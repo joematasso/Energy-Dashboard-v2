@@ -39,6 +39,7 @@ const STATE = {
   weather: null,
   weatherBias: {},
   weatherSource: 'none',
+  wxHeatingSeason: false,
 };
 
 /* =====================================================================

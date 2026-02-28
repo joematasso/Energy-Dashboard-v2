@@ -540,6 +540,7 @@ async function fetchWeather(isInitial) {
     }
     if (biasData.success && biasData.bias) {
       STATE.weatherBias = biasData.bias;
+      STATE.wxHeatingSeason = biasData.is_heating_season;
       _renderBiasGrid(biasData.bias, biasData.is_heating_season);
     }
   } catch(e) {
@@ -641,12 +642,9 @@ function _renderCityForecasts(cities) {
 }
 
 function renderWeatherPage() {
-  // Called by nav-risk.js when the NG page is rendered
-  // Weather data is already fetched on init; just re-render if data exists
+  // Called by renderCurrentPage() on every 8-second tick — must NOT fetch here.
+  // Actual API calls happen only in fetchWeather() via WX_FETCH_INTERVAL (5 min).
   if (STATE.weatherBias && Object.keys(STATE.weatherBias).length) {
-    // Bias already loaded — trigger a fresh render of the bias grid only
-    fetch(API_BASE + '/api/weather/bias').then(r => r.json()).then(d => {
-      if (d.success) _renderBiasGrid(d.bias, d.is_heating_season);
-    }).catch(() => {});
+    _renderBiasGrid(STATE.weatherBias, STATE.wxHeatingSeason);
   }
 }
