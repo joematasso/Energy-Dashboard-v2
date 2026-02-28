@@ -7,10 +7,15 @@ function setLbTab(tab) {
   document.getElementById('lbIndividual').style.display = tab==='individual'?'block':'none';
   document.getElementById('lbMyTeam').style.display = tab==='myteam'?'block':'none';
   document.getElementById('lbRankings').style.display = tab==='rankings'?'block':'none';
+  const lbTournEl = document.getElementById('lbTournament');
+  if (lbTournEl) lbTournEl.style.display = tab==='tournament'?'block':'none';
   document.getElementById('lbTabIndiv').className = 'btn btn-sm '+(tab==='individual'?'btn-primary':'btn-ghost');
   document.getElementById('lbTabTeam').className = 'btn btn-sm '+(tab==='myteam'?'btn-primary':'btn-ghost');
   document.getElementById('lbTabRank').className = 'btn btn-sm '+(tab==='rankings'?'btn-primary':'btn-ghost');
-  renderLeaderboardPage();
+  const lbTabTourn = document.getElementById('lbTabTourn');
+  if (lbTabTourn) lbTabTourn.className = 'btn btn-sm '+(tab==='tournament'?'btn-primary':'btn-ghost');
+  if (tab === 'tournament') renderTournamentLeaderboard();
+  else renderLeaderboardPage();
 }
 
 function renderLeaderboardPage() {
@@ -418,3 +423,143 @@ function submitMobileTrade() {
   mobDir='';
 }
 
+
+/* =====================================================================
+   TOURNAMENT LEADERBOARD
+   ===================================================================== */
+
+let _activeTournament = null;
+let _tournPollTimer = null;
+
+function startTournamentPoll() {
+  fetchActiveTournament();
+  if (!_tournPollTimer) _tournPollTimer = setInterval(fetchActiveTournament, 60000);
+}
+
+async function fetchActiveTournament() {
+  try {
+    const r = await fetch(API_BASE + '/api/tournament/active');
+    const d = await r.json();
+    if (!d.success) return;
+    _activeTournament = d.tournament;
+    updateTournamentBanner();
+  } catch(e) {}
+}
+
+function updateTournamentBanner() {
+  const banner = document.getElementById('tournamentBanner');
+  if (!banner) return;
+  if (!_activeTournament) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = 'flex';
+  document.getElementById('tournBannerName').textContent = _activeTournament.name;
+
+  // Countdown
+  const endTime = _activeTournament.end_time ? new Date(_activeTournament.end_time + 'Z') : null;
+  if (endTime) {
+    const diff = endTime - Date.now();
+    if (diff > 0) {
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      document.getElementById('tournBannerCountdown').textContent =
+        (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm remaining';
+    } else {
+      document.getElementById('tournBannerCountdown').textContent = 'Ended';
+    }
+  } else {
+    document.getElementById('tournBannerCountdown').textContent = 'In progress';
+  }
+}
+
+function renderTournamentLeaderboard() {
+  // Ensure the tournament tab panel exists in the DOM
+  let panel = document.getElementById('lbTournament');
+  if (!panel) {
+    const lb = document.getElementById('lbRankings');
+    if (!lb) return;
+    panel = document.createElement('div');
+    panel.id = 'lbTournament';
+    panel.style.display = 'none';
+    lb.parentNode.insertBefore(panel, lb.nextSibling);
+  }
+
+  if (!_activeTournament) {
+    panel.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:40px;opacity:0.4">🏆</div><p style="margin-top:12px">No active tournament right now.<br>Check back when one is running.</p></div>';
+    return;
+  }
+
+  panel.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">Loading standings…</div>';
+
+  const prices = {};
+  for (const hubs of Object.values(ALL_HUB_SETS)) {
+    hubs.forEach(h => { prices[h.name] = getPrice(h.name); });
+  }
+
+  const endTime = _activeTournament.end_time ? new Date(_activeTournament.end_time + 'Z') : null;
+  const countdownStr = endTime
+    ? (() => {
+        const diff = endTime - Date.now();
+        if (diff <= 0) return 'Ended';
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        return (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm remaining';
+      })()
+    : 'In progress';
+
+  fetch(API_BASE + '/api/tournament/' + _activeTournament.id + '/standings?prices=' + encodeURIComponent(JSON.stringify(prices)))
+    .then(r => r.json())
+    .then(d => {
+      if (!d.success) { panel.innerHTML = '<p style="padding:20px;color:var(--text-muted)">Could not load standings.</p>'; return; }
+
+      const myRank = STATE.trader ? d.standings.findIndex(s => s.trader_name === STATE.trader.trader_name) + 1 : 0;
+      if (myRank > 0) {
+        document.getElementById('tournBannerRank').textContent = myRank;
+        document.getElementById('tournBannerTotal').textContent = d.standings.length;
+      }
+
+      panel.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="font-size:20px;font-weight:700;color:var(--accent)">🏆 ${_activeTournament.name}</div>
+          <div style="font-size:12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);border-radius:6px;padding:4px 10px;color:var(--accent)">${countdownStr}</div>
+          ${_activeTournament.description ? `<div style="font-size:13px;color:var(--text-muted)">${_activeTournament.description}</div>` : ''}
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th style="width:48px">#</th>
+              <th>Trader</th>
+              <th>Team</th>
+              <th style="text-align:right">P&L</th>
+              <th style="text-align:right">Return</th>
+              <th style="text-align:right">Trades</th>
+            </tr></thead>
+            <tbody>
+              ${d.standings.map((s, i) => {
+                const isMe = STATE.trader && s.trader_name === STATE.trader.trader_name;
+                const pnlColor = s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+                const medal = s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : s.rank;
+                const pnlStr = (s.total_pnl >= 0 ? '+' : '') + '$' + Math.abs(s.total_pnl).toLocaleString('en-US', {maximumFractionDigits:0});
+                const retStr = (s.ret_pct >= 0 ? '+' : '') + s.ret_pct.toFixed(2) + '%';
+                return `<tr style="${isMe ? 'background:rgba(34,211,238,0.08);border-left:3px solid var(--accent)' : ''}">
+                  <td style="font-size:16px;font-weight:700">${medal}</td>
+                  <td>
+                    ${s.photo_url ? `<img src="${s.photo_url}" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:6px;object-fit:cover">` : ''}
+                    <strong>${s.display_name}</strong>${isMe ? ' <span style="font-size:10px;color:var(--accent)">(you)</span>' : ''}
+                  </td>
+                  <td style="font-size:12px;color:${s.team_color || 'var(--text-muted)'}">${s.team_name || '—'}</td>
+                  <td style="text-align:right;font-weight:700;color:${pnlColor}">${pnlStr}</td>
+                  <td style="text-align:right;color:${pnlColor}">${retStr}</td>
+                  <td style="text-align:right">${s.trades}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }).catch(() => {
+      panel.innerHTML = '<p style="padding:20px;color:var(--text-muted)">Error loading standings.</p>';
+    });
+}

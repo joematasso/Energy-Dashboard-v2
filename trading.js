@@ -442,6 +442,19 @@ async function submitTrade() {
     };
     STATE.pendingOrders.push(pendingOrder);
     localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders));
+    // Persist to server (non-blocking) so order survives page refresh
+    if (STATE.connected && STATE.trader) {
+      fetch(API_BASE + '/api/pending-orders/' + STATE.trader.trader_name, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(pendingOrder)
+      }).then(r => r.json()).then(d => {
+        if (d.success && d.id) {
+          // Tag with server ID for later cancellation
+          const o = STATE.pendingOrders.find(x => x._pendingId === pendingOrder._pendingId);
+          if (o) { o._serverId = d.id; localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders)); }
+        }
+      }).catch(() => {});
+    }
     playSound('trade');
     const triggerLabel = orderType === 'LIMIT' ? `limit $${limitPrice.toFixed(3)}` : orderType === 'STOP' ? `stop $${stopPrice.toFixed(3)}` : `stop $${stopPrice.toFixed(3)} / limit $${limitPrice.toFixed(3)}`;
     toast(`${orderType} order placed: ${tradeDirection} ${volume} ${hub} (${triggerLabel}, ${tif})`, 'success');

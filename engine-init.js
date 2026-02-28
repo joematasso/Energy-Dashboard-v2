@@ -15,10 +15,39 @@ function onOrderTypeChange() {
 
 function cancelPendingOrder(pendingId) {
   if (!confirm('Cancel this pending order?')) return;
+  const order = STATE.pendingOrders.find(o => o._pendingId === pendingId);
   STATE.pendingOrders = STATE.pendingOrders.filter(o => o._pendingId !== pendingId);
   localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders));
+  // Also cancel on server if we have a server ID
+  if (order && order._serverId && STATE.trader) {
+    fetch(API_BASE + '/api/pending-orders/' + STATE.trader.trader_name + '/' + order._serverId, {
+      method: 'DELETE'
+    }).catch(() => {});
+  }
   toast('Pending order cancelled', 'info');
   renderBlotterPage();
+}
+
+async function loadPendingOrdersFromServer(traderName) {
+  try {
+    const r = await fetch(API_BASE + '/api/pending-orders/' + encodeURIComponent(traderName));
+    const d = await r.json();
+    if (!d.success || !d.orders.length) return;
+    // Merge server orders with localStorage orders (avoid duplicates by _pendingId)
+    const localIds = new Set(STATE.pendingOrders.map(o => o._pendingId));
+    let added = 0;
+    for (const order of d.orders) {
+      if (!localIds.has(order._pendingId)) {
+        STATE.pendingOrders.push(order);
+        added++;
+      }
+    }
+    if (added > 0) {
+      localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders));
+      renderBlotterPage();
+      toast(`Restored ${added} pending order${added > 1 ? 's' : ''} from server`, 'info');
+    }
+  } catch(e) {}
 }
 
 /* =====================================================================
@@ -496,6 +525,10 @@ function postLoginInit() {
     document.getElementById('chatTab').style.display = 'none';
     var hcb = document.getElementById('headerChatBtn'); if(hcb) hcb.style.display = 'flex';
     document.getElementById('tradeFeedBar').style.display = 'flex';
+    // Tournament banner poll
+    if (typeof startTournamentPoll === 'function') startTournamentPoll();
+    // Load pending orders from server
+    if (STATE.trader) loadPendingOrdersFromServer(STATE.trader.trader_name);
   } catch(e) { console.warn('postLoginInit error:', e); }
 }
 

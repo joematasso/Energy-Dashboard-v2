@@ -427,4 +427,55 @@ def handle_leaderboard_request():
     emit('leaderboard_update', {'reason': 'requested'})
 
 
+# ---------------------------------------------------------------------------
+# Pending Orders (server-side persistence)
+# ---------------------------------------------------------------------------
+@misc_bp.route('/api/pending-orders/<trader>', methods=['GET'])
+def get_pending_orders(trader):
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, order_data, status, created_at FROM pending_orders WHERE trader_name=? AND status='PENDING' ORDER BY id ASC",
+        (trader,)
+    ).fetchall()
+    orders = []
+    for r in rows:
+        try:
+            od = json.loads(r['order_data'])
+            od['_serverId'] = r['id']
+            od['created_at'] = r['created_at']
+            orders.append(od)
+        except Exception:
+            pass
+    return jsonify({'success': True, 'orders': orders})
+
+
+@misc_bp.route('/api/pending-orders/<trader>', methods=['POST'])
+def create_pending_order(trader):
+    db = get_db()
+    t = db.execute("SELECT status FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    if not t or t['status'] != 'ACTIVE':
+        return jsonify({'success': False, 'error': 'Trader not found or not active'}), 400
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data'}), 400
+    cur = db.execute(
+        "INSERT INTO pending_orders (trader_name, order_data) VALUES (?,?)",
+        (trader, json.dumps(data))
+    )
+    db.commit()
+    return jsonify({'success': True, 'id': cur.lastrowid})
+
+
+@misc_bp.route('/api/pending-orders/<trader>/<int:order_id>', methods=['DELETE'])
+def cancel_pending_order(trader, order_id):
+    db = get_db()
+    row = db.execute("SELECT id FROM pending_orders WHERE id=? AND trader_name=?", (order_id, trader)).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Order not found'}), 404
+    db.execute("UPDATE pending_orders SET status='CANCELLED' WHERE id=?", (order_id,))
+    db.commit()
+    return jsonify({'success': True})
+
+
+
 

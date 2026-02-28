@@ -129,6 +129,14 @@ tr:hover td{background:var(--surface2)}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       <span>Broadcast</span>
     </button>
+    <button class="nav-item" data-section="dashboard" onclick="switchSection('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-item" data-section="tournament" onclick="switchSection('tournament')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 010-5H6"/><path d="M18 9h1.5a2.5 2.5 0 000-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0012 0V2z"/></svg>
+      <span>Tournaments</span>
+    </button>
   </nav>
   <div class="sidebar-footer">
     <div class="server-status"><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting...</span></div>
@@ -290,6 +298,100 @@ tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     DASHBOARD SECTION
+════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-dashboard">
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <p>Live platform metrics — refreshes every 30 seconds.</p>
+  </div>
+  <div class="summary-grid">
+    <div class="summary-card"><div class="label">Active Traders</div><div class="value green" id="dbActiveTraders">—</div></div>
+    <div class="summary-card"><div class="label">Total Trades</div><div class="value" id="dbTotalTrades">—</div></div>
+    <div class="summary-card"><div class="label">Combined P&L</div><div class="value" id="dbTotalPnl">—</div></div>
+    <div class="summary-card"><div class="label">Gross Notional</div><div class="value" id="dbTotalNotional">—</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+    <div class="card">
+      <div class="card-header"><h3>Sector Activity</h3></div>
+      <div class="card-body" style="padding:0">
+        <table><thead><tr><th>Sector</th><th style="text-align:right">Trades</th><th style="text-align:right">Volume</th></tr></thead>
+        <tbody id="dbSectorBody"><tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Top Traders by P&L</h3></div>
+      <div class="card-body" style="padding:0">
+        <table><thead><tr><th>Trader</th><th style="text-align:right">Trades</th><th style="text-align:right">P&L</th></tr></thead>
+        <tbody id="dbTopBody"><tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><h3>Recent Trade Activity</h3><button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻ Refresh</button></div>
+    <div class="card-body" style="padding:0">
+      <table><thead><tr><th>Time</th><th>Trader</th><th>Action</th><th>Summary</th></tr></thead>
+      <tbody id="dbFeedBody"><tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOURNAMENT SECTION
+════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-tournament">
+  <div class="page-header">
+    <h1>Tournaments</h1>
+    <p>Create time-bounded trading competitions. Standings are calculated from trades within the tournament window.</p>
+  </div>
+  <div class="summary-grid">
+    <div class="summary-card"><div class="label">Active Tournament</div><div class="value green" id="tnActiveName">None</div></div>
+    <div class="summary-card"><div class="label">Total Tournaments</div><div class="value" id="tnTotal">0</div></div>
+    <div class="summary-card"><div class="label">Enrolled Traders</div><div class="value" id="tnEnrolled">0</div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><h3>Create Tournament</h3></div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group"><label>Name</label><input type="text" id="tnName" placeholder="Q1 2026 Challenge"></div>
+        <div class="form-group"><label>Description</label><input type="text" id="tnDesc" placeholder="Optional description"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Start Date/Time (UTC)</label><input type="datetime-local" id="tnStart"></div>
+        <div class="form-group"><label>End Date/Time (UTC)</label><input type="datetime-local" id="tnEnd"></div>
+        <div class="form-group"><label>Starting Balance ($)</label><input type="number" id="tnBalance" value="1000000" min="1000"></div>
+        <button class="btn btn-primary" onclick="createTournament()" style="height:36px;align-self:flex-end">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><h3>All Tournaments</h3><button class="btn btn-sm btn-ghost" onclick="loadTournaments()">↻ Refresh</button></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Status</th><th>Start</th><th>End</th><th>Enrolled</th><th>Actions</th></tr></thead>
+        <tbody id="tnTableBody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tnStandingsWrap" style="display:none;margin-top:16px">
+    <div class="card">
+      <div class="card-header"><h3 id="tnStandingsTitle">Standings</h3><button class="btn btn-sm btn-ghost" onclick="document.getElementById('tnStandingsWrap').style.display='none'">✕ Close</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Trader</th><th>Team</th><th style="text-align:right">P&L</th><th style="text-align:right">Return</th><th style="text-align:right">Trades</th></tr></thead>
+          <tbody id="tnStandingsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
@@ -325,6 +427,8 @@ function switchSection(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('sec-'+name).classList.add('active');
   document.querySelector('.nav-item[data-section="'+name+'"]').classList.add('active');
+  if(name==='dashboard'){loadDashboard();if(!_dashInterval)_dashInterval=setInterval(loadDashboard,30000);}else{if(_dashInterval){clearInterval(_dashInterval);_dashInterval=null;}}
+  if(name==='tournament')loadTournaments();
 }
 
 function api(url,opts={}){opts.headers={...opts.headers,'X-Admin-Pin':adminPin,'Content-Type':'application/json'};return fetch(url,opts).then(r=>r.json())}
@@ -616,6 +720,161 @@ document.querySelectorAll('.logo-img-sm,.logo-img-login').forEach(img => img.src
   if(adminPin){const ok=await testAuth(adminPin);if(ok){document.getElementById('loginOverlay').classList.add('hidden');loadAllData()}else{localStorage.removeItem('ng_admin_pin');adminPin=''}}
   setInterval(()=>{if(adminPin){checkStatus();loadTraders()}},30000);
 })();
+
+
+// ──────────────────────────────────────────────────────────────────
+// DASHBOARD
+// ──────────────────────────────────────────────────────────────────
+let _dashInterval = null;
+
+function loadDashboard() {
+  fetch('/api/admin/metrics', {headers:{'X-Admin-Pin': adminPin}})
+    .then(r => r.json()).then(d => {
+      if (!d.success) return;
+      document.getElementById('dbActiveTraders').textContent = d.active_traders + ' / ' + d.total_traders;
+      document.getElementById('dbTotalTrades').textContent = d.total_trades.toLocaleString();
+      const pnl = d.total_realized_pnl;
+      const pnlEl = document.getElementById('dbTotalPnl');
+      pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
+      pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
+      document.getElementById('dbTotalNotional').textContent = '$' + (d.total_notional/1e6).toFixed(1) + 'M';
+
+      document.getElementById('dbSectorBody').innerHTML = d.sector_breakdown.map(s =>
+        `<tr><td style="font-weight:600;text-transform:uppercase">${s.sector}</td><td style="text-align:right">${s.count}</td><td style="text-align:right">${(s.volume/1000).toFixed(0)}k</td></tr>`
+      ).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px">No trades yet</td></tr>';
+
+      document.getElementById('dbTopBody').innerHTML = d.top_traders.map(t =>
+        `<tr><td style="font-weight:600">${t.trader_name}</td><td style="text-align:right">${t.trades}</td><td style="text-align:right;color:${t.pnl>=0?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${Math.abs(t.pnl).toLocaleString('en-US',{maximumFractionDigits:0})}</td></tr>`
+      ).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px">No trades yet</td></tr>';
+
+      document.getElementById('dbFeedBody').innerHTML = d.recent_feed.map(f => {
+        const t = new Date(f.created_at + 'Z').toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+        return `<tr><td style="color:var(--text-muted);white-space:nowrap">${t}</td><td style="font-weight:600">${f.trader_name}</td><td><span class="badge badge-info">${f.action}</span></td><td style="font-size:12px">${f.summary}</td></tr>`;
+      }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px">No activity yet</td></tr>';
+    }).catch(() => {});
+}
+
+// ──────────────────────────────────────────────────────────────────
+// TOURNAMENTS
+// ──────────────────────────────────────────────────────────────────
+let _tournaments = [];
+
+function loadTournaments() {
+  fetch('/api/admin/tournaments', {headers:{'X-Admin-Pin': adminPin}})
+    .then(r => r.json()).then(d => {
+      if (!d.success) return;
+      _tournaments = d.tournaments;
+      const active = _tournaments.find(t => t.status === 'ACTIVE');
+      document.getElementById('tnActiveName').textContent = active ? active.name : 'None';
+      document.getElementById('tnActiveName').className = 'value ' + (active ? 'green' : '');
+      document.getElementById('tnTotal').textContent = _tournaments.length;
+      const totalEnrolled = _tournaments.reduce((s, t) => s + (t.entry_count || 0), 0);
+      document.getElementById('tnEnrolled').textContent = totalEnrolled;
+
+      document.getElementById('tnTableBody').innerHTML = _tournaments.map(t => {
+        const statusColor = t.status === 'ACTIVE' ? 'green' : t.status === 'ENDED' ? 'red' : '';
+        const start = t.start_time ? new Date(t.start_time + 'Z').toLocaleString() : '—';
+        const end = t.end_time ? new Date(t.end_time + 'Z').toLocaleString() : '—';
+        const canActivate = t.status === 'PENDING';
+        const canEnd = t.status === 'ACTIVE';
+        return `<tr>
+          <td style="font-weight:700">${t.name}<br><span style="font-size:11px;color:var(--text-muted)">${t.description || ''}</span></td>
+          <td><span class="badge ${statusColor}">${t.status}</span></td>
+          <td style="font-size:12px">${start}</td>
+          <td style="font-size:12px">${end}</td>
+          <td>${t.entry_count || 0}</td>
+          <td style="display:flex;gap:4px;flex-wrap:wrap">
+            ${canActivate ? `<button class="btn btn-sm btn-success" onclick="activateTournament(${t.id})">▶ Start</button>` : ''}
+            ${canEnd ? `<button class="btn btn-sm btn-warning" onclick="endTournament(${t.id})">■ End</button>` : ''}
+            <button class="btn btn-sm btn-ghost" onclick="enrollAllTraders(${t.id})">👥 Enroll All</button>
+            <button class="btn btn-sm btn-ghost" onclick="showTournamentStandings(${t.id}, '${t.name.replace(/'/g, "\'")}')">📊 Standings</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteTournament(${t.id})">✕</button>
+          </td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">No tournaments yet.</td></tr>';
+    }).catch(() => {});
+}
+
+function createTournament() {
+  const name = document.getElementById('tnName').value.trim();
+  if (!name) { showToast('Name is required', 'error'); return; }
+  const start = document.getElementById('tnStart').value;
+  const end = document.getElementById('tnEnd').value;
+  const balance = parseFloat(document.getElementById('tnBalance').value) || 1000000;
+  fetch('/api/admin/tournaments', {
+    method: 'POST', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
+    body: JSON.stringify({name, description: document.getElementById('tnDesc').value,
+      start_time: start ? start.replace('T', ' ') : null,
+      end_time: end ? end.replace('T', ' ') : null,
+      starting_balance: balance})
+  }).then(r => r.json()).then(d => {
+    if (d.success) { showToast('Tournament created', 'success'); loadTournaments(); document.getElementById('tnName').value = ''; document.getElementById('tnDesc').value = ''; }
+    else showToast(d.error || 'Error', 'error');
+  });
+}
+
+function activateTournament(id) {
+  fetch('/api/admin/tournaments/' + id, {
+    method: 'PUT', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
+    body: JSON.stringify({status: 'ACTIVE'})
+  }).then(r => r.json()).then(d => {
+    if (d.success) { showToast('Tournament activated', 'success'); loadTournaments(); }
+    else showToast(d.error || 'Error', 'error');
+  });
+}
+
+function endTournament(id) {
+  fetch('/api/admin/tournaments/' + id, {
+    method: 'PUT', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
+    body: JSON.stringify({status: 'ENDED'})
+  }).then(r => r.json()).then(d => {
+    if (d.success) { showToast('Tournament ended', 'success'); loadTournaments(); }
+    else showToast(d.error || 'Error', 'error');
+  });
+}
+
+function enrollAllTraders(id) {
+  fetch('/api/admin/tournaments/' + id + '/enroll-all', {
+    method: 'POST', headers: {'X-Admin-Pin': adminPin}
+  }).then(r => r.json()).then(d => {
+    if (d.success) { showToast('Enrolled ' + d.enrolled + ' traders', 'success'); loadTournaments(); }
+    else showToast(d.error || 'Error', 'error');
+  });
+}
+
+function deleteTournament(id) {
+  if (!confirm('Delete this tournament?')) return;
+  fetch('/api/admin/tournaments/' + id, {
+    method: 'DELETE', headers: {'X-Admin-Pin': adminPin}
+  }).then(r => r.json()).then(d => {
+    if (d.success) { showToast('Deleted', 'success'); loadTournaments(); }
+  });
+}
+
+function showTournamentStandings(id, name) {
+  document.getElementById('tnStandingsTitle').textContent = '🏆 ' + name + ' — Standings';
+  document.getElementById('tnStandingsWrap').style.display = 'block';
+  document.getElementById('tnStandingsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px">Loading…</td></tr>';
+  fetch('/api/tournament/' + id + '/standings', {headers:{'X-Admin-Pin':adminPin}})
+    .then(r => r.json()).then(d => {
+      if (!d.success) return;
+      document.getElementById('tnStandingsBody').innerHTML = d.standings.map(s => {
+        const pnlColor = s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const retStr = (s.ret_pct >= 0 ? '+' : '') + s.ret_pct.toFixed(2) + '%';
+        const pnlStr = (s.total_pnl >= 0 ? '+' : '') + '$' + Math.abs(s.total_pnl).toLocaleString('en-US', {maximumFractionDigits:0});
+        const medal = s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : s.rank;
+        return `<tr>
+          <td style="font-weight:700;font-size:16px">${medal}</td>
+          <td style="font-weight:600">${s.display_name}</td>
+          <td style="font-size:12px">${s.team_name ? '<span style="color:' + s.team_color + '">' + s.team_name + '</span>' : '—'}</td>
+          <td style="text-align:right;font-weight:700;color:${pnlColor}">${pnlStr}</td>
+          <td style="text-align:right;color:${pnlColor}">${retStr}</td>
+          <td style="text-align:right">${s.trades}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px">No standings yet.</td></tr>';
+    });
+}
+
 </script>
 </body>
 </html>

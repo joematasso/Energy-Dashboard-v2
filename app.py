@@ -214,6 +214,34 @@ def init_db():
             priority TEXT NOT NULL DEFAULT 'normal',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS tournaments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            status TEXT DEFAULT 'PENDING',
+            start_time TIMESTAMP,
+            end_time TIMESTAMP,
+            starting_balance REAL DEFAULT 1000000,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS tournament_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id INTEGER NOT NULL,
+            trader_name TEXT NOT NULL,
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
+            UNIQUE(tournament_id, trader_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS pending_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trader_name TEXT NOT NULL,
+            order_data TEXT NOT NULL,
+            status TEXT DEFAULT 'PENDING',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trader_name) REFERENCES traders(trader_name)
+        );
     """)
 
     # Insert default admin PIN if not exists

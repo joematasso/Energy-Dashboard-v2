@@ -300,36 +300,44 @@ function initMapZoom(sector) {
     mapZoomAt(sector, dir, e);
   }, { passive: false });
 
-  // Drag pan
+  // Drag pan — rect cached at drag-start to avoid forced reflow on every mousemove
   let dragging = false, startX = 0, startY = 0, startVx = 0, startVy = 0;
+  let cachedRect = null, rafPan = null;
   wrap.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     dragging = true; wrap.classList.add('dragging');
     startX = e.clientX; startY = e.clientY;
     const z = MAP_ZOOM[sector];
     startVx = z.vx; startVy = z.vy;
+    cachedRect = svgEl.getBoundingClientRect(); // cache once — avoids reflow per-pixel
     e.preventDefault();
   });
   window.addEventListener('mousemove', e => {
     if (!dragging) return;
     const z = MAP_ZOOM[sector];
-    const rect = svgEl.getBoundingClientRect();
-    const scaleX = z.vw / rect.width;
-    const scaleY = z.vh / rect.height;
-    z.vx = startVx - (e.clientX - startX) * scaleX;
-    z.vy = startVy - (e.clientY - startY) * scaleY;
-    svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
+    const scaleX = z.vw / cachedRect.width;
+    const scaleY = z.vh / cachedRect.height;
+    const newVx = startVx - (e.clientX - startX) * scaleX;
+    const newVy = startVy - (e.clientY - startY) * scaleY;
+    // rAF throttle: only one DOM write per animation frame (smooth 60fps)
+    if (rafPan) return;
+    rafPan = requestAnimationFrame(() => {
+      z.vx = newVx; z.vy = newVy;
+      svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
+      rafPan = null;
+    });
   });
   window.addEventListener('mouseup', () => {
-    if (dragging) { dragging = false; wrap.classList.remove('dragging'); }
+    if (dragging) { dragging = false; wrap.classList.remove('dragging'); cachedRect = null; }
   });
 
   // Touch support
-  let lastTouchDist = 0;
+  let lastTouchDist = 0, cachedTouchRect = null;
   wrap.addEventListener('touchstart', e => {
     if (e.touches.length === 1) {
       dragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
       const z = MAP_ZOOM[sector]; startVx = z.vx; startVy = z.vy;
+      cachedTouchRect = svgEl.getBoundingClientRect(); // cache at touch-start
     } else if (e.touches.length === 2) {
       lastTouchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
     }
@@ -337,7 +345,8 @@ function initMapZoom(sector) {
   }, { passive: false });
   wrap.addEventListener('touchmove', e => {
     if (e.touches.length === 1 && dragging) {
-      const z = MAP_ZOOM[sector]; const rect = svgEl.getBoundingClientRect();
+      const z = MAP_ZOOM[sector];
+      const rect = cachedTouchRect || svgEl.getBoundingClientRect();
       z.vx = startVx - (e.touches[0].clientX - startX) * (z.vw / rect.width);
       z.vy = startVy - (e.touches[0].clientY - startY) * (z.vh / rect.height);
       svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);

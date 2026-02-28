@@ -518,3 +518,268 @@ def delete_censored_word(word):
     return jsonify({'success': True, 'words': words, 'count': len(words)})
 
 
+# ---------------------------------------------------------------------------
+# Admin Dashboard Metrics
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/admin/metrics', methods=['GET'])
+@admin_required
+def get_admin_metrics():
+    """Aggregate metrics for the admin dashboard."""
+    db = get_db()
+
+    traders = db.execute("SELECT trader_name, status, starting_balance FROM traders").fetchall()
+    total_traders = len(traders)
+    active_traders = sum(1 for t in traders if t['status'] == 'ACTIVE')
+
+    all_trades = db.execute("SELECT trade_data FROM trades").fetchall()
+    total_trades = len(all_trades)
+    total_realized_pnl = 0.0
+    total_notional = 0.0
+    sector_map = {}  # sector -> {count, volume}
+
+    for row in all_trades:
+        try:
+            td = json.loads(row['trade_data'])
+        except Exception:
+            continue
+        if td.get('status') == 'CLOSED':
+            total_realized_pnl += float(td.get('realizedPnl', 0) or 0)
+        volume = float(td.get('volume', 0) or 0)
+        entry = float(td.get('entryPrice', 0) or 0)
+        total_notional += volume * abs(entry)
+        sector = td.get('sector', 'other')
+        if sector not in sector_map:
+            sector_map[sector] = {'sector': sector, 'count': 0, 'volume': 0}
+        sector_map[sector]['count'] += 1
+        sector_map[sector]['volume'] += volume
+
+    sector_breakdown = sorted(sector_map.values(), key=lambda x: x['count'], reverse=True)
+
+    # Top 5 traders by realized P&L
+    trader_pnl = []
+    for t in traders:
+        rows = db.execute("SELECT trade_data FROM trades WHERE trader_name=?", (t['trader_name'],)).fetchall()
+        pnl = 0.0
+        for r in rows:
+            try:
+                td = json.loads(r['trade_data'])
+                if td.get('status') == 'CLOSED':
+                    pnl += float(td.get('realizedPnl', 0) or 0)
+            except Exception:
+                pass
+        trader_pnl.append({'trader_name': t['trader_name'], 'pnl': round(pnl, 2), 'trades': len(rows)})
+    top_traders = sorted(trader_pnl, key=lambda x: x['pnl'], reverse=True)[:5]
+
+    recent_feed = db.execute(
+        "SELECT * FROM trade_feed ORDER BY id DESC LIMIT 10"
+    ).fetchall()
+
+    return jsonify({
+        'success': True,
+        'total_traders': total_traders,
+        'active_traders': active_traders,
+        'total_trades': total_trades,
+        'total_realized_pnl': round(total_realized_pnl, 2),
+        'total_notional': round(total_notional, 2),
+        'sector_breakdown': sector_breakdown,
+        'top_traders': top_traders,
+        'recent_feed': [dict(r) for r in recent_feed],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Tournament Admin Endpoints
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/admin/tournaments', methods=['GET'])
+@admin_required
+def list_tournaments():
+    db = get_db()
+    rows = db.execute("SELECT * FROM tournaments ORDER BY created_at DESC").fetchall()
+    result = []
+    for r in rows:
+        t = dict(r)
+        t['entry_count'] = db.execute(
+            "SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id=?", (r['id'],)
+        ).fetchone()['c']
+        result.append(t)
+    return jsonify({'success': True, 'tournaments': result})
+
+
+@admin_bp.route('/api/admin/tournaments', methods=['POST'])
+@admin_required
+def create_tournament():
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'Name is required'}), 400
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO tournaments (name, description, start_time, end_time, starting_balance) VALUES (?,?,?,?,?)",
+        (name, data.get('description', ''), data.get('start_time'), data.get('end_time'),
+         float(data.get('starting_balance', 1000000)))
+    )
+    db.commit()
+    return jsonify({'success': True, 'id': cur.lastrowid})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>', methods=['PUT'])
+@admin_required
+def update_tournament(tid):
+    data = request.get_json()
+    db = get_db()
+    row = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+
+    name = data.get('name', row['name'])
+    desc = data.get('description', row['description'])
+    status = data.get('status', row['status'])
+    start_time = data.get('start_time', row['start_time'])
+    end_time = data.get('end_time', row['end_time'])
+    balance = float(data.get('starting_balance', row['starting_balance']))
+
+    # Auto-set start_time when activating
+    if status == 'ACTIVE' and row['status'] == 'PENDING' and not start_time:
+        start_time = datetime.utcnow().isoformat()
+
+    db.execute(
+        "UPDATE tournaments SET name=?, description=?, status=?, start_time=?, end_time=?, starting_balance=? WHERE id=?",
+        (name, desc, status, start_time, end_time, balance, tid)
+    )
+    db.commit()
+    socketio.emit('tournament_update', {'id': tid, 'status': status})
+    return jsonify({'success': True})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>', methods=['DELETE'])
+@admin_required
+def delete_tournament(tid):
+    db = get_db()
+    db.execute("DELETE FROM tournament_entries WHERE tournament_id=?", (tid,))
+    db.execute("DELETE FROM tournaments WHERE id=?", (tid,))
+    db.commit()
+    return jsonify({'success': True})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>/enroll-all', methods=['POST'])
+@admin_required
+def enroll_all_traders(tid):
+    db = get_db()
+    if not db.execute("SELECT id FROM tournaments WHERE id=?", (tid,)).fetchone():
+        return jsonify({'success': False, 'error': 'Tournament not found'}), 404
+    traders = db.execute("SELECT trader_name FROM traders WHERE status='ACTIVE'").fetchall()
+    enrolled = 0
+    for t in traders:
+        try:
+            db.execute("INSERT OR IGNORE INTO tournament_entries (tournament_id, trader_name) VALUES (?,?)",
+                       (tid, t['trader_name']))
+            enrolled += 1
+        except Exception:
+            pass
+    db.commit()
+    return jsonify({'success': True, 'enrolled': enrolled})
+
+
+# ---------------------------------------------------------------------------
+# Public Tournament Endpoints (no admin auth required)
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/tournament/active', methods=['GET'])
+def get_active_tournament():
+    db = get_db()
+    row = db.execute("SELECT * FROM tournaments WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1").fetchone()
+    if not row:
+        return jsonify({'success': True, 'tournament': None})
+    t = dict(row)
+    t['entry_count'] = db.execute(
+        "SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id=?", (row['id'],)
+    ).fetchone()['c']
+    return jsonify({'success': True, 'tournament': t})
+
+
+@admin_bp.route('/api/tournament/<int:tid>/standings', methods=['GET'])
+def get_tournament_standings(tid):
+    """Return P&L standings for a tournament, scoped to its time window."""
+    db = get_db()
+    tourn = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not tourn:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+
+    prices_raw = request.args.get('prices', '{}')
+    try:
+        prices = json.loads(prices_raw)
+    except Exception:
+        prices = {}
+
+    entries = db.execute(
+        "SELECT e.trader_name, t.display_name, t.photo_url, tm.name as team_name, tm.color as team_color "
+        "FROM tournament_entries e "
+        "JOIN traders t ON e.trader_name = t.trader_name "
+        "LEFT JOIN teams tm ON t.team_id = tm.id "
+        "WHERE e.tournament_id=?", (tid,)
+    ).fetchall()
+
+    start = tourn['start_time']
+    end = tourn['end_time'] or datetime.utcnow().isoformat()
+    balance = tourn['starting_balance']
+
+    standings = []
+    for e in entries:
+        if start:
+            trades = db.execute(
+                "SELECT trade_data FROM trades WHERE trader_name=? AND created_at>=? AND created_at<=?",
+                (e['trader_name'], start, end)
+            ).fetchall()
+        else:
+            trades = db.execute(
+                "SELECT trade_data FROM trades WHERE trader_name=?", (e['trader_name'],)
+            ).fetchall()
+
+        realized = 0.0
+        unrealized = 0.0
+        trade_count = 0
+        for row in trades:
+            try:
+                td = json.loads(row['trade_data'])
+            except Exception:
+                continue
+            trade_count += 1
+            if td.get('status') == 'CLOSED':
+                realized += float(td.get('realizedPnl', 0) or 0)
+            elif td.get('status') == 'OPEN':
+                hub = td.get('hub', '')
+                price = prices.get(hub, float(td.get('entryPrice', 0) or 0))
+                entry = float(td.get('entryPrice', 0) or 0)
+                volume = float(td.get('volume', 0) or 0)
+                direction = td.get('direction', 'BUY')
+                mult = 1 if direction == 'BUY' else -1
+                unrealized += mult * (price - entry) * volume
+
+        total_pnl = realized + unrealized
+        equity = balance + total_pnl
+        ret_pct = (total_pnl / balance * 100) if balance else 0
+
+        standings.append({
+            'trader_name': e['trader_name'],
+            'display_name': e['display_name'],
+            'photo_url': e['photo_url'] or '',
+            'team_name': e['team_name'] or '',
+            'team_color': e['team_color'] or '#888',
+            'equity': round(equity, 2),
+            'total_pnl': round(total_pnl, 2),
+            'realized_pnl': round(realized, 2),
+            'unrealized_pnl': round(unrealized, 2),
+            'ret_pct': round(ret_pct, 2),
+            'trades': trade_count,
+        })
+
+    standings.sort(key=lambda x: x['total_pnl'], reverse=True)
+    for i, s in enumerate(standings):
+        s['rank'] = i + 1
+
+    return jsonify({
+        'success': True,
+        'tournament': dict(tourn),
+        'standings': standings,
+    })
+
+
