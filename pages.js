@@ -23,6 +23,7 @@ function renderNGPage() {
       ${priceDisplay}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -113,6 +114,7 @@ function renderCrudePage() {
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -196,6 +198,7 @@ function renderPowerPage() {
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -268,6 +271,7 @@ function renderFreightPage() {
       <div class="hub-price">${isIdx ? p.toFixed(0) : '$'+p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${isIdx?c.toFixed(0):c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -343,6 +347,7 @@ function renderAgPage() {
       <div class="hub-price">${formatAgPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -413,6 +418,7 @@ function renderMetalsPage() {
       <div class="hub-price">${formatMetalPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -480,6 +486,7 @@ function renderNGLsPage() {
       <div style="font-size:11px;color:var(--text-dim)">$${bblPrice}/bbl</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)}¢ (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 
@@ -586,6 +593,7 @@ function renderLNGPage() {
       <div class="hub-price">$${p.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)">/MMBtu</span></div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
 

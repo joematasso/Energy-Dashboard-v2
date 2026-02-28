@@ -299,6 +299,34 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// Returns a small always-visible source label for each bench-card.
+// Clicking it opens the same popover as the LIVE/EST badge.
+function hubSrcLine(name) {
+  const src = getHubSource(name);
+  let short = src.name
+    .replace(/ \(est\.\)/, '')
+    .replace(/ via yfinance$/, '')
+    .replace(/ \(proxy\)/, '')
+    .replace(/ \(backup source\)/, '')
+    .split(' — ')[0]
+    .trim();
+  if (short.length > 26) short = short.slice(0, 24) + '…';
+  const safeHub = name.replace(/"/g, '&quot;');
+  return `<div class="hub-src-line" data-hub="${safeHub}" onclick="event.stopPropagation();showPriceSource(event,this.dataset.hub)" title="Click to see source details">${short}</div>`;
+}
+
+// Updates the floating "N live prices · fetched Xm ago" pill.
+function _updateRefreshBar() {
+  const bar = document.getElementById('priceRefreshBar');
+  const txt = document.getElementById('priceRefreshText');
+  if (!bar || !txt || !_pricesFetchedAt) return;
+  const mins = Math.round((Date.now() - _pricesFetchedAt * 1000) / 60000);
+  const liveCount = _liveHubSet.size;
+  const ageStr = mins <= 1 ? 'just now' : mins + 'm ago';
+  txt.textContent = `${liveCount} live prices · fetched ${ageStr} · click source label on any card for details`;
+  bar.style.display = 'flex';
+}
+
 function genHistory(base, days, vol) {
   const h = [base];
   for (let i = 1; i < days; i++) {
@@ -318,6 +346,7 @@ async function fetchLivePrices() {
       _liveHubSet      = new Set(d.live_hubs || []);
       _hubSources      = d.hub_sources || {};
       _pricesFetchedAt = d.fetched_at  || 0;
+      _updateRefreshBar();
       const srcEl = document.getElementById('livePriceSrc');
       if (srcEl) {
         srcEl.textContent = `Live prices: ${d.live_hubs ? d.live_hubs.length : d.hub_count} hubs (${d.source})`;
@@ -371,6 +400,9 @@ function initPrices() {
     const ok = await fetchLivePrices();
     if (ok) _rebaseToLivePrices();
   }, LIVE_PRICE_REFRESH);
+
+  // Keep the "fetched Xm ago" text current every minute
+  setInterval(_updateRefreshBar, 60000);
 }
 
 function _rebaseToLivePrices() {
