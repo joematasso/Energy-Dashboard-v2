@@ -308,12 +308,14 @@ from routes_market import market_bp
 from routes_admin import admin_bp
 from routes_chat import chat_bp
 from routes_misc import misc_bp
+from routes_prices import prices_bp
 
 app.register_blueprint(public_bp)
 app.register_blueprint(market_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(misc_bp)
+app.register_blueprint(prices_bp)
 
 # ---------------------------------------------------------------------------
 # Startup

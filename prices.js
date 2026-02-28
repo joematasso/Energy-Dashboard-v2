@@ -1,6 +1,12 @@
 /* =====================================================================
    PRICE ENGINE
    ===================================================================== */
+
+// Real-world price anchors fetched from /api/live-prices (yfinance + EIA).
+// Populated on init and refreshed every 15 minutes.
+let _livePrices = {};
+const LIVE_PRICE_REFRESH = 900000; // 15 minutes
+
 function genHistory(base, days, vol) {
   const h = [base];
   for (let i = 1; i < days; i++) {
@@ -11,7 +17,32 @@ function genHistory(base, days, vol) {
   return h;
 }
 
+async function fetchLivePrices() {
+  try {
+    const r = await fetch(API_BASE + '/api/live-prices');
+    const d = await r.json();
+    if (d.success && d.prices && Object.keys(d.prices).length > 0) {
+      _livePrices = d.prices;
+      const srcEl = document.getElementById('livePriceSrc');
+      if (srcEl) {
+        srcEl.textContent = `Live prices: ${d.hub_count} hubs (${d.source})`;
+        srcEl.title = `Cache age: ${d.cache_age_seconds}s`;
+      }
+      return true;
+    }
+  } catch(e) {
+    // Non-critical — falls back to static base prices
+  }
+  return false;
+}
+
+function _seedPrice(hub) {
+  // Use real market price if available, otherwise fall back to static base
+  return _livePrices[hub.name] !== undefined ? _livePrices[hub.name] : hub.base;
+}
+
 function initPrices() {
+  // Initialize immediately with static base prices so the tick engine can start
   for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
     hubs.forEach(h => {
       priceHistory[h.name] = genHistory(h.base, 180, h.vol);
@@ -19,6 +50,51 @@ function initPrices() {
     });
   }
   initForwardCurves();
+
+  // Then fetch real prices and rebase (non-blocking)
+  fetchLivePrices().then(ok => {
+    if (ok) {
+      // Re-seed history with real prices — patches the last 5 ticks toward reality
+      for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
+        hubs.forEach(h => {
+          const real = _livePrices[h.name];
+          if (real === undefined) return;
+          const hist = priceHistory[h.name];
+          // Gently walk the last 5 entries toward the real price
+          const n = Math.min(5, hist.length);
+          for (let i = n; i >= 1; i--) {
+            const frac = (n - i + 1) / (n + 1);
+            hist[hist.length - i] = hist[hist.length - i] + (real - hist[hist.length - i]) * frac;
+          }
+        });
+      }
+    }
+  });
+
+  // Refresh live prices periodically and gently rebase
+  setInterval(async () => {
+    const ok = await fetchLivePrices();
+    if (ok) _rebaseToLivePrices();
+  }, LIVE_PRICE_REFRESH);
+}
+
+function _rebaseToLivePrices() {
+  // Nudge the last tick toward the real price to prevent long-term drift.
+  // A gentle 20% pull per refresh keeps the simulation grounded without jarring jumps.
+  for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
+    hubs.forEach(h => {
+      const real = _livePrices[h.name];
+      if (real === undefined) return;
+      const hist = priceHistory[h.name];
+      if (!hist || !hist.length) return;
+      const current = hist[hist.length - 1];
+      const isPower = sector === 'power';
+      const floor = isPower ? -h.base * 0.5 : h.base * 0.4;
+      // Pull 20% toward real price
+      const nudged = Math.max(floor, current + (real - current) * 0.20);
+      hist[hist.length - 1] = nudged;
+    });
+  }
 }
 
 function tickPrices() {
