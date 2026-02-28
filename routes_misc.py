@@ -405,7 +405,7 @@ def handle_connect(auth=None):
     logger.info(f"Client connected: {sid} (total: {count})")
 
 @socketio.on('disconnect')
-def handle_disconnect():
+def handle_disconnect(reason=None):
     sid = request.sid
     with connections_lock:
         active_connections.discard(sid)

@@ -56,6 +56,8 @@ FRED_API_KEY = os.environ.get('FRED_API_KEY', '')   # optional — register free
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+# Suppress Werkzeug's per-request access log — it floods Railway's log quota
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 # Caches
 news_cache = {}
