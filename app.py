@@ -50,7 +50,8 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'energydesk-v3-secret')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energydesk.db')
-EIA_API_KEY = os.environ.get('EIA_API_KEY', '')
+EIA_API_KEY  = os.environ.get('EIA_API_KEY', '')
+FRED_API_KEY = os.environ.get('FRED_API_KEY', '')   # optional — register free at fred.stlouisfed.org/docs/api/api_key.html
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -416,6 +417,7 @@ if __name__ == '__main__':
 
     logger.info(f"Starting Energy Desk v3.0 on {host}:{port}")
     logger.info(f"Database: {DATABASE}")
-    logger.info(f"EIA API Key: {'configured' if EIA_API_KEY else 'NOT SET'}")
+    logger.info(f"EIA API Key:  {'configured' if EIA_API_KEY else 'NOT SET'}")
+    logger.info(f"FRED API Key: {'configured' if FRED_API_KEY else 'NOT SET (propane will be estimated)'}")
 
     socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)

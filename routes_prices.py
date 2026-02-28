@@ -24,7 +24,7 @@ from datetime import datetime, timezone, timedelta
 import requests
 from flask import Blueprint, jsonify
 
-from app import EIA_API_KEY
+from app import EIA_API_KEY, FRED_API_KEY
 
 logger = logging.getLogger(__name__)
 prices_bp = Blueprint('prices', __name__)
@@ -113,30 +113,46 @@ def _fetch_yfinance(tickers):
 
 def _fetch_eia_prices():
     """
-    Fetch WTI spot price from EIA API v2.
-    Note: EIA v2 dropped the daily Henry Hub gas spot (RNGWHHD) — NG price
-    now comes exclusively from yfinance NG=F (NYMEX near-month futures).
-    WTI spot is available via series RWTC in /petroleum/pri/spt/data/.
+    Fetch petroleum spot prices from EIA API v2 (/petroleum/pri/spt/data/).
+    Batches multiple series in one request for efficiency.
+
+    Series fetched:
+      RWTC  — WTI Cushing ($/bbl)
+      RBRTE — Brent ($/bbl)  [backup for yfinance BZ=F]
+
+    Note: EIA v2 dropped the daily Henry Hub gas spot (RNGWHHD). NG price
+    now comes from the EIA Today in Energy scrape or yfinance NG=F.
     """
     if not EIA_API_KEY:
         return {}
     result = {}
     try:
-        # WTI Cushing spot price (series RWTC)
         url = (
             'https://api.eia.gov/v2/petroleum/pri/spt/data/'
             f'?api_key={EIA_API_KEY}'
-            '&frequency=daily&data[0]=value&facets[series][]=RWTC'
-            '&sort[0][column]=period&sort[0][direction]=desc&length=1'
+            '&frequency=daily&data[0]=value'
+            '&facets[series][]=RWTC&facets[series][]=RBRTE'
+            '&sort[0][column]=period&sort[0][direction]=desc&length=5'
         )
         r = requests.get(url, timeout=8)
         d = r.json()
         rows = d.get('response', {}).get('data', [])
-        if rows and rows[0].get('value') is not None:
-            result['wti_eia'] = float(rows[0]['value'])
-            logger.debug(f"EIA WTI spot: ${rows[0]['value']} ({rows[0].get('period')})")
+
+        # Rows are sorted date DESC across all requested series.
+        # 'series' field in each row holds the series ID (e.g. 'RWTC', 'RBRTE').
+        SERIES_KEY_MAP = {'RWTC': 'wti_eia', 'RBRTE': 'brent_eia'}
+        for row in rows:
+            series_id = row.get('series', '')
+            val = row.get('value')
+            key = SERIES_KEY_MAP.get(series_id)
+            if key and key not in result and val is not None:
+                result[key] = float(val)
+                logger.debug(f"EIA {series_id}: ${val} ({row.get('period')})")
+            if len(result) == len(SERIES_KEY_MAP):
+                break  # all series found
+
     except Exception as e:
-        logger.debug(f'EIA WTI spot fetch failed: {e}')
+        logger.debug(f'EIA petroleum spot fetch failed: {e}')
 
     return result
 
@@ -202,7 +218,150 @@ def _fetch_nyiso_lmps():
         return {}
 
 
-def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None):
+def _fetch_eia_spot_prices():
+    """
+    Scrape EIA Today in Energy daily spot prices for NG and electricity.
+    URL: https://www.eia.gov/todayinenergy/prices.php
+
+    Page layout (tables[2]): Region | NG Price | NG %Chg | Elec Price | Elec %Chg | Spark Spread
+    Page layout (tables[3]): Region | Gas Point Used | Power Point Used
+    Prices update on business days; no API key required.
+
+    Returns tuple (ng_spots, power_spots):
+      ng_spots:    our_hub_name -> float ($/MMBtu)
+      power_spots: our_hub_name -> float ($/MWh)
+    """
+    try:
+        from bs4 import BeautifulSoup
+        r = requests.get(
+            'https://www.eia.gov/todayinenergy/prices.php',
+            timeout=15,
+            headers={'User-Agent': 'Mozilla/5.0 (compatible; EnergyDesk/3.0)'},
+        )
+        if r.status_code != 200:
+            logger.debug(f'EIA prices page HTTP {r.status_code}')
+            return {}, {}
+
+        soup = BeautifulSoup(r.text, 'html.parser')
+        tables = soup.find_all('table')
+        if len(tables) < 4:
+            logger.debug(f'EIA prices page: expected ≥4 tables, got {len(tables)}')
+            return {}, {}
+
+        # --- Parse Table 2: Region → (ng_price, elec_price) ---
+        # Row format: cells[0]=region  cells[1]=NG$  cells[2]=NG%  cells[3]=elec$  cells[4]=elec%  cells[5]=spark
+        region_prices = {}
+        for row in tables[2].find_all('tr'):
+            cells = row.find_all('td')
+            if len(cells) < 2:
+                continue
+            region = cells[0].get_text(strip=True)
+            try:
+                ng_val = float(cells[1].get_text(strip=True).replace(',', ''))
+                pwr_val = float(cells[3].get_text(strip=True).replace(',', '')) if len(cells) >= 4 else None
+                region_prices[region] = (ng_val, pwr_val)
+            except (ValueError, IndexError):
+                continue
+
+        # --- Hardcoded region → (ng_our_hub, power_our_hub) mapping ---
+        # Derived from Table 3 analysis; hardcoded for stability.
+        # Table 2 region name → (our NG hub or None, our power hub or None)
+        REGION_TO_HUBS = {
+            'New England':   ('Algonquin',      'NEPOOL Mass'),
+            'New York City': ('Transco Zone 6', 'NYISO Zone J'),
+            'Mid-Atlantic':  ('Tetco M3',       'PJM West Hub'),
+            'Midwest':       ('Chicago',         'MISO Illinois'),
+            'Louisiana':     ('Henry Hub',       None),          # Entergy not in our hub list
+            'Houston':       (None,              'ERCOT Hub'),   # Houston Ship Channel not an NG hub we use
+            'Southwest':     ('Waha',            None),          # El Paso San Juan = Waha proxy; Palo Verde not in our list
+            'Southern CA':   ('SoCal Gas',       'CAISO SP15'),
+            'Northern CA':   (None,              'CAISO NP15'),  # PG&E CG not in our NG list
+            'Northwest':     ('Sumas',           None),          # Mid-Columbia not in our power list
+        }
+
+        ng_spots = {}
+        power_spots = {}
+
+        for region, (ng_hub, pwr_hub) in REGION_TO_HUBS.items():
+            # Flexible region match: exact first, then prefix
+            prices = region_prices.get(region)
+            if prices is None:
+                for r_key in region_prices:
+                    if r_key.startswith(region) or region.startswith(r_key):
+                        prices = region_prices[r_key]
+                        break
+            if prices is None:
+                continue
+
+            ng_val, pwr_val = prices
+
+            if ng_hub and ng_val is not None:
+                if -5.0 < ng_val < 50.0:
+                    ng_spots[ng_hub] = round(ng_val, 4)
+
+            if pwr_hub and pwr_val is not None:
+                if -50.0 < pwr_val < 1500.0:
+                    power_spots[pwr_hub] = round(pwr_val, 2)
+
+        logger.debug(f'EIA spot prices: {len(ng_spots)} NG {ng_spots}, {len(power_spots)} power {power_spots}')
+        return ng_spots, power_spots
+
+    except Exception as e:
+        logger.debug(f'EIA spot scrape failed: {e}')
+        return {}, {}
+
+
+def _fetch_fred_prices():
+    """
+    Fetch commodity prices from FRED (Federal Reserve Economic Data).
+    Optional — only runs if FRED_API_KEY env var is set.
+    Register free at: https://fred.stlouisfed.org/docs/api/api_key.html
+
+    Key series fetched:
+      DPROPANEMBTX  — Mont Belvieu propane spot ($/gallon, weekly from EIA)
+      DHHNGSP       — Henry Hub natural gas spot ($/MMBtu, daily from EIA) [backup]
+      DCOILWTICO    — WTI crude spot ($/barrel, daily from EIA) [backup]
+      DCOILBRENTEU  — Brent crude spot ($/barrel, daily from EIA) [backup]
+
+    Returns dict with keys: propane_fred, henry_hub_fred, wti_fred, brent_fred
+    (all float, $/unit as noted above)
+    """
+    if not FRED_API_KEY:
+        return {}
+
+    FRED_SERIES = {
+        'DPROPANEMBTX': 'propane_fred',     # Mont Belvieu propane ($/gal)
+        'DHHNGSP':      'henry_hub_fred',   # Henry Hub spot ($/MMBtu)
+        'DCOILWTICO':   'wti_fred',         # WTI spot ($/bbl)
+        'DCOILBRENTEU': 'brent_fred',       # Brent spot ($/bbl)
+    }
+
+    result = {}
+    for series_id, key in FRED_SERIES.items():
+        try:
+            url = (
+                'https://api.stlouisfed.org/fred/series/observations'
+                f'?series_id={series_id}'
+                f'&api_key={FRED_API_KEY}'
+                '&sort_order=desc&limit=10&file_type=json'
+            )
+            r = requests.get(url, timeout=8)
+            if r.status_code != 200:
+                continue
+            obs = r.json().get('observations', [])
+            # Find the most recent non-missing observation ('.' means no data)
+            for ob in obs:
+                if ob.get('value', '.') != '.':
+                    result[key] = float(ob['value'])
+                    logger.debug(f'FRED {series_id}: {ob["value"]} ({ob["date"]})')
+                    break
+        except Exception as e:
+            logger.debug(f'FRED {series_id} fetch failed: {e}')
+
+    return result
+
+
+def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None, eia_power_spots=None, fred_prices=None):
     """
     Map raw benchmark prices to the platform's hub names.
 
@@ -211,14 +370,23 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None):
 
     Returns (prices_dict, live_hubs_list).
     """
-    ercot_lmps = ercot_lmps or {}
-    caiso_lmps = caiso_lmps or {}
+    if nyiso_lmps is None:
+        nyiso_lmps = {}
+    if eia_ng_spots is None:
+        eia_ng_spots = {}
+    if eia_power_spots is None:
+        eia_power_spots = {}
+    if fred_prices is None:
+        fred_prices = {}
 
     # --- Benchmarks ---
-    # Prefer EIA spot (more authoritative) then yfinance for NG and WTI
-    hh = eia_prices.get('henry_hub_eia') or yf_prices.get('NG=F')
-    wti = eia_prices.get('wti_eia') or yf_prices.get('CL=F')
-    brent = yf_prices.get('BZ=F')
+    # Priority chain (most authoritative → most available):
+    # Henry Hub: EIA page physical spot > FRED EIA-sourced spot > yfinance NYMEX futures
+    # WTI:       EIA API RWTC spot      > FRED EIA-sourced spot > yfinance CL=F futures
+    # Brent:     yfinance BZ=F          > FRED EIA-sourced spot
+    hh    = eia_ng_spots.get('Henry Hub') or eia_prices.get('henry_hub_eia') or fred_prices.get('henry_hub_fred') or yf_prices.get('NG=F')
+    wti   = eia_prices.get('wti_eia')    or fred_prices.get('wti_fred')      or yf_prices.get('CL=F')
+    brent = yf_prices.get('BZ=F')        or eia_prices.get('brent_eia')      or fred_prices.get('brent_fred')
 
     out = {}
     live_hubs = set()
@@ -244,9 +412,15 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None):
     if hh:
         for hub, spread in NG_SPREADS.items():
             out[hub] = round(hh + spread, 4)
-        # Only Henry Hub itself is sourced from a real feed (yfinance NG=F).
-        # All other NG hubs use estimated historical basis spreads — mark as EST.
+        # Henry Hub from yfinance NG=F — always LIVE.
         live_hubs.add('Henry Hub')
+
+    # Override spread-estimated hubs with real EIA daily spot prices where available.
+    # These are the actual published spot prices for physical delivery today —
+    # much more accurate than HH + fixed spread.
+    for hub_name, spot_price in eia_ng_spots.items():
+        out[hub_name] = spot_price
+        live_hubs.add(hub_name)
 
     # --- Crude (all relative to WTI) ---
     CRUDE_DIFFS = {
@@ -310,20 +484,25 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None):
         # TTF tracks HH with a premium — use yfinance if available
         # JKM not available free; keep as Brownian
 
-    # --- NGLs (anchor to NG and crude) ---
+    # --- NGLs (anchor to NG and crude; upgrade to FRED spot where available) ---
     if hh:
-        # Ethane (¢/gal): tracks NG price loosely — ~3.5 Mcf per gallon
-        # Base: 22.5 ¢/gal when HH ≈ 2.75 → ratio 22.5/2.75 ≈ 8.18
+        # Ethane (¢/gal): loosely tracks NG — ~3.5 Mcf per gallon
         out['Ethane (C2)'] = round(hh * 8.18, 1)
         live_hubs.add('Ethane (C2)')
     if wti:
-        # Propane ≈ 35% of crude (price in ¢/gal, crude in $/bbl)
-        # WTI $79.50 → propane ~72 ¢/gal → ratio ≈ 0.905
-        out['Propane (C3)'] = round(wti * 0.905, 1)
         out['Normal Butane (nC4)'] = round(wti * 1.32, 1)
-        out['Isobutane (iC4)'] = round(wti * 1.41, 1)
-        out['Nat Gasoline (C5+)'] = round(wti * 1.95, 1)
-        live_hubs.update(['Propane (C3)', 'Normal Butane (nC4)', 'Isobutane (iC4)', 'Nat Gasoline (C5+)'])
+        out['Isobutane (iC4)']     = round(wti * 1.41, 1)
+        out['Nat Gasoline (C5+)']  = round(wti * 1.95, 1)
+        live_hubs.update(['Normal Butane (nC4)', 'Isobutane (iC4)', 'Nat Gasoline (C5+)'])
+
+    # Propane: prefer FRED Mont Belvieu spot ($/gal → ¢/gal × 100) over crude ratio.
+    # FRED DPROPANEMBTX = EIA weekly Mont Belvieu propane price in $/gallon.
+    if fred_prices.get('propane_fred'):
+        out['Propane (C3)'] = round(fred_prices['propane_fred'] * 100, 1)  # $/gal → ¢/gal
+        live_hubs.add('Propane (C3)')
+    elif wti:
+        # Fallback: crude ratio (WTI $65 → ~59 ¢/gal at ~0.905 ratio)
+        out['Propane (C3)'] = round(wti * 0.905, 1)
 
     # --- Power: NYISO live LMPs; heat-rate estimates (EST) for all others ---
     # Heat-rate formula: LMP ≈ gas_price ($/MMBtu) × heat_rate (MMBtu/MWh) + non-fuel adder
@@ -344,17 +523,22 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None):
         'SPP North':    ('Henry Hub',      7.5,  +2.00),  # ~$23 vs typical $20-30
     }
 
-    # Apply NYISO real-time LMPs where available; all others are heat-rate EST
+    # Priority order for power prices:
+    # 1. NYISO real-time CSV (5-min, most current)
+    # 2. EIA Today in Energy (daily SNL/regional assessments)
+    # 3. Heat-rate formula (estimated, marked EST)
     for hub, (gas_hub, heat_rate, adder) in POWER_GAS_REF.items():
         if nyiso_lmps and hub in nyiso_lmps:
             out[hub] = nyiso_lmps[hub]
+            live_hubs.add(hub)
+        elif eia_power_spots and hub in eia_power_spots:
+            out[hub] = eia_power_spots[hub]
             live_hubs.add(hub)
         else:
             gas_price = out.get(gas_hub)
             if gas_price:
                 out[hub] = round(gas_price * heat_rate + adder, 2)
                 # Heat-rate derived — NOT marked live even though anchored to live gas.
-                # The formula itself is estimated, so these should show EST.
 
     return out, list(live_hubs)
 
@@ -366,24 +550,33 @@ def fetch_live_prices():
         if _price_cache['data'] and (now - _price_cache['ts']) < PRICE_TTL:
             return _price_cache['data']
 
-    logger.info('Fetching live prices from yfinance + EIA + NYISO...')
+    logger.info('Fetching live prices from yfinance + EIA + NYISO + EIA-spot-scrape...')
 
     # Fetch all sources concurrently
     import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
         f_yf    = ex.submit(_fetch_yfinance, TICKERS)
         f_eia   = ex.submit(_fetch_eia_prices)
         f_nyiso = ex.submit(_fetch_nyiso_lmps)
-        yf_prices  = f_yf.result()
-        eia_prices = f_eia.result()
-        nyiso_lmps = f_nyiso.result()
+        f_spots = ex.submit(_fetch_eia_spot_prices)
+        f_fred  = ex.submit(_fetch_fred_prices)
+        yf_prices              = f_yf.result()
+        eia_prices             = f_eia.result()
+        nyiso_lmps             = f_nyiso.result()
+        eia_ng_spots, eia_power_spots = f_spots.result()
+        fred_prices            = f_fred.result()
 
-    hub_prices, live_hubs = _build_hub_prices(yf_prices, eia_prices, nyiso_lmps)
+    hub_prices, live_hubs = _build_hub_prices(
+        yf_prices, eia_prices, nyiso_lmps, eia_ng_spots, eia_power_spots, fred_prices
+    )
 
     sources = []
-    if yf_prices:  sources.append('yfinance')
-    if eia_prices: sources.append('EIA')
-    if nyiso_lmps: sources.append(f'NYISO({len(nyiso_lmps)})')
+    if yf_prices:       sources.append('yfinance')
+    if eia_prices:      sources.append('EIA-WTI')
+    if nyiso_lmps:      sources.append(f'NYISO({len(nyiso_lmps)})')
+    if eia_ng_spots:    sources.append(f'EIA-NG({len(eia_ng_spots)})')
+    if eia_power_spots: sources.append(f'EIA-PWR({len(eia_power_spots)})')
+    if fred_prices:     sources.append(f'FRED({len(fred_prices)})')
     logger.info(f'Live prices fetched from [{", ".join(sources)}]: {len(hub_prices)} hubs ({len(live_hubs)} live)')
 
     with _price_lock:
@@ -409,7 +602,7 @@ def get_live_prices():
             'live_hubs': _price_cache.get('live_hubs', []),
             'hub_count': len(prices),
             'cache_age_seconds': cached_age,
-            'source': 'yfinance+EIA+NYISO'
+            'source': 'yfinance+EIA+NYISO+EIA-spot-scrape'
         })
     except Exception as e:
         logger.error(f'Live prices endpoint error: {e}')
