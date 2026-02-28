@@ -56,7 +56,7 @@ function renderConvoList() {
   const list = document.getElementById('chatConvoList');
   if(!list) return;
   if(!CHAT_STATE.conversations.length) {
-    list.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">No conversations yet.<br>Click + New to start one.</p>';
+    list.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:var(--text-muted);text-align:center;gap:10px;padding:24px"><div style="font-size:36px;opacity:0.4">💬</div><div style="font-size:13px;line-height:1.6">No conversations yet.<br>Tap <strong style="color:var(--text)">+ New</strong> to start one.</div></div>';
     return;
   }
   list.innerHTML = CHAT_STATE.conversations.map(c => {
@@ -160,15 +160,32 @@ async function loadMessages(convId) {
 
 function renderMessages(msgs) {
   const container = document.getElementById('chatMessages');
-  const REACTION_EMOJIS = ['👍','🔥','📈','📉','💯','🎯'];
+  if (!container) return;
 
-  container.innerHTML = msgs.map(m => {
+  let html = '';
+  let lastDate = null;
+  let lastSender = null;
+  let lastMsgTime = null;
+
+  msgs.forEach(m => {
     const isMe = m.sender === STATE.trader.trader_name;
-    const time = new Date(m.created_at+'Z').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    const teamDot = m.team_color ? `<span style="width:6px;height:6px;border-radius:50%;background:${m.team_color};display:inline-block"></span>` : '';
+    const msgDate = new Date(m.created_at + 'Z');
+    const dateLabel = msgDate.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+    const timeStr = msgDate.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
 
-    // Render @mentions highlighted
-    const renderedText = formatMentions(escapeHtml(m.text));
+    // Date separator between different days
+    if (dateLabel !== lastDate) {
+      html += `<div class="chat-date-sep"><span>${dateLabel}</span></div>`;
+      lastDate = dateLabel;
+      lastSender = null;
+      lastMsgTime = null;
+    }
+
+    // Group consecutive messages from same sender within 5 minutes
+    const timeDiff = lastMsgTime ? (msgDate - lastMsgTime) / 60000 : 999;
+    const isGrouped = !m.pinned && m.sender === lastSender && timeDiff < 5;
+    lastSender = m.sender;
+    lastMsgTime = msgDate;
 
     // Reactions
     const reactions = m.reactions || [];
@@ -177,38 +194,48 @@ function renderMessages(msgs) {
       reactionsHtml = '<div class="msg-reactions">' + reactions.map(r => {
         const isMine = r.traders.includes(STATE.trader.trader_name);
         const title = r.traders.join(', ');
-        return `<span class="msg-reaction ${isMine?'mine':''}" title="${title}" onclick="toggleReaction(${m.id},'${r.emoji}')">`
-          + `<span class="react-emoji">${r.emoji}</span><span class="react-count">${r.count}</span></span>`;
+        return `<span class="msg-reaction ${isMine ? 'mine' : ''}" title="${title}" onclick="toggleReaction(${m.id},'${r.emoji}')"><span class="react-emoji">${r.emoji}</span><span class="react-count">${r.count}</span></span>`;
       }).join('') + '</div>';
     }
 
-    // Pin indicator
     const pinIndicator = m.pinned ? '<div class="msg-pin-indicator">📌 Pinned</div>' : '';
-
-    // Action buttons (react + pin) — inline below bubble
     const actionsHtml = `<div class="msg-actions-inline">
       <button class="msg-action-btn" onclick="showReactPicker(event,${m.id})" title="React">😊</button>
-      <button class="msg-action-btn" onclick="togglePin(${m.id})" title="${m.pinned?'Unpin':'Pin'}">${m.pinned?'📌':'📍'}</button>
+      <button class="msg-action-btn" onclick="togglePin(${m.id})" title="${m.pinned ? 'Unpin' : 'Pin'}">${m.pinned ? '📌' : '📍'}</button>
     </div>`;
 
-    const senderAvatar = !isMe && m.photo_url
-        ? `<img src="${m.photo_url}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px">`
-        : '';
+    const teamDot = m.team_color ? `<span style="width:6px;height:6px;border-radius:50%;background:${m.team_color};display:inline-block;flex-shrink:0"></span>` : '';
+    const renderedText = formatMentions(escapeHtml(m.text));
 
-    return `<div class="chat-msg ${isMe?'me':'other'}">
-      ${pinIndicator}
-      ${!isMe?`<div class="msg-sender">${senderAvatar}${teamDot}${m.display_name}</div>`:''}
-      <div class="msg-bubble">${renderedText}</div>
-      ${reactionsHtml}
-      <div class="msg-meta">
-        <div class="msg-time">${time}</div>
-        ${actionsHtml}
+    // Avatar column (other messages only)
+    let avatarHtml = '';
+    if (!isMe) {
+      if (!isGrouped) {
+        const initials = (m.display_name || '?').charAt(0).toUpperCase();
+        const imgContent = m.photo_url ? `<img src="${m.photo_url}" alt="">` : initials;
+        avatarHtml = `<div class="msg-avatar">${imgContent}</div>`;
+      } else {
+        avatarHtml = `<div class="msg-avatar-spacer"></div>`;
+      }
+    }
+
+    html += `<div class="chat-msg ${isMe ? 'me' : 'other'}${isGrouped ? ' grouped' : ''}">
+      ${!isMe ? avatarHtml : ''}
+      <div class="chat-msg-content">
+        ${pinIndicator}
+        ${!isMe && !isGrouped ? `<div class="msg-sender">${teamDot}${m.display_name}</div>` : ''}
+        <div class="msg-bubble">${renderedText}</div>
+        ${reactionsHtml}
+        <div class="msg-meta">
+          <div class="msg-time">${timeStr}</div>
+          ${actionsHtml}
+        </div>
       </div>
     </div>`;
-  }).join('');
-  container.scrollTop = container.scrollHeight;
+  });
 
-  // Load pinned bar
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
   if (CHAT_STATE.activeConvo) loadPinnedBar(CHAT_STATE.activeConvo.id);
 }
 
@@ -351,13 +378,19 @@ function chatInputKeydown(event) {
     } else if (event.key === 'Escape') {
       closeMentionDropdown();
     }
-  } else if (event.key === 'Enter') {
+  } else if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
     chatSend();
   }
 }
 
 function chatInputChanged() {
   const input = document.getElementById('chatInput');
+  // Auto-grow textarea
+  if (input.tagName === 'TEXTAREA') {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  }
   const val = input.value;
   const cursorPos = input.selectionStart;
 
@@ -427,6 +460,7 @@ async function chatSend() {
   const text = input.value.trim();
   if(!text) return;
   input.value = '';
+  if (input.tagName === 'TEXTAREA') input.style.height = 'auto';
   try {
     await fetch(API_BASE+'/api/chat/send/'+CHAT_STATE.activeConvo.id,{
       method:'POST', headers:{'Content-Type':'application/json'},

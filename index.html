@@ -1252,8 +1252,8 @@
     <div id="chatInputWrap" style="position:relative">
       <div class="mention-dropdown" id="mentionDropdown"></div>
       <div class="chat-input-wrap">
-        <input type="text" id="chatInput" placeholder="Type a message... (use @ to mention)" maxlength="2000" onkeydown="chatInputKeydown(event)" oninput="chatInputChanged()">
-        <button onclick="chatSend()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></button>
+        <textarea id="chatInput" rows="1" placeholder="Message… (@ to mention · Shift+↵ for newline)" maxlength="2000" onkeydown="chatInputKeydown(event)" oninput="chatInputChanged()"></textarea>
+        <button class="chat-send-btn" onclick="chatSend()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></button>
       </div>
     </div>
   </div>
