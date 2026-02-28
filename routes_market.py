@@ -199,6 +199,22 @@ def get_news(commodity):
 # ---------------------------------------------------------------------------
 # EIA Proxy
 # ---------------------------------------------------------------------------
+@market_bp.route('/api/eia-cache-clear', methods=['POST'])
+def eia_cache_clear():
+    """Clear the EIA cache so the next request re-fetches fresh data."""
+    from app import admin_required
+    from flask import request as _req
+    # Require admin PIN
+    from app import verify_admin_pin
+    pin = _req.headers.get('X-Admin-Pin', '')
+    if not verify_admin_pin(pin):
+        return jsonify({'success': False, 'error': 'Admin PIN required'}), 403
+    with eia_cache_lock:
+        cleared = list(eia_cache.keys())
+        eia_cache.clear()
+    return jsonify({'success': True, 'cleared': cleared})
+
+
 @market_bp.route('/api/eia-debug')
 def eia_debug():
     """Debug endpoint — hit /api/eia-debug in your browser to check EIA status"""

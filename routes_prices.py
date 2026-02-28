@@ -112,32 +112,21 @@ def _fetch_yfinance(tickers):
 
 
 def _fetch_eia_prices():
-    """Fetch Henry Hub and WTI spot prices from EIA API v2."""
+    """
+    Fetch WTI spot price from EIA API v2.
+    Note: EIA v2 dropped the daily Henry Hub gas spot (RNGWHHD) — NG price
+    now comes exclusively from yfinance NG=F (NYMEX near-month futures).
+    WTI spot is available via series RWTC in /petroleum/pri/spt/data/.
+    """
     if not EIA_API_KEY:
         return {}
     result = {}
     try:
-        # Henry Hub natural gas spot
-        url = (
-            'https://api.eia.gov/v2/natural-gas/pri/sum/data/'
-            f'?api_key={EIA_API_KEY}'
-            '&frequency=daily&data[0]=value&facets[series][]=RNGWHHD'
-            '&sort[0][column]=period&sort[0][direction]=desc&length=1'
-        )
-        r = requests.get(url, timeout=8)
-        d = r.json()
-        rows = d.get('response', {}).get('data', [])
-        if rows and rows[0].get('value') is not None:
-            result['henry_hub_eia'] = float(rows[0]['value'])
-    except Exception as e:
-        logger.debug(f'EIA NG spot fetch failed: {e}')
-
-    try:
-        # WTI crude spot
+        # WTI Cushing spot price (series RWTC)
         url = (
             'https://api.eia.gov/v2/petroleum/pri/spt/data/'
             f'?api_key={EIA_API_KEY}'
-            '&frequency=daily&data[0]=value&facets[series][]=RCLC1'
+            '&frequency=daily&data[0]=value&facets[series][]=RWTC'
             '&sort[0][column]=period&sort[0][direction]=desc&length=1'
         )
         r = requests.get(url, timeout=8)
@@ -145,6 +134,7 @@ def _fetch_eia_prices():
         rows = d.get('response', {}).get('data', [])
         if rows and rows[0].get('value') is not None:
             result['wti_eia'] = float(rows[0]['value'])
+            logger.debug(f"EIA WTI spot: ${rows[0]['value']} ({rows[0].get('period')})")
     except Exception as e:
         logger.debug(f'EIA WTI spot fetch failed: {e}')
 
@@ -321,7 +311,9 @@ def _build_hub_prices(yf_prices, eia_prices, ercot_lmps=None, caiso_lmps=None):
     if hh:
         for hub, spread in NG_SPREADS.items():
             out[hub] = round(hh + spread, 4)
-            live_hubs.add(hub)
+        # Only Henry Hub itself is sourced from a real feed (yfinance NG=F).
+        # All other NG hubs use estimated historical basis spreads — mark as EST.
+        live_hubs.add('Henry Hub')
 
     # --- Crude (all relative to WTI) ---
     CRUDE_DIFFS = {
@@ -336,7 +328,9 @@ def _build_hub_prices(yf_prices, eia_prices, ercot_lmps=None, caiso_lmps=None):
     if wti:
         for hub, diff in CRUDE_DIFFS.items():
             out[hub] = round(wti + diff, 2)
-            live_hubs.add(hub)
+        # Only WTI Cushing is sourced from real data (EIA RWTC / yfinance CL=F).
+        # Other crude grades use fixed estimated differentials — mark as EST.
+        live_hubs.add('WTI Cushing')
     if brent:
         out['Brent Dated'] = round(brent, 2)
         live_hubs.add('Brent Dated')
