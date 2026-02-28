@@ -237,17 +237,21 @@ def get_eia(eia_type):
         return jsonify({'success': False, 'error': 'EIA_API_KEY not configured'})
 
     # EIA v2 API routes and series IDs
+    # Process codes: SWO=Working Gas (total), SAX=Ending Stocks excl SPR, SAE=Ending Stocks (all)
     routes = {
         'ng_storage': {
-            'url': f"https://api.eia.gov/v2/natural-gas/stor/wkly/data/?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value&facets[process][]=SAT&sort[0][column]=period&sort[0][direction]=desc&length=52",
+            # SWO = Working Gas in Underground Storage; R48 = Lower 48 states total
+            'url': f"https://api.eia.gov/v2/natural-gas/stor/wkly/data/?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value&facets[process][]=SWO&facets[duoarea][]=R48&sort[0][column]=period&sort[0][direction]=desc&length=52",
             'label': 'NG Weekly Storage'
         },
         'crude_inventory': {
-            'url': f"https://api.eia.gov/v2/petroleum/stoc/wstk/data/?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value&facets[product][]=EPC0&facets[duoarea][]=NUS&sort[0][column]=period&sort[0][direction]=desc&length=52",
+            # SAX = Ending Stocks Excluding SPR — the commercial inventory number markets watch
+            'url': f"https://api.eia.gov/v2/petroleum/stoc/wstk/data/?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value&facets[product][]=EPC0&facets[duoarea][]=NUS&facets[process][]=SAX&sort[0][column]=period&sort[0][direction]=desc&length=52",
             'label': 'Crude Weekly Inventory'
         },
         'crude_cushing': {
-            'url': f"https://api.eia.gov/v2/petroleum/stoc/wstk/data/?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value&facets[product][]=EPC0&facets[duoarea][]=R20&sort[0][column]=period&sort[0][direction]=desc&length=52",
+            # SAE = Ending Stocks (Cushing is all commercial, no SPR component)
+            'url': f"https://api.eia.gov/v2/petroleum/stoc/wstk/data/?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value&facets[product][]=EPC0&facets[duoarea][]=R20&facets[process][]=SAE&sort[0][column]=period&sort[0][direction]=desc&length=52",
             'label': 'Cushing Stocks'
         }
     }
