@@ -63,6 +63,18 @@ function renderBlotterTable() {
     // Row tint
     const rowBg = t._pending ? 'background:rgba(139,92,246,0.03)' : (t.status === 'OPEN' ? (mtm >= 0 ? 'background:rgba(16,185,129,0.03)' : 'background:rgba(239,68,68,0.03)') : '');
 
+    // MTM tooltip
+    let mtmTitle = '';
+    if (!t._pending) {
+      const ep = parseFloat(t.entryPrice || 0);
+      const move = (spot - ep) * dir;
+      if (t.status === 'OPEN') {
+        mtmTitle = `Entry: $${ep.toFixed(4)} | Spot: $${spot.toFixed(4)} | Move: ${move >= 0 ? '+' : ''}$${move.toFixed(4)}/unit | Vol: ${vol.toLocaleString()} | MTM: ${mtm >= 0 ? '+' : ''}$${Math.abs(mtm).toLocaleString(undefined, {maximumFractionDigits:0})}`;
+      } else {
+        mtmTitle = `Entry: $${ep.toFixed(4)} | Close: $${parseFloat(t.closePrice || 0).toFixed(4)} | Realized: ${mtm >= 0 ? '+' : ''}$${Math.abs(mtm).toLocaleString(undefined, {maximumFractionDigits:0})}`;
+      }
+    }
+
     // Check 1-hour delete window
     const created = new Date(t.timestamp || t.server_created_at || Date.now());
     const canDelete = (Date.now() - created.getTime()) < 3600000;
@@ -78,6 +90,7 @@ function renderBlotterTable() {
       if (canDelete) actions += `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTrade(${t.id})">Delete</button>`;
       else if (t.status === 'OPEN') actions += `<span style="font-size:10px;color:var(--text-muted)" title="Admin required after 1hr">Locked</span>`;
       actions += `<button class="btn btn-ghost btn-sm" onclick="cloneTrade(${t.id})">Clone</button>`;
+      actions += `<button class="btn btn-ghost btn-sm" title="Share to chat" onclick="shareTradeToChat(${t.id})">Share</button>`;
     }
 
     return `<tr style="${rowBg}">
@@ -89,7 +102,7 @@ function renderBlotterTable() {
       <td class="mono">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>
       <td class="mono">${isLarge ? spot.toFixed(0) : spot.toFixed(3)}</td>
       <td>${orderBadge}</td>
-      <td class="mono ${mtmColor}" style="font-weight:600">${t._pending ? '—' : (mtm>=0?'+':'') + '$' + Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+      <td class="mono ${mtmColor}" style="font-weight:600;cursor:default" title="${mtmTitle}">${t._pending ? '—' : (mtm>=0?'+':'') + '$' + Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
       <td>${statusBadge}</td>
       <td><div class="actions-cell">${actions}</div></td>
     </tr>`;
@@ -406,12 +419,148 @@ function initPnlCrosshair() {
   canvas.addEventListener('mouseleave', () => { if (canvas._pnlMeta) drawPnlChart(); });
 }
 
+async function shareTradeToChat(tradeId) {
+  if (!STATE.trader) return toast('Please log in to share trades', 'error');
+  const t = STATE.trades.find(x => x.id === tradeId);
+  if (!t) return;
+
+  // Build formatted trade message
+  const spot = getPrice(t.hub);
+  const dir = t.direction === 'BUY' ? 1 : -1;
+  const mtm = t.status === 'OPEN' ? ((spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir) : parseFloat(t.realizedPnl || 0);
+  const mtmStr = (mtm >= 0 ? '+' : '') + '$' + Math.abs(mtm).toLocaleString(undefined, {maximumFractionDigits: 0});
+  const statusLabel = t.status === 'OPEN' ? `OPEN | Spot: $${spot.toFixed(3)} | MTM: ${mtmStr}` : `CLOSED @ $${parseFloat(t.closePrice||0).toFixed(3)} | P&L: ${mtmStr}`;
+  const msg = `📊 ${t.direction} ${parseFloat(t.volume).toLocaleString()} ${t.hub} @ $${parseFloat(t.entryPrice).toFixed(3)} [${t.type}] — ${statusLabel}${t.notes ? ' | ' + t.notes : ''}`;
+
+  // Load conversations
+  let convos = [];
+  try {
+    const r = await fetch(API_BASE + '/api/chat/conversations/' + encodeURIComponent(STATE.trader.trader_name));
+    const d = await r.json();
+    if (d.success) convos = (d.conversations || []).filter(c => c.type !== 'system' && c.type !== 'admin_inbox');
+  } catch(e) {}
+
+  if (!convos.length) {
+    toast('No conversations to share to. Open chat to start one.', 'info');
+    return;
+  }
+
+  // Show picker
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:300px;max-width:420px;width:90%">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">Share Trade to Chat</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;font-family:monospace;padding:8px;background:var(--surface2);border-radius:6px;word-break:break-all">${msg}</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">Select a conversation:</div>
+      <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+        ${convos.map(c => {
+          const name = c.type === 'dm' ? (c.members||[]).filter(m => m !== STATE.trader.trader_name).join(', ') || c.name : c.name;
+          return `<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''" onclick="doShareToChat(${c.id})" data-convo-id="${c.id}">
+            <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:var(--surface2);color:var(--text-dim)">${c.type==='dm'?'DM':c.type.toUpperCase()}</span>
+            <span style="font-weight:600">${name}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:12px;display:flex;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="this.closest('[data-overlay-root]').remove()">Cancel</button>
+      </div>
+    </div>`;
+  overlay.setAttribute('data-overlay-root', '1');
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  // Store msg for the share handler
+  overlay._shareMsg = msg;
+  window._shareOverlay = overlay;
+  document.body.appendChild(overlay);
+}
+
+async function doShareToChat(convId) {
+  if (!STATE.trader) return;
+  const msg = window._shareOverlay ? window._shareOverlay._shareMsg : '';
+  if (!msg) return;
+  try {
+    await fetch(API_BASE + '/api/chat/send/' + convId, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sender: STATE.trader.trader_name, text: msg})
+    });
+    toast('Trade shared to chat', 'success');
+  } catch(e) { toast('Failed to share trade', 'error'); }
+  if (window._shareOverlay) { window._shareOverlay.remove(); window._shareOverlay = null; }
+}
+
+function flatAll() {
+  const open = STATE.trades.filter(t => t.status === 'OPEN');
+  if (!open.length) return toast('No open positions to close', 'info');
+  if (!confirm(`Close all ${open.length} open position(s) at market price?`)) return;
+  let totalPnl = 0;
+  open.forEach(t => {
+    const cp = getPrice(t.hub);
+    if (!cp && cp !== 0) return;
+    const dir = t.direction === 'BUY' ? 1 : -1;
+    const pnl = (cp - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    t.status = 'CLOSED';
+    t.closePrice = cp;
+    t.realizedPnl = pnl;
+    t.closedAt = new Date().toISOString();
+    totalPnl += pnl;
+    if (STATE.connected && STATE.trader) {
+      fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp })
+      }).catch(() => {});
+    }
+  });
+  localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+  playSound('trade');
+  toast(`Flattened ${open.length} position(s). Net P&L: ${totalPnl >= 0 ? '+' : ''}$${Math.abs(totalPnl).toLocaleString(undefined, {maximumFractionDigits:0})}`, totalPnl >= 0 ? 'success' : 'error');
+  renderBlotterPage();
+}
+
+function exportTradesCSV() {
+  const trades = STATE.trades;
+  if (!trades.length) return toast('No trades to export', 'info');
+  const headers = ['Date','Type','Direction','Hub','Volume','Entry Price','Close Price','Status','Realized P&L','MTM P&L','Sector','Delivery','Counterparty','Venue','Notes'];
+  const rows = trades.map(t => {
+    const spot = getPrice(t.hub);
+    const dir = t.direction === 'BUY' ? 1 : -1;
+    const mtm = t.status === 'OPEN' ? ((spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir) : '';
+    return [
+      new Date(t.timestamp || t.server_created_at || Date.now()).toISOString(),
+      t.type || '',
+      t.direction || '',
+      t.hub || '',
+      t.volume || '',
+      t.entryPrice || '',
+      t.closePrice || '',
+      t.status || '',
+      t.status === 'CLOSED' ? (t.realizedPnl || 0) : '',
+      t.status === 'OPEN' ? mtm.toFixed(2) : '',
+      t.sector || '',
+      t.deliveryMonth || '',
+      t.counterparty || '',
+      t.venue || '',
+      (t.notes || '').replace(/"/g, '""')
+    ].map(v => `"${v}"`).join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const traderName = STATE.trader ? STATE.trader.trader_name : 'trades';
+  a.href = url;
+  a.download = `${traderName}_trades_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${trades.length} trades to CSV`, 'success');
+}
+
 // Keyboard shortcuts for blotter
 document.addEventListener('keydown', e => {
   if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
   if (STATE.currentPage === 'blotter') {
     if (e.key.toLowerCase() === 'b') { e.preventDefault(); setDirection('BUY'); }
     if (e.key.toLowerCase() === 's') { e.preventDefault(); setDirection('SELL'); }
+    if (e.key.toLowerCase() === 'f') { e.preventDefault(); setDirection(tradeDirection === 'BUY' ? 'SELL' : 'BUY'); }
     if (e.key === 'Enter') { e.preventDefault(); submitTrade(); }
   }
 });

@@ -36,6 +36,31 @@ function renderLeaderboardPage() {
   }).catch(()=>renderLeaderboardData(null, false));
 }
 
+function calcSharpeAndDrawdown(trades, balance) {
+  const closed = trades.filter(t => t.status === 'CLOSED').sort((a, b) => new Date(a.closedAt || a.timestamp || 0) - new Date(b.closedAt || b.timestamp || 0));
+  if (closed.length < 2) return { sharpe: null, maxDD: null };
+
+  // Build cumulative equity series from closed trades
+  let peak = balance, maxDD = 0, running = balance;
+  const pnls = [];
+  closed.forEach(t => {
+    const pnl = parseFloat(t.realizedPnl || 0);
+    running += pnl;
+    pnls.push(pnl);
+    if (running > peak) peak = running;
+    const dd = (peak - running) / peak;
+    if (dd > maxDD) maxDD = dd;
+  });
+
+  // Per-trade Sharpe (annualized approximation)
+  const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
+  const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
+  const std = Math.sqrt(variance);
+  const sharpe = std > 0 ? (mean / std) * Math.sqrt(Math.min(pnls.length, 252)) : null;
+
+  return { sharpe: sharpe !== null ? parseFloat(sharpe.toFixed(2)) : null, maxDD: parseFloat((maxDD * 100).toFixed(1)) };
+}
+
 function renderLeaderboardData(serverData, isLive) {
   const indicator = document.getElementById('lbLiveIndicator');
   if(indicator){
@@ -49,6 +74,7 @@ function renderLeaderboardData(serverData, isLive) {
   const myRet=((equity-balance)/balance)*100;
   const myWR=(wins+losses)>0?((wins/(wins+losses))*100):0;
   const myPF=grossLosses>0?(grossWins/grossLosses):(grossWins>0?999:((wins+losses)>0?0:null));
+  const { sharpe: mySharpe, maxDD: myMaxDD } = calcSharpeAndDrawdown(STATE.trades, balance);
   const myName=STATE.trader?STATE.trader.display_name:'You';
   const myRealName=STATE.trader?STATE.trader.real_name:'';
   const myFirm=STATE.trader?STATE.trader.firm:'';
@@ -96,8 +122,13 @@ function renderLeaderboardData(serverData, isLive) {
       {label:'Win Rate', value:myWR.toFixed(1)+'%', pct:Math.round((entries.filter(e=>myWR>=e.winRate).length/totalCount)*100)},
       {label:'Profit Factor', value:myPF===null?'—':myPF.toFixed(2), pct:myPF===null?0:Math.round((entries.filter(e=>myPF>=(e.pf??0)).length/totalCount)*100)},
       {label:'# Trades', value:STATE.trades.length.toString(), pct:Math.round((entries.filter(e=>STATE.trades.length>=e.trades).length/totalCount)*100)},
+      {label:'Sharpe Ratio', value:mySharpe===null?'—':mySharpe.toFixed(2), pct:0, note:'Per-trade Sharpe (annualized)'},
+      {label:'Max Drawdown', value:myMaxDD===null?'—':'-'+myMaxDD.toFixed(1)+'%', pct:0, note:'Peak-to-trough equity decline'},
     ];
-    document.getElementById('percentileContainer').innerHTML = metrics.map(m => `<div class="pct-row"><span class="pct-label">${m.label}</span><span class="pct-value">${m.value}</span><div class="pct-bar-wrap"><div class="pct-bar" style="width:${m.pct}%"></div></div><span class="pct-rank">Top ${100-m.pct}%</span></div>`).join('');
+    document.getElementById('percentileContainer').innerHTML = metrics.map(m => {
+      const hasRank = m.pct > 0 || (m.note === undefined);
+      return `<div class="pct-row" title="${m.note||''}"><span class="pct-label">${m.label}</span><span class="pct-value">${m.value}</span><div class="pct-bar-wrap"><div class="pct-bar" style="width:${m.pct}%"></div></div><span class="pct-rank">${hasRank ? 'Top '+(100-m.pct)+'%' : (m.value==='—'?'—':'Personal')}</span></div>`;
+    }).join('');
     drawLbEquityCurve(entries, myEntry);
     const lbCanvas = document.getElementById('lbEquityChart');
     if (lbCanvas) { lbCanvas._lbRedraw = () => drawLbEquityCurve(entries, myEntry); }
