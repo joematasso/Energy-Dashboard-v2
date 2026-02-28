@@ -19,7 +19,7 @@ function renderNGPage() {
       ? `<div class="hub-price">C$${cadPrice.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)"> /GJ</span></div><div style="font-size:11px;color:var(--text-dim)">US$${p.toFixed(3)}/MMBtu</div>`
       : `<div class="hub-price">$${p.toFixed(2)}</div>`;
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ng','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name}${isAECO?' 🇨🇦':''}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}${isAECO?' 🇨🇦':''}</div>${priceBadge(h.name)}</div>
       ${priceDisplay}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
@@ -109,7 +109,7 @@ function renderCrudePage() {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.crude === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('crude','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
@@ -192,7 +192,7 @@ function renderPowerPage() {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.power === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('power','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
@@ -264,7 +264,7 @@ function renderFreightPage() {
     const sel = STATE.selectedHubs.freight === h.name ? 'selected' : '';
     const isIdx = h.base > 100;
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('freight','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${isIdx ? p.toFixed(0) : '$'+p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${isIdx?c.toFixed(0):c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
@@ -339,7 +339,7 @@ function renderAgPage() {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.ag === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ag','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name.replace(/ \(.*\)/,'')}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatAgPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
@@ -409,7 +409,7 @@ function renderMetalsPage() {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.metals === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('metals','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name.replace(/ \(.*\)/,'')}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatMetalPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
@@ -475,7 +475,7 @@ function renderNGLsPage() {
     const sel = STATE.selectedHubs.ngls === h.name ? 'selected' : '';
     const bblPrice = (p * 42 / 100).toFixed(2);
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ngls','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${h.name.replace(/ \(.*\)/,'')}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${p.toFixed(1)}¢<span style="font-size:11px;color:var(--text-muted)">/gal</span></div>
       <div style="font-size:11px;color:var(--text-dim)">$${bblPrice}/bbl</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)}¢ (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
@@ -582,7 +582,7 @@ function renderLNGPage() {
     const sel = STATE.selectedHubs.lng === h.name ? 'selected' : '';
     const regionFlag = h.region === 'Asia' ? '🇯🇵' : h.region === 'Europe' ? '🇪🇺' : h.region === 'US Export' ? '🇺🇸' : h.region === 'LatAm' ? '🌎' : '🌐';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('lng','${h.name}')">
-      <div class="hub-name" style="color:${h.color}">${regionFlag} ${h.name.replace(/ \(.*\)/,'')}${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${regionFlag} ${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)">/MMBtu</span></div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
