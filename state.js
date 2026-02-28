@@ -202,9 +202,9 @@ const LIVE_PRICE_REFRESH = 900000; // 15 minutes
 // Returns true if hub price came from a real external source (EIA / yfinance)
 function isHubLive(name) { return _liveHubSet.has(name); }
 
-// Returns a small LIVE or EST badge HTML string for a hub
+// Returns a small LIVE or EST badge HTML string for a hub.
+// Always shows EST by default; upgrades to LIVE when confirmed by the external API.
 function priceBadge(name) {
-  if (_liveHubSet.size === 0) return ''; // not yet loaded, show nothing
   return isHubLive(name)
     ? '<span class="price-badge live">LIVE</span>'
     : '<span class="price-badge est">EST</span>';
