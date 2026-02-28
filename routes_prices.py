@@ -19,7 +19,7 @@ import time
 import logging
 import threading
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import requests
 from flask import Blueprint, jsonify
@@ -147,136 +147,69 @@ def _fetch_ercot_lmps():
     Uses the ERCOT public API v2 grid-status endpoint — updated every 5 minutes.
     Returns dict: hub_name -> float ($/MWh)
     """
-    NAME_MAP = {
-        'HB_HUBAVG': 'ERCOT Hub',
-        'HB_NORTH':  'ERCOT North',
-        'HB_SOUTH':  'ERCOT South',
-        'HB_WEST':   'ERCOT Hub',
-        'HB_BUSAVG': 'ERCOT Hub',
-    }
-    # Try the newer ERCOT API v2 endpoint (grid conditions / realtime LMPs)
-    urls_to_try = [
-        'https://www.ercot.com/api/1/services/read/dashboards/current-condition.json',
-        'https://www.ercot.com/api/1/services/read/dashboards/systemWidePrices.json',
-    ]
-    result = {}
-    for url in urls_to_try:
-        try:
-            r = requests.get(url, timeout=8, headers={'Accept': 'application/json',
-                                                       'User-Agent': 'Mozilla/5.0'})
-            if r.status_code != 200:
-                continue
-            data = r.json()
-            # Walk all nested dicts/lists looking for settlement point price data
-            def _walk(obj):
-                if isinstance(obj, list):
-                    for item in obj:
-                        sp = item.get('settlementPointName', '') if isinstance(item, dict) else ''
-                        pr = item.get('settlementPointPrice') if isinstance(item, dict) else None
-                        if sp in NAME_MAP and pr is not None and NAME_MAP[sp] not in result:
-                            result[NAME_MAP[sp]] = round(float(pr), 2)
-                        _walk(item) if isinstance(item, dict) else None
-                elif isinstance(obj, dict):
-                    for v in obj.values():
-                        _walk(v)
-            _walk(data)
-            if result:
-                logger.debug(f'ERCOT LMPs fetched from {url}: {result}')
-                return result
-        except Exception as e:
-            logger.debug(f'ERCOT attempt {url} failed: {e}')
-    logger.debug('ERCOT LMP fetch: all endpoints failed, returning empty')
-    return result
+    # ERCOT public API now requires authentication — returns 404 without a key.
+    # Return empty; ERCOT hubs fall back to heat-rate estimates (marked EST).
+    logger.debug('ERCOT LMP fetch skipped: API requires auth')
+    return {}
 
 
 def _fetch_caiso_lmps():
+    # CAISO OASIS consistently returns malformed XML for unauthenticated requests.
+    # Return empty; CAISO hubs fall back to heat-rate estimates (marked EST).
+    logger.debug('CAISO LMP fetch skipped: OASIS returning invalid responses')
+    return {}
+
+
+def _fetch_nyiso_lmps():
     """
-    Fetch CAISO real-time LMPs via OASIS API (no API key required).
-    Returns most recent interval prices for NP15 and SP15 nodes ($/MWh).
-    Note: CAISO OASIS returns a ZIP file containing CSV — parsed in memory.
+    Fetch NYISO real-time zone LMPs from the public CSV feed (no auth required).
+    URL pattern: https://mis.nyiso.com/public/csv/rtlbmp/{YYYYMMDD}rtlbmp_zone.csv
+    Returns dict: hub_name -> float ($/MWh), using the most recent 5-min interval.
     """
+    import csv as csv_mod
     try:
-        now_utc = datetime.now(timezone.utc)
-        # Use the current hour; CAISO data is typically available with ~15 min lag
-        start = now_utc.strftime('%Y%m%dT%H00')
-        # Node IDs for the two main CAISO trading hubs
-        nodes = 'TH_NP15_GEN-APND,TH_SP15_GEN-APND'
-        url = (
-            'https://oasis.caiso.com/oasisapi/SingleZip'
-            f'?queryname=PRC_INTVL_LMP'
-            f'&startdatetime={start}'
-            f'&version=1&market_run_id=RTM'
-            f'&node_id={nodes}'
-            f'&resultformat=6'  # CSV format
-        )
-        r = requests.get(url, timeout=12)
-        if r.status_code != 200 or not r.content:
+        now_et = datetime.now(timezone.utc) - timedelta(hours=5)  # Eastern time (approx)
+        date_str = now_et.strftime('%Y%m%d')
+        url = f'https://mis.nyiso.com/public/csv/rtlbmp/{date_str}rtlbmp_zone.csv'
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200 or not r.text.strip():
             return {}
-
-        # Unzip in memory
-        with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-            csv_name = next((n for n in zf.namelist() if n.endswith('.csv')), None)
-            if not csv_name:
-                return {}
-            csv_bytes = zf.read(csv_name).decode('utf-8', errors='replace')
-
-        # Parse CSV: find most recent LMP_TYPE=LMP rows per node
-        lines = csv_bytes.splitlines()
-        if not lines:
+        reader = csv_mod.DictReader(r.text.splitlines())
+        rows = list(reader)
+        if not rows:
             return {}
-        header = [h.strip() for h in lines[0].split(',')]
-        try:
-            node_col = header.index('NODE')
-            val_col  = header.index('MW')
-            type_col = header.index('LMP_TYPE')
-        except ValueError:
-            # Column names may vary; try alternative names
-            try:
-                node_col = next(i for i, h in enumerate(header) if 'NODE' in h.upper())
-                val_col  = next(i for i, h in enumerate(header) if h.upper() in ('MW', 'VALUE', 'LMP'))
-                type_col = next(i for i, h in enumerate(header) if 'TYPE' in h.upper())
-            except (StopIteration, ValueError):
-                return {}
-
-        latest = {}  # node -> price (take last occurrence = most recent interval)
-        for line in lines[1:]:
-            cols = line.split(',')
-            if len(cols) <= max(node_col, val_col, type_col):
-                continue
-            lmp_type = cols[type_col].strip()
-            if lmp_type != 'LMP':
-                continue
-            node = cols[node_col].strip()
-            try:
-                price = float(cols[val_col].strip())
-                latest[node] = price
-            except ValueError:
-                continue
-
+        # Get the most recent timestamp available
+        timestamps = sorted(set(row.get('Time Stamp', '') for row in rows), reverse=True)
+        latest_ts = timestamps[0]
+        latest_rows = [row for row in rows if row.get('Time Stamp') == latest_ts]
+        # Map NYISO zone names to our hub names
+        ZONE_MAP = {
+            'N.Y.C.': 'NYISO Zone J',   # NYC / Zone J
+            'WEST':   'NYISO Zone A',   # Western upstate / Zone A
+        }
         result = {}
-        if 'TH_NP15_GEN-APND' in latest:
-            result['CAISO NP15'] = round(latest['TH_NP15_GEN-APND'], 2)
-        if 'TH_SP15_GEN-APND' in latest:
-            result['CAISO SP15'] = round(latest['TH_SP15_GEN-APND'], 2)
-        logger.debug(f'CAISO LMPs fetched: {result}')
+        for row in latest_rows:
+            zone = row.get('Name', '').strip()
+            if zone in ZONE_MAP:
+                try:
+                    result[ZONE_MAP[zone]] = round(float(row['LBMP ($/MWHr)']), 2)
+                except (ValueError, KeyError):
+                    continue
+        logger.debug(f'NYISO LMPs fetched ({latest_ts}): {result}')
         return result
     except Exception as e:
-        logger.debug(f'CAISO LMP fetch failed: {e}')
+        logger.debug(f'NYISO LMP fetch failed: {e}')
         return {}
 
 
-def _build_hub_prices(yf_prices, eia_prices, ercot_lmps=None, caiso_lmps=None):
+def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None):
     """
     Map raw benchmark prices to the platform's hub names.
-    For hubs without direct data, compute as benchmark ± historical spread.
 
-    NG hubs: priced as Henry Hub + basis spread
-    Crude hubs: priced as WTI + differential
-    Power hubs: real-time LMPs where available (ERCOT, CAISO), otherwise heat-rate calc
-    Others: direct mapping where available
+    LIVE hubs: directly fetched from an external API (yfinance, EIA, NYISO).
+    EST hubs:  derived via fixed spreads/heat-rates from live anchor prices.
 
-    Returns (prices_dict, live_hubs_list) — live_hubs are hubs anchored to
-    at least one real external data source (EIA, yfinance, ERCOT, or CAISO).
+    Returns (prices_dict, live_hubs_list).
     """
     ercot_lmps = ercot_lmps or {}
     caiso_lmps = caiso_lmps or {}
@@ -392,38 +325,36 @@ def _build_hub_prices(yf_prices, eia_prices, ercot_lmps=None, caiso_lmps=None):
         out['Nat Gasoline (C5+)'] = round(wti * 1.95, 1)
         live_hubs.update(['Propane (C3)', 'Normal Butane (nC4)', 'Isobutane (iC4)', 'Nat Gasoline (C5+)'])
 
-    # --- Power: real-time LMPs where available, heat-rate calc as fallback ---
-    # Heat rate: typical 7.0-9.0 MMBtu/MWh
+    # --- Power: NYISO live LMPs; heat-rate estimates (EST) for all others ---
+    # Heat-rate formula: LMP ≈ gas_price ($/MMBtu) × heat_rate (MMBtu/MWh) + non-fuel adder
+    # Adder captures: capacity payments, O&M, ancillary services, congestion, carbon costs.
+    # Recalibrated Feb 2026 at NG ~$2.85/MMBtu against observed market prices.
     POWER_GAS_REF = {
-        'ERCOT Hub':    ('Henry Hub',      8.5,  0.00),
-        'ERCOT North':  ('Henry Hub',      8.0, -1.50),
-        'ERCOT South':  ('Henry Hub',      8.8, +0.80),
-        'PJM West Hub': ('Transco Zone 6', 7.5, -1.00),
-        'NEPOOL Mass':  ('Algonquin',      8.5, +3.00),
-        'MISO Illinois':('Chicago',        8.0, -2.50),
-        'CAISO NP15':   ('SoCal Gas',      9.0, +3.00),
-        'CAISO SP15':   ('SoCal Gas',      8.8, +2.00),
-        'NYISO Zone J': ('Transco Zone 6', 9.5, +5.00),
-        'NYISO Zone A': ('Dawn',           7.5, -2.00),
-        'SPP North':    ('Henry Hub',      7.8, -3.50),
+        # hub                  gas_hub          HR    adder  notes
+        'ERCOT Hub':    ('Henry Hub',      8.0,  +5.00),  # ~$28 vs typical $25-40
+        'ERCOT North':  ('Henry Hub',      7.8,  +3.00),  # typically discount to Hub
+        'ERCOT South':  ('Henry Hub',      8.2,  +6.00),  # slight premium (load center)
+        'PJM West Hub': ('Transco Zone 6', 7.5,  +2.00),  # ~$28 vs observed $23-35
+        'NEPOOL Mass':  ('Algonquin',      8.5,  +8.00),  # ~$39 vs typical $30-50
+        'MISO Illinois':('Chicago',        7.8,  +3.50),  # ~$25 vs typical $22-32
+        'CAISO NP15':   ('SoCal Gas',      8.5,  +8.00),  # ~$33 (renewable-heavy, varies)
+        'CAISO SP15':   ('SoCal Gas',      8.2,  +6.00),  # slight discount to NP15
+        'NYISO Zone J': ('Transco Zone 6', 8.5,  +8.00),  # ~$37 vs typical $30-55 (NYC)
+        'NYISO Zone A': ('Dawn',           7.5,  +3.00),  # ~$25 vs typical $20-35 (upstate)
+        'SPP North':    ('Henry Hub',      7.5,  +2.00),  # ~$23 vs typical $20-30
     }
 
-    # Merge live LMP sources (prefer real-time data over derived)
-    live_power_prices = {}
-    live_power_prices.update(ercot_lmps)   # ERCOT real-time SPP
-    live_power_prices.update(caiso_lmps)   # CAISO real-time LMP
-
+    # Apply NYISO real-time LMPs where available; all others are heat-rate EST
     for hub, (gas_hub, heat_rate, adder) in POWER_GAS_REF.items():
-        if hub in live_power_prices:
-            # Use real-time LMP
-            out[hub] = live_power_prices[hub]
+        if nyiso_lmps and hub in nyiso_lmps:
+            out[hub] = nyiso_lmps[hub]
             live_hubs.add(hub)
         else:
-            # Fall back to heat-rate calculation from gas price
             gas_price = out.get(gas_hub)
             if gas_price:
                 out[hub] = round(gas_price * heat_rate + adder, 2)
-                live_hubs.add(hub)  # still anchored to live gas price
+                # Heat-rate derived — NOT marked live even though anchored to live gas.
+                # The formula itself is estimated, so these should show EST.
 
     return out, list(live_hubs)
 
@@ -435,27 +366,24 @@ def fetch_live_prices():
         if _price_cache['data'] and (now - _price_cache['ts']) < PRICE_TTL:
             return _price_cache['data']
 
-    logger.info('Fetching live prices from yfinance + EIA + ERCOT + CAISO...')
+    logger.info('Fetching live prices from yfinance + EIA + NYISO...')
 
     # Fetch all sources concurrently
     import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
         f_yf    = ex.submit(_fetch_yfinance, TICKERS)
         f_eia   = ex.submit(_fetch_eia_prices)
-        f_ercot = ex.submit(_fetch_ercot_lmps)
-        f_caiso = ex.submit(_fetch_caiso_lmps)
-        yf_prices   = f_yf.result()
-        eia_prices  = f_eia.result()
-        ercot_lmps  = f_ercot.result()
-        caiso_lmps  = f_caiso.result()
+        f_nyiso = ex.submit(_fetch_nyiso_lmps)
+        yf_prices  = f_yf.result()
+        eia_prices = f_eia.result()
+        nyiso_lmps = f_nyiso.result()
 
-    hub_prices, live_hubs = _build_hub_prices(yf_prices, eia_prices, ercot_lmps, caiso_lmps)
+    hub_prices, live_hubs = _build_hub_prices(yf_prices, eia_prices, nyiso_lmps)
 
     sources = []
     if yf_prices:  sources.append('yfinance')
     if eia_prices: sources.append('EIA')
-    if ercot_lmps: sources.append(f'ERCOT({len(ercot_lmps)})')
-    if caiso_lmps: sources.append(f'CAISO({len(caiso_lmps)})')
+    if nyiso_lmps: sources.append(f'NYISO({len(nyiso_lmps)})')
     logger.info(f'Live prices fetched from [{", ".join(sources)}]: {len(hub_prices)} hubs ({len(live_hubs)} live)')
 
     with _price_lock:
@@ -481,7 +409,7 @@ def get_live_prices():
             'live_hubs': _price_cache.get('live_hubs', []),
             'hub_count': len(prices),
             'cache_age_seconds': cached_age,
-            'source': 'yfinance+EIA+ERCOT+CAISO'
+            'source': 'yfinance+EIA+NYISO'
         })
     except Exception as e:
         logger.error(f'Live prices endpoint error: {e}')
