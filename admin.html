@@ -451,9 +451,9 @@ async function generatePins(){const qty=parseInt(document.getElementById('pinQua
 async function revokePin(pin){await api('/api/admin/pins/revoke',{method:'POST',body:JSON.stringify({pin:pin})});toast('PIN revoked','info');loadPins()}
 
 async function loadConfig(){
-  try{const d=await api('/api/admin/config');if(!d.success)return;const c=d.config;
+  try{const d=await api('/api/admin/config');if(!d.success){document.getElementById('configDisplay').innerHTML='<p style="color:var(--red)">Failed to load: '+(d.error||'Unknown error')+'</p>';return;}const c=d.config;
     document.getElementById('configDisplay').innerHTML='<div style="display:grid;grid-template-columns:200px 1fr;gap:8px;font-size:13px"><span style="color:var(--text-dim)">Admin PIN:</span><span style="font-family:var(--font-mono)">'+c.admin_pin+'</span><span style="color:var(--text-dim)">EIA API Key:</span><span style="font-family:var(--font-mono)">'+c.eia_api_key+'</span><span style="color:var(--text-dim)">Database:</span><span style="font-family:var(--font-mono);word-break:break-all">'+c.database+'</span><span style="color:var(--text-dim)">News Cache TTL:</span><span>'+c.news_cache_ttl+'s</span></div>';
-  }catch(e){console.error('Load config error:',e)}
+  }catch(e){console.error('Load config error:',e);document.getElementById('configDisplay').innerHTML='<p style="color:var(--red)">Error: '+e.message+'</p>';}
 }
 async function changeAdminPin(){
   const cur=document.getElementById('currentAdminPin').value,np=document.getElementById('newAdminPin').value,cp=document.getElementById('confirmAdminPin').value;

@@ -11,7 +11,7 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
-from app import get_db, admin_required, socketio, EIA_API_KEY, NEWS_CACHE_TTL, logger
+from app import get_db, admin_required, socketio, EIA_API_KEY, NEWS_CACHE_TTL, logger, DATABASE
 
 admin_bp = Blueprint('admin', __name__)
 

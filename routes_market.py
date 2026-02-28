@@ -322,7 +322,7 @@ def get_cot(commodity):
                 'prod_long': _safe_int(row.get('prod_merc_positions_long_all')),
                 'prod_short': _safe_int(row.get('prod_merc_positions_short_all')),
                 'swap_long': _safe_int(row.get('swap_positions_long_all')),
-                'swap_short': _safe_int(row.get('swap__positions_short_all')),
+                'swap_short': _safe_int(row.get('swap_positions_short_all')),
                 'mm_long': _safe_int(row.get('money_manager_positions_long')),
                 'mm_short': _safe_int(row.get('money_manager_positions_short')),
                 'other_long': _safe_int(row.get('other_rept_positions_long_all')),
