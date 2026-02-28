@@ -790,7 +790,7 @@
           <div class="form-group"><label>Hub / Location</label><select id="tradeHub"></select></div>
           <div class="form-group"><label>Volume</label><input type="number" id="tradeVolume" placeholder="10000"></div>
           <div class="form-group"><label>Entry Price <span style="font-size:11px;color:var(--text-muted)" id="priceHint">(at or above spot for BUY)</span></label><input type="number" id="tradeEntry" step="0.001" placeholder="Select hub"></div>
-          <div class="form-group"><label>Spot Reference</label><input id="tradeSpot" readonly style="color:var(--text-muted)"></div>
+          <div class="form-group"><label>Spot Reference <span id="tradeSpotBadge" style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle;display:none"></span></label><input id="tradeSpot" readonly style="color:var(--text-muted)"></div>
           <div class="form-group"><label>Delivery Month</label><input type="month" id="tradeDelivery"></div>
           <div class="form-group"><label>Counterparty <span id="cptyHint" style="font-size:10px;color:var(--text-muted)"></span></label><select id="tradeCpty"><option value="">None (Exchange)</option></select></div>
         </div>
@@ -834,7 +834,49 @@
               <option value="OTC">OTC Bilateral</option>
             </select>
           </div>
+          <div class="form-group"><label>Broker / FCM</label>
+            <select id="tradeBroker">
+              <option value="">Direct / None</option>
+              <option value="Tradition">Tradition Energy</option>
+              <option value="ICAP">TP ICAP</option>
+              <option value="BGC">BGC Partners</option>
+              <option value="GFI">GFI Group</option>
+              <option value="Marex">Marex</option>
+              <option value="StoneX">StoneX</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Settlement Type</label>
+            <select id="tradeSettlement" onchange="onSettlementChange()">
+              <option value="FINANCIAL">Financial (Cash-Settled)</option>
+              <option value="PHYSICAL">Physical Delivery</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Commission ($/unit)</label>
+            <input type="number" id="tradeCommission" step="0.0001" placeholder="e.g. 0.010">
+          </div>
           <div class="form-group"><label>Notes</label><input id="tradeNotes" placeholder="Optional notes"></div>
+        </div>
+
+        <!-- Physical delivery fields (shown when Settlement=Physical) -->
+        <div id="physicalFields" style="display:none;margin-top:12px">
+          <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Physical Delivery Details</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
+            <div class="form-group"><label>Delivery Location</label>
+              <input id="tradeDelivLoc" placeholder="e.g. TETCO M-3, Cushing OK">
+            </div>
+            <div class="form-group"><label>Quality / Grade</label>
+              <select id="tradeQuality"><option value="">Standard</option></select>
+            </div>
+            <div class="form-group"><label>Delivery Terms</label>
+              <select id="tradeIncoterms">
+                <option value="EXW">EXW – Ex-Works (seller's facility)</option>
+                <option value="FCA">FCA – Free Carrier (pipeline inlet)</option>
+                <option value="FOB">FOB – Free on Board (vessel/terminal)</option>
+                <option value="DES">DES – Delivered Ex-Ship (LNG)</option>
+                <option value="DAP">DAP – Delivered at Place</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <!-- Margin preview -->
@@ -859,7 +901,7 @@
     <div class="card">
       <div class="table-wrap">
         <table id="blotterTable">
-          <thead><tr><th>Date</th><th>Type</th><th>Dir</th><th>Hub</th><th>Vol</th><th>Entry</th><th>Spot</th><th>Order</th><th>MTM P&amp;L</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Ref#</th><th>Date</th><th>Type</th><th>Dir</th><th>Hub</th><th>Vol</th><th>Entry</th><th>Spot</th><th>Settle</th><th>Broker</th><th>MTM P&amp;L</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="blotterBody"></tbody>
         </table>
       </div>
@@ -1284,7 +1326,6 @@
 <!-- Core: state → prices → charts → pages → trading → positions → market-data → options -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
 <script src="state.js"></script>
-<script src="prices.js"></script>
 <script src="charts.js"></script>
 <script src="pages.js"></script>
 <script src="trading.js"></script>
@@ -1297,7 +1338,6 @@
 <script src="leaderboard.js"></script>
 <script src="maps.js"></script>
 <script src="clock-otc.js"></script>
-<script src="weather.js"></script>
 <script src="chat.js"></script>
 <script src="engine-init.js"></script>
 

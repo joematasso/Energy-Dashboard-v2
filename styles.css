@@ -486,7 +486,7 @@ input:focus,select:focus{border-color:var(--accent)}
 /* =====================================================================
    REGISTRATION OVERLAY
    ===================================================================== */
-.reg-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center}
+.reg-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;overscroll-behavior:contain;touch-action:pan-y}
 .reg-overlay.hidden{display:none}
 .reg-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:40px;width:90%;max-width:440px}
 .reg-box .logo{font-size:28px;text-align:center;margin-bottom:8px}
@@ -789,3 +789,7 @@ input:focus,select:focus{border-color:var(--accent)}
   /* Bench tiles: 2-col forced */
   .bench-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px}
 }
+/* Live / Estimated price badges */
+.price-badge{font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;letter-spacing:0.5px;vertical-align:middle;margin-left:4px;white-space:nowrap}
+.price-badge.live{background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)}
+.price-badge.est{background:rgba(148,163,184,0.1);color:#94a3b8;border:1px solid rgba(148,163,184,0.2)}

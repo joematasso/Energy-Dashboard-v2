@@ -93,7 +93,17 @@ function renderBlotterTable() {
       actions += `<button class="btn btn-ghost btn-sm" title="Share to chat" onclick="shareTradeToChat(${t.id})">Share</button>`;
     }
 
+    // Settlement & broker display
+    const settleBadge = t.settlementType === 'PHYSICAL'
+      ? '<span style="font-size:10px;color:#f59e0b">📦 PHYS</span>'
+      : '<span style="font-size:10px;color:var(--text-muted)">⚡ FIN</span>';
+    const brokerLabel = t.broker ? `<span style="font-size:10px;color:var(--text-dim)">${t.broker}</span>` : '<span style="font-size:10px;color:var(--text-muted)">—</span>';
+    const refLabel = t.confirmRef
+      ? `<span class="mono" style="font-size:10px;color:var(--text-dim)" title="${t.confirmRef}">${t.confirmRef}</span>`
+      : '<span style="font-size:10px;color:var(--text-muted)">—</span>';
+
     return `<tr style="${rowBg}">
+      <td>${refLabel}</td>
       <td style="font-size:12px;white-space:nowrap">${dateStr}</td>
       <td style="font-size:11px">${t.type}</td>
       <td style="${dirColor};font-weight:700">${t.direction}</td>
@@ -101,7 +111,8 @@ function renderBlotterTable() {
       <td class="mono">${parseFloat(t.volume).toLocaleString()}</td>
       <td class="mono">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>
       <td class="mono">${isLarge ? spot.toFixed(0) : spot.toFixed(3)}</td>
-      <td>${orderBadge}</td>
+      <td>${settleBadge}</td>
+      <td>${brokerLabel}</td>
       <td class="mono ${mtmColor}" style="font-weight:600;cursor:default" title="${mtmTitle}">${t._pending ? '—' : (mtm>=0?'+':'') + '$' + Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
       <td>${statusBadge}</td>
       <td><div class="actions-cell">${actions}</div></td>
@@ -109,7 +120,7 @@ function renderBlotterTable() {
   }).join('');
 
   if (!pageTrades.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:30px">No trades yet. Use the form above to place your first trade.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:30px">No trades yet. Use the form above to place your first trade.</td></tr>';
   }
 
   // Pagination controls

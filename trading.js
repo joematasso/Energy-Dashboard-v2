@@ -5,6 +5,23 @@ let tradeDirection = '';
 let blotterPage = 0;
 const BLOTTER_PAGE_SIZE = 10;
 
+function _updateSpotBadge(hubName) {
+  const el = document.getElementById('tradeSpotBadge');
+  if (!el) return;
+  if (typeof isHubLive !== 'function' || typeof _liveHubSet === 'undefined' || _liveHubSet.size === 0) {
+    el.style.display = 'none'; return;
+  }
+  if (isHubLive(hubName)) {
+    el.textContent = 'LIVE'; el.style.display = 'inline';
+    el.style.background = 'rgba(16,185,129,0.15)'; el.style.color = '#10b981';
+    el.style.border = '1px solid rgba(16,185,129,0.3)';
+  } else {
+    el.textContent = 'EST'; el.style.display = 'inline';
+    el.style.background = 'rgba(148,163,184,0.1)'; el.style.color = '#94a3b8';
+    el.style.border = '1px solid rgba(148,163,184,0.2)';
+  }
+}
+
 function renderBlotterPage() {
   updateAccountBar();
   populateHubDropdown();
@@ -23,7 +40,10 @@ function renderBlotterPage() {
 
   // Update spot ref
   const hub = document.getElementById('tradeHub').value;
-  if (hub) document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+  if (hub) {
+    document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+    _updateSpotBadge(hub);
+  }
 }
 
 function updateAccountBar() {
@@ -98,7 +118,10 @@ function populateHubDropdown() {
 
   // Update spot reference
   const hub = sel.value;
-  if (hub) document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+  if (hub) {
+    document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+    _updateSpotBadge(hub);
+  }
 }
 
 const SECTOR_TRADE_TYPES = {
@@ -248,9 +271,49 @@ function onTradeSectorChange() {
   populateVenueDropdown(sector);
 }
 
+// Auto-incrementing confirmation reference per session
+function genConfirmRef() {
+  const d = new Date();
+  const seq = String((STATE.confirmSeq = (STATE.confirmSeq || 0) + 1)).padStart(4, '0');
+  return `ARM-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${seq}`;
+}
+
+// Quality options by sector for physical delivery
+const QUALITY_OPTIONS = {
+  ng:     ['Pipeline Quality (≥950 BTU/cf)', 'Rich Gas (>1050 BTU/cf)', 'Lean Gas (<950 BTU/cf)', 'LNG Grade', 'Sub-spec (waiver required)'],
+  crude:  ['WTI Sweet (API 40°, <0.5%S)', 'Light Sweet (API 35-45°)', 'Medium Sour (API 25-35°, 1-2%S)', 'Heavy Sour (API <25°, >2%S)', 'Mars Sour Blend', 'WCS (API 20°, 3.5%S)', 'Bakken Light (API 42°, 0.2%S)'],
+  power:  ['Firm On-Peak (6×16)', 'Firm Off-Peak', 'Firm Flat (7×24)', 'Non-Firm (LD)', 'Interruptible', 'Unit Contingent'],
+  lng:    ['GIIGNL Spec (>1000 BTU/cf)', 'LNG Grade A', 'LNG Grade B', 'Regas Quality'],
+  ngls:   ['HD-5 Propane (min 95% C3)', 'Commercial Propane', 'Propane-Butane Mix', 'Normal Butane (>95% nC4)', 'Isobutane (>95% iC4)', 'Natural Gasoline'],
+  default:['Standard Grade', 'Premium Grade', 'Off-Spec (negotiated)'],
+};
+
+const PHYSICAL_TYPES = new Set(['CRUDE_PHYS','PHYS_FIXED','PHYS_INDEX','LNG_FOB','LNG_DES']);
+
+function onSettlementChange() {
+  const val = document.getElementById('tradeSettlement').value;
+  const phys = document.getElementById('physicalFields');
+  if (!phys) return;
+  phys.style.display = val === 'PHYSICAL' ? 'block' : 'none';
+  if (val === 'PHYSICAL') {
+    // Populate quality dropdown based on current sector
+    const sector = document.getElementById('tradeSector').value || 'default';
+    const opts = QUALITY_OPTIONS[sector] || QUALITY_OPTIONS.default;
+    const qSel = document.getElementById('tradeQuality');
+    if (qSel) qSel.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
+  }
+}
+
 function onTradeTypeChange() {
   const type = document.getElementById('tradeType').value;
   populateHubDropdown();
+
+  // Auto-set settlement type based on trade type
+  const settleEl = document.getElementById('tradeSettlement');
+  if (settleEl) {
+    settleEl.value = PHYSICAL_TYPES.has(type) ? 'PHYSICAL' : 'FINANCIAL';
+    onSettlementChange();
+  }
 
   // Show/hide conditional fields
   const condDiv = document.getElementById('conditionalFields');
@@ -403,7 +466,15 @@ async function submitTrade() {
     limitPrice: limitPrice || null,
     stopPrice: stopPrice || null,
     status: 'OPEN',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    // Blotter accuracy fields
+    confirmRef: genConfirmRef(),
+    broker: document.getElementById('tradeBroker')?.value || '',
+    settlementType: document.getElementById('tradeSettlement')?.value || 'FINANCIAL',
+    commission: parseFloat(document.getElementById('tradeCommission')?.value) || 0,
+    deliveryLoc: document.getElementById('tradeDelivLoc')?.value || '',
+    quality: document.getElementById('tradeQuality')?.value || '',
+    incoterms: document.getElementById('tradeIncoterms')?.value || '',
   };
 
   // Market hours check for exchange trades

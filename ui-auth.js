@@ -42,6 +42,7 @@ function setTraderPhoto(data) {
 function checkRegistration() {
   if (STATE.trader) {
     document.getElementById('regOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
     initAfterLogin();
   }
 }
@@ -84,6 +85,7 @@ async function doLogin() {
       if (d.photo_url) setTraderPhoto(d.photo_url);
       localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));
       document.getElementById('regOverlay').classList.add('hidden');
+      document.body.style.overflow = '';
       toast('Welcome, ' + d.display_name + '!', 'success');
       initAfterLogin();
     } else {
@@ -96,6 +98,7 @@ async function doLogin() {
     STATE.trader = { trader_name: traderName, real_name: name, display_name: name, firm: '', pin: pin };
     localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));
     document.getElementById('regOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
     toast('Welcome, ' + name + '! (Offline mode)', 'info');
     initAfterLogin();
   }
@@ -290,6 +293,7 @@ function doLogout() {
   STATE.settings = {balance:1000000, margin:'nymex', sound:false};
   STATE.trader = null;
   document.getElementById('regOverlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
   document.getElementById('regName').value = '';
   document.getElementById('regPin').value = '';
   document.getElementById('headerProfile').style.display = 'none';

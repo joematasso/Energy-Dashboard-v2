@@ -5,7 +5,19 @@
 // Real-world price anchors fetched from /api/live-prices (yfinance + EIA).
 // Populated on init and refreshed every 15 minutes.
 let _livePrices = {};
+let _liveHubSet = new Set();   // Hub names confirmed live from external APIs
 const LIVE_PRICE_REFRESH = 900000; // 15 minutes
+
+// Returns true if hub price came from a real external source (EIA / yfinance)
+function isHubLive(name) { return _liveHubSet.has(name); }
+
+// Returns a small LIVE or EST badge HTML string for a hub
+function priceBadge(name) {
+  if (_liveHubSet.size === 0) return ''; // not yet loaded, show nothing
+  return isHubLive(name)
+    ? '<span class="price-badge live">LIVE</span>'
+    : '<span class="price-badge est">EST</span>';
+}
 
 function genHistory(base, days, vol) {
   const h = [base];
@@ -23,9 +35,10 @@ async function fetchLivePrices() {
     const d = await r.json();
     if (d.success && d.prices && Object.keys(d.prices).length > 0) {
       _livePrices = d.prices;
+      _liveHubSet = new Set(d.live_hubs || []);
       const srcEl = document.getElementById('livePriceSrc');
       if (srcEl) {
-        srcEl.textContent = `Live prices: ${d.hub_count} hubs (${d.source})`;
+        srcEl.textContent = `Live prices: ${d.live_hubs ? d.live_hubs.length : d.hub_count} hubs (${d.source})`;
         srcEl.title = `Cache age: ${d.cache_age_seconds}s`;
       }
       return true;

@@ -29,7 +29,7 @@ prices_bp = Blueprint('prices', __name__)
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
-_price_cache = {'data': None, 'ts': 0}
+_price_cache = {'data': None, 'live_hubs': [], 'ts': 0}
 _price_lock = threading.Lock()
 PRICE_TTL = 900  # 15 minutes
 
@@ -152,6 +152,9 @@ def _build_hub_prices(yf_prices, eia_prices):
     NG hubs: priced as Henry Hub + basis spread
     Crude hubs: priced as WTI + differential
     Others: direct mapping where available
+
+    Returns (prices_dict, live_hubs_list) — live_hubs are hubs anchored to
+    at least one real external data source (EIA or yfinance).
     """
 
     # --- Benchmarks ---
@@ -161,6 +164,7 @@ def _build_hub_prices(yf_prices, eia_prices):
     brent = yf_prices.get('BZ=F')
 
     out = {}
+    live_hubs = set()
 
     # --- Natural Gas (all relative to Henry Hub) ---
     # Historical basis spreads ($/MMBtu) vs Henry Hub
@@ -183,6 +187,7 @@ def _build_hub_prices(yf_prices, eia_prices):
     if hh:
         for hub, spread in NG_SPREADS.items():
             out[hub] = round(hh + spread, 4)
+            live_hubs.add(hub)
 
     # --- Crude (all relative to WTI) ---
     CRUDE_DIFFS = {
@@ -197,8 +202,10 @@ def _build_hub_prices(yf_prices, eia_prices):
     if wti:
         for hub, diff in CRUDE_DIFFS.items():
             out[hub] = round(wti + diff, 2)
+            live_hubs.add(hub)
     if brent:
         out['Brent Dated'] = round(brent, 2)
+        live_hubs.add('Brent Dated')
 
     # --- Metals (direct from yfinance) ---
     METALS_MAP = {
@@ -211,6 +218,7 @@ def _build_hub_prices(yf_prices, eia_prices):
     for hub, ticker in METALS_MAP.items():
         if ticker in yf_prices:
             out[hub] = round(yf_prices[ticker], 2)
+            live_hubs.add(hub)
 
     # --- Agriculture (direct from yfinance) ---
     AG_MAP = {
@@ -230,12 +238,14 @@ def _build_hub_prices(yf_prices, eia_prices):
     for hub, ticker in AG_MAP.items():
         if ticker in yf_prices:
             out[hub] = round(yf_prices[ticker], 4)
+            live_hubs.add(hub)
 
     # --- LNG (anchor HH Netback to Henry Hub; others are too proprietary) ---
     if hh:
         # HH Netback ≈ Henry Hub + liquefaction + shipping - regas
         # Rough: HH + 3.30 blended export cost
         out['HH Netback'] = round(hh + 3.30, 2)
+        live_hubs.add('HH Netback')
         # TTF tracks HH with a premium — use yfinance if available
         # JKM not available free; keep as Brownian
 
@@ -244,6 +254,7 @@ def _build_hub_prices(yf_prices, eia_prices):
         # Ethane (¢/gal): tracks NG price loosely — ~3.5 Mcf per gallon
         # Base: 22.5 ¢/gal when HH ≈ 2.75 → ratio 22.5/2.75 ≈ 8.18
         out['Ethane (C2)'] = round(hh * 8.18, 1)
+        live_hubs.add('Ethane (C2)')
     if wti:
         # Propane ≈ 35% of crude (price in ¢/gal, crude in $/bbl)
         # WTI $79.50 → propane ~72 ¢/gal → ratio ≈ 0.905
@@ -251,6 +262,7 @@ def _build_hub_prices(yf_prices, eia_prices):
         out['Normal Butane (nC4)'] = round(wti * 1.32, 1)
         out['Isobutane (iC4)'] = round(wti * 1.41, 1)
         out['Nat Gasoline (C5+)'] = round(wti * 1.95, 1)
+        live_hubs.update(['Propane (C3)', 'Normal Butane (nC4)', 'Isobutane (iC4)', 'Nat Gasoline (C5+)'])
 
     # --- Power (derive from gas price × implied heat rate) ---
     # Heat rate: typical 7.0-9.0 MMBtu/MWh
@@ -271,8 +283,9 @@ def _build_hub_prices(yf_prices, eia_prices):
         gas_price = out.get(gas_hub)
         if gas_price:
             out[hub] = round(gas_price * heat_rate + adder, 2)
+            live_hubs.add(hub)
 
-    return out
+    return out, list(live_hubs)
 
 
 def fetch_live_prices():
@@ -285,15 +298,16 @@ def fetch_live_prices():
     logger.info('Fetching live prices from yfinance + EIA...')
     yf_prices = _fetch_yfinance(TICKERS)
     eia_prices = _fetch_eia_prices()
-    hub_prices = _build_hub_prices(yf_prices, eia_prices)
+    hub_prices, live_hubs = _build_hub_prices(yf_prices, eia_prices)
 
     sources = []
     if yf_prices: sources.append('yfinance')
     if eia_prices: sources.append('EIA')
-    logger.info(f'Live prices fetched from [{", ".join(sources)}]: {len(hub_prices)} hubs')
+    logger.info(f'Live prices fetched from [{", ".join(sources)}]: {len(hub_prices)} hubs ({len(live_hubs)} live)')
 
     with _price_lock:
         _price_cache['data'] = hub_prices
+        _price_cache['live_hubs'] = live_hubs
         _price_cache['ts'] = now
 
     return hub_prices
@@ -311,6 +325,7 @@ def get_live_prices():
         return jsonify({
             'success': True,
             'prices': prices,
+            'live_hubs': _price_cache.get('live_hubs', []),
             'hub_count': len(prices),
             'cache_age_seconds': cached_age,
             'source': 'yfinance+EIA'
