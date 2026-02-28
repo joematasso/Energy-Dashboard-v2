@@ -10,6 +10,7 @@ from datetime import datetime, date, timedelta
 
 import requests
 from flask import Blueprint, request, jsonify
+from flask_socketio import emit
 
 from app import (get_db, get_db_standalone, logger, socketio,
                  active_connections, connections_lock)
@@ -395,7 +396,7 @@ def get_weather_bias():
 # WebSocket Events
 # ---------------------------------------------------------------------------
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None):
     sid = request.sid
     with connections_lock:
         active_connections.add(sid)
