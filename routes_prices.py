@@ -41,28 +41,30 @@ PRICE_TTL = 900  # 15 minutes
 # Prices come in as-is from yfinance; conversion applied separately.
 # ---------------------------------------------------------------------------
 TICKERS = [
-    'NG=F',   # Henry Hub natural gas ($/MMBtu)
-    'CL=F',   # WTI crude ($/bbl)
-    'BZ=F',   # Brent crude ($/bbl)
-    'HO=F',   # Heating Oil ($/gal)
-    'RB=F',   # RBOB Gasoline ($/gal)
-    'GC=F',   # Gold ($/oz)
-    'SI=F',   # Silver ($/oz)
-    'HG=F',   # Copper ($/lb — COMEX)
-    'PL=F',   # Platinum ($/oz)
-    'PA=F',   # Palladium ($/oz)
-    'ZC=F',   # Corn (cents/bu → /100 for $/bu)
-    'ZW=F',   # Wheat (cents/bu → /100)
-    'ZS=F',   # Soybeans (cents/bu → /100)
-    'ZL=F',   # Soybean Oil (cents/lb → /100)
-    'ZM=F',   # Soybean Meal ($/ton)
-    'CT=F',   # Cotton (cents/lb → /100)
-    'SB=F',   # Sugar #11 (cents/lb → /100)
-    'KC=F',   # Coffee C (cents/lb → /100)
-    'CC=F',   # Cocoa ($/MT)
-    'LE=F',   # Live Cattle (cents/lb → /100)
-    'HE=F',   # Lean Hogs (cents/lb → /100)
-    'GF=F',   # Feeder Cattle (cents/lb → /100)
+    'NG=F',     # Henry Hub natural gas ($/MMBtu)
+    'CL=F',     # WTI crude ($/bbl)
+    'BZ=F',     # Brent crude ($/bbl)
+    'HO=F',     # Heating Oil ($/gal)
+    'RB=F',     # RBOB Gasoline ($/gal)
+    'GC=F',     # Gold ($/oz)
+    'SI=F',     # Silver ($/oz)
+    'HG=F',     # Copper ($/lb — COMEX)
+    'PL=F',     # Platinum ($/oz)
+    'PA=F',     # Palladium ($/oz)
+    'ZC=F',     # Corn (cents/bu → /100 for $/bu)
+    'ZW=F',     # Wheat (cents/bu → /100)
+    'ZS=F',     # Soybeans (cents/bu → /100)
+    'ZL=F',     # Soybean Oil (cents/lb → /100)
+    'ZM=F',     # Soybean Meal ($/ton)
+    'CT=F',     # Cotton (cents/lb → /100)
+    'SB=F',     # Sugar #11 (cents/lb → /100)
+    'KC=F',     # Coffee C (cents/lb → /100)
+    'CC=F',     # Cocoa ($/MT)
+    'LE=F',     # Live Cattle (cents/lb → /100)
+    'HE=F',     # Lean Hogs (cents/lb → /100)
+    'GF=F',     # Feeder Cattle (cents/lb → /100)
+    'TTF=F',    # Dutch TTF Natural Gas (EUR/MWh on ICE — converted to $/MMBtu)
+    'EURUSD=X', # EUR/USD spot rate (for TTF conversion)
 ]
 
 # Tickers that report in cents — divide by 100 to get $/unit
@@ -497,6 +499,16 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
         out['HH Netback'] = round(hh + 3.30, 2)
         hub_srcs['HH Netback'] = 'hh_netback_est'
         live_hubs.add('HH Netback')
+
+    # TTF Dutch gas: ICE futures quoted in EUR/MWh → convert to $/MMBtu
+    # 1 MWh = 3.41214 MMBtu; multiply by EUR/USD spot rate
+    ttf_raw = yf_prices.get('TTF=F')
+    eurusd  = yf_prices.get('EURUSD=X') or 1.10  # fallback if forex unavailable
+    if ttf_raw and ttf_raw > 0 and eurusd > 0:
+        ttf_usd_mmbtu = round(ttf_raw * eurusd / 3.41214, 2)
+        out['TTF (ICE)'] = ttf_usd_mmbtu
+        hub_srcs['TTF (ICE)'] = 'yfinance_ttf'
+        live_hubs.add('TTF (ICE)')
 
     # --- NGLs ---
     if hh:

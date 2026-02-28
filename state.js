@@ -215,6 +215,7 @@ const PRICE_SOURCE_META = {
   yfinance_bz:        { name: 'ICE BZ=F via yfinance',        url: 'https://finance.yahoo.com/quote/BZ%3DF/',                          freq: '15-min delayed',          desc: 'Brent crude front-month futures settlement price. 15-minute delay during market hours.' },
   yfinance_comex:     { name: 'COMEX / NYMEX via yfinance',   url: 'https://finance.yahoo.com/',                                       freq: '15-min delayed',          desc: 'Exchange-traded metals futures (GC=F gold, SI=F silver, HG=F copper, PL=F platinum, PA=F palladium).' },
   yfinance_ag:        { name: 'CBOT / CME / ICE via yfinance',url: 'https://finance.yahoo.com/',                                       freq: '15-min delayed',          desc: 'Exchange-traded agricultural futures from CBOT, CME, and ICE. 15-minute delay during market hours.' },
+  yfinance_ttf:       { name: 'ICE TTF=F via yfinance',        url: 'https://finance.yahoo.com/quote/TTF%3DF/',                          freq: '15-min delayed',          desc: 'Dutch TTF Natural Gas front-month futures (ICE). Quoted in EUR/MWh, converted to $/MMBtu using live EUR/USD rate. 15-minute delay during market hours.' },
   fred_propane:       { name: 'FRED — DPROPANEMBTX',          url: 'https://fred.stlouisfed.org/series/DPROPANEMBTX',                  freq: 'Weekly (Wednesdays)',      desc: 'Mont Belvieu, TX propane spot price from the EIA weekly petroleum survey, via FRED API.' },
   fred_backup:        { name: 'FRED (backup source)',          url: 'https://fred.stlouisfed.org/',                                     freq: 'Daily / Weekly',          desc: 'Price sourced from FRED (Federal Reserve Economic Data), used as fallback when primary API is unavailable.' },
   hh_spread:          { name: 'HH + basis spread (est.)',      url: null,                                                               freq: 'Derived',                 desc: 'Estimated from live Henry Hub price plus a fixed historical basis differential for this hub.' },
@@ -270,6 +271,15 @@ function showPriceSource(event, hubName) {
     ageEl.style.display = 'block';
   } else {
     ageEl.style.display = 'none';
+  }
+
+  const simNote = pop.querySelector('.psp-sim-note');
+  if (simNote) {
+    if (isHubLive(hubName)) {
+      simNote.style.display = 'block';
+    } else {
+      simNote.style.display = 'none';
+    }
   }
 
   // Position near the clicked badge; clamp to viewport edges
@@ -407,7 +417,8 @@ function initPrices() {
 
 function _rebaseToLivePrices() {
   // Nudge the last tick toward the real price to prevent long-term drift.
-  // A gentle 20% pull per refresh keeps the simulation grounded without jarring jumps.
+  // Live hubs (real anchor): 70% hard pull back to anchor every 15 min.
+  // Estimated hubs: gentle 20% nudge.
   for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
     hubs.forEach(h => {
       const real = _livePrices[h.name];
@@ -417,8 +428,8 @@ function _rebaseToLivePrices() {
       const current = hist[hist.length - 1];
       const isPower = sector === 'power';
       const floor = isPower ? -h.base * 0.5 : h.base * 0.4;
-      // Pull 20% toward real price
-      const nudged = Math.max(floor, current + (real - current) * 0.20);
+      const pull = isHubLive(h.name) ? 0.70 : 0.20;
+      const nudged = Math.max(floor, current + (real - current) * pull);
       hist[hist.length - 1] = nudged;
     });
   }
@@ -429,12 +440,25 @@ function tickPrices() {
     hubs.forEach(h => {
       const hist = priceHistory[h.name];
       const last = hist[hist.length - 1];
-      let drift = (Math.random()-0.5) * 2 * (h.base * h.vol/100 / 15);
-      // Apply weather-driven bias for gas and power hubs
+      const live = isHubLive(h.name);
+      // Live hubs are anchored to real daily/intraday prices — use 10% of normal vol
+      // so the price ticks slightly (keeping P&L active) but stays close to the real anchor.
+      const volScale = live ? 0.10 : 1.0;
+      let drift = (Math.random()-0.5) * 2 * (h.base * h.vol/100 / 15) * volScale;
+      // Apply weather-driven bias for gas and power hubs (also dampened for live)
       if ((sector === 'ng' || sector === 'power') && STATE.weatherBias[h.name]) {
-        drift += last * STATE.weatherBias[h.name] * (0.3 + Math.random() * 0.4);
+        drift += last * STATE.weatherBias[h.name] * (0.3 + Math.random() * 0.4) * volScale;
       }
       let next = last + drift;
+      // Hard clamp for live hubs: never drift more than ±2% from the real anchor
+      if (live) {
+        const anchor = _livePrices[h.name];
+        if (anchor !== undefined && anchor > 0) {
+          const maxDev = anchor * 0.02;
+          if (next > anchor + maxDev) next = anchor + maxDev;
+          if (next < anchor - maxDev) next = Math.max(anchor - maxDev, 0.001);
+        }
+      }
       // Power markets can go negative; others have a floor
       const isPower = sector === 'power';
       const priceFloor = isPower ? -h.base * 0.5 : h.base * 0.4;
