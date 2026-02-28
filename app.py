@@ -49,7 +49,7 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'energydesk-v3-secret')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energydesk.db')
+DATABASE = os.environ.get('DB_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energydesk.db'))
 EIA_API_KEY  = os.environ.get('EIA_API_KEY', '')
 FRED_API_KEY = os.environ.get('FRED_API_KEY', '')   # optional — register free at fred.stlouisfed.org/docs/api/api_key.html
 
