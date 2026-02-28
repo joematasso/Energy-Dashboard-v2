@@ -32,7 +32,7 @@ prices_bp = Blueprint('prices', __name__)
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
-_price_cache = {'data': None, 'live_hubs': [], 'ts': 0}
+_price_cache = {'data': None, 'live_hubs': [], 'hub_sources': {}, 'ts': 0}
 _price_lock = threading.Lock()
 PRICE_TTL = 900  # 15 minutes
 
@@ -390,9 +390,20 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
 
     out = {}
     live_hubs = set()
+    hub_srcs = {}   # hub_name → source key string (used by frontend for popover info)
+
+    # Determine source key for each benchmark depending on which feed succeeded
+    hh_src  = ('eia_spot_page'      if eia_ng_spots.get('Henry Hub')        else
+               'fred_backup'        if fred_prices.get('henry_hub_fred')    else
+               'yfinance_ng')
+    wti_src = ('eia_api_rwtc'       if eia_prices.get('wti_eia')            else
+               'fred_backup'        if fred_prices.get('wti_fred')          else
+               'yfinance_cl')
+    brent_src = ('yfinance_bz'      if yf_prices.get('BZ=F')               else
+                 'eia_api_brent'    if eia_prices.get('brent_eia')          else
+                 'fred_backup')
 
     # --- Natural Gas (all relative to Henry Hub) ---
-    # Historical basis spreads ($/MMBtu) vs Henry Hub
     NG_SPREADS = {
         'Henry Hub': 0.00,
         'Waha': -0.35,
@@ -407,20 +418,23 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
         'Opal': -0.08,
         'Tetco M3': +0.55,
         'Kern River': +0.05,
-        'AECO': -0.80,   # approximate (CAD/GJ conversion applied client-side)
+        'AECO': -0.80,
     }
     if hh:
         for hub, spread in NG_SPREADS.items():
             out[hub] = round(hh + spread, 4)
-        # Henry Hub from yfinance NG=F — always LIVE.
+            hub_srcs[hub] = 'hh_spread'
+        hub_srcs['Henry Hub'] = hh_src
         live_hubs.add('Henry Hub')
 
-    # Override spread-estimated hubs with real EIA daily spot prices where available.
-    # These are the actual published spot prices for physical delivery today —
-    # much more accurate than HH + fixed spread.
+    # Override spread estimates with real EIA daily spot prices where available.
     for hub_name, spot_price in eia_ng_spots.items():
         out[hub_name] = spot_price
+        hub_srcs[hub_name] = 'eia_spot_page'
         live_hubs.add(hub_name)
+    # Waha maps to El Paso San Juan (proxy) — clarify in the source key
+    if 'Waha' in eia_ng_spots:
+        hub_srcs['Waha'] = 'eia_spot_page_proxy'
 
     # --- Crude (all relative to WTI) ---
     CRUDE_DIFFS = {
@@ -435,11 +449,12 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
     if wti:
         for hub, diff in CRUDE_DIFFS.items():
             out[hub] = round(wti + diff, 2)
-        # Only WTI Cushing is sourced from real data (EIA RWTC / yfinance CL=F).
-        # Other crude grades use fixed estimated differentials — mark as EST.
+            hub_srcs[hub] = 'wti_diff'
+        hub_srcs['WTI Cushing'] = wti_src
         live_hubs.add('WTI Cushing')
     if brent:
         out['Brent Dated'] = round(brent, 2)
+        hub_srcs['Brent Dated'] = brent_src
         live_hubs.add('Brent Dated')
 
     # --- Metals (direct from yfinance) ---
@@ -453,6 +468,7 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
     for hub, ticker in METALS_MAP.items():
         if ticker in yf_prices:
             out[hub] = round(yf_prices[ticker], 2)
+            hub_srcs[hub] = 'yfinance_comex'
             live_hubs.add(hub)
 
     # --- Agriculture (direct from yfinance) ---
@@ -473,74 +489,67 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
     for hub, ticker in AG_MAP.items():
         if ticker in yf_prices:
             out[hub] = round(yf_prices[ticker], 4)
+            hub_srcs[hub] = 'yfinance_ag'
             live_hubs.add(hub)
 
-    # --- LNG (anchor HH Netback to Henry Hub; others are too proprietary) ---
+    # --- LNG ---
     if hh:
-        # HH Netback ≈ Henry Hub + liquefaction + shipping - regas
-        # Rough: HH + 3.30 blended export cost
         out['HH Netback'] = round(hh + 3.30, 2)
+        hub_srcs['HH Netback'] = 'hh_netback_est'
         live_hubs.add('HH Netback')
-        # TTF tracks HH with a premium — use yfinance if available
-        # JKM not available free; keep as Brownian
 
-    # --- NGLs (anchor to NG and crude; upgrade to FRED spot where available) ---
+    # --- NGLs ---
     if hh:
-        # Ethane (¢/gal): loosely tracks NG — ~3.5 Mcf per gallon
         out['Ethane (C2)'] = round(hh * 8.18, 1)
+        hub_srcs['Ethane (C2)'] = 'hh_ratio_est'
         live_hubs.add('Ethane (C2)')
     if wti:
         out['Normal Butane (nC4)'] = round(wti * 1.32, 1)
         out['Isobutane (iC4)']     = round(wti * 1.41, 1)
         out['Nat Gasoline (C5+)']  = round(wti * 1.95, 1)
+        hub_srcs['Normal Butane (nC4)'] = 'wti_ratio_est'
+        hub_srcs['Isobutane (iC4)']     = 'wti_ratio_est'
+        hub_srcs['Nat Gasoline (C5+)']  = 'wti_ratio_est'
         live_hubs.update(['Normal Butane (nC4)', 'Isobutane (iC4)', 'Nat Gasoline (C5+)'])
 
-    # Propane: prefer FRED Mont Belvieu spot ($/gal → ¢/gal × 100) over crude ratio.
-    # FRED DPROPANEMBTX = EIA weekly Mont Belvieu propane price in $/gallon.
     if fred_prices.get('propane_fred'):
-        out['Propane (C3)'] = round(fred_prices['propane_fred'] * 100, 1)  # $/gal → ¢/gal
+        out['Propane (C3)'] = round(fred_prices['propane_fred'] * 100, 1)
+        hub_srcs['Propane (C3)'] = 'fred_propane'
         live_hubs.add('Propane (C3)')
     elif wti:
-        # Fallback: crude ratio (WTI $65 → ~59 ¢/gal at ~0.905 ratio)
         out['Propane (C3)'] = round(wti * 0.905, 1)
+        hub_srcs['Propane (C3)'] = 'wti_ratio_est'
 
-    # --- Power: NYISO live LMPs; heat-rate estimates (EST) for all others ---
-    # Heat-rate formula: LMP ≈ gas_price ($/MMBtu) × heat_rate (MMBtu/MWh) + non-fuel adder
-    # Adder captures: capacity payments, O&M, ancillary services, congestion, carbon costs.
-    # Recalibrated Feb 2026 at NG ~$2.85/MMBtu against observed market prices.
+    # --- Power ---
     POWER_GAS_REF = {
-        # hub                  gas_hub          HR    adder  notes
-        'ERCOT Hub':    ('Henry Hub',      8.0,  +5.00),  # ~$28 vs typical $25-40
-        'ERCOT North':  ('Henry Hub',      7.8,  +3.00),  # typically discount to Hub
-        'ERCOT South':  ('Henry Hub',      8.2,  +6.00),  # slight premium (load center)
-        'PJM West Hub': ('Transco Zone 6', 7.5,  +2.00),  # ~$28 vs observed $23-35
-        'NEPOOL Mass':  ('Algonquin',      8.5,  +8.00),  # ~$39 vs typical $30-50
-        'MISO Illinois':('Chicago',        7.8,  +3.50),  # ~$25 vs typical $22-32
-        'CAISO NP15':   ('SoCal Gas',      8.5,  +8.00),  # ~$33 (renewable-heavy, varies)
-        'CAISO SP15':   ('SoCal Gas',      8.2,  +6.00),  # slight discount to NP15
-        'NYISO Zone J': ('Transco Zone 6', 8.5,  +8.00),  # ~$37 vs typical $30-55 (NYC)
-        'NYISO Zone A': ('Dawn',           7.5,  +3.00),  # ~$25 vs typical $20-35 (upstate)
-        'SPP North':    ('Henry Hub',      7.5,  +2.00),  # ~$23 vs typical $20-30
+        'ERCOT Hub':    ('Henry Hub',      8.0,  +5.00),
+        'ERCOT North':  ('Henry Hub',      7.8,  +3.00),
+        'ERCOT South':  ('Henry Hub',      8.2,  +6.00),
+        'PJM West Hub': ('Transco Zone 6', 7.5,  +2.00),
+        'NEPOOL Mass':  ('Algonquin',      8.5,  +8.00),
+        'MISO Illinois':('Chicago',        7.8,  +3.50),
+        'CAISO NP15':   ('SoCal Gas',      8.5,  +8.00),
+        'CAISO SP15':   ('SoCal Gas',      8.2,  +6.00),
+        'NYISO Zone J': ('Transco Zone 6', 8.5,  +8.00),
+        'NYISO Zone A': ('Dawn',           7.5,  +3.00),
+        'SPP North':    ('Henry Hub',      7.5,  +2.00),
     }
-
-    # Priority order for power prices:
-    # 1. NYISO real-time CSV (5-min, most current)
-    # 2. EIA Today in Energy (daily SNL/regional assessments)
-    # 3. Heat-rate formula (estimated, marked EST)
     for hub, (gas_hub, heat_rate, adder) in POWER_GAS_REF.items():
         if nyiso_lmps and hub in nyiso_lmps:
             out[hub] = nyiso_lmps[hub]
+            hub_srcs[hub] = 'nyiso_rt_lmp'
             live_hubs.add(hub)
         elif eia_power_spots and hub in eia_power_spots:
             out[hub] = eia_power_spots[hub]
+            hub_srcs[hub] = 'eia_power_snl'
             live_hubs.add(hub)
         else:
             gas_price = out.get(gas_hub)
             if gas_price:
                 out[hub] = round(gas_price * heat_rate + adder, 2)
-                # Heat-rate derived — NOT marked live even though anchored to live gas.
+                hub_srcs[hub] = 'heat_rate_est'
 
-    return out, list(live_hubs)
+    return out, list(live_hubs), hub_srcs
 
 
 def fetch_live_prices():
@@ -566,7 +575,7 @@ def fetch_live_prices():
         eia_ng_spots, eia_power_spots = f_spots.result()
         fred_prices            = f_fred.result()
 
-    hub_prices, live_hubs = _build_hub_prices(
+    hub_prices, live_hubs, hub_srcs = _build_hub_prices(
         yf_prices, eia_prices, nyiso_lmps, eia_ng_spots, eia_power_spots, fred_prices
     )
 
@@ -582,6 +591,7 @@ def fetch_live_prices():
     with _price_lock:
         _price_cache['data'] = hub_prices
         _price_cache['live_hubs'] = live_hubs
+        _price_cache['hub_sources'] = hub_srcs
         _price_cache['ts'] = now
 
     return hub_prices
@@ -600,6 +610,8 @@ def get_live_prices():
             'success': True,
             'prices': prices,
             'live_hubs': _price_cache.get('live_hubs', []),
+            'hub_sources': _price_cache.get('hub_sources', {}),
+            'fetched_at': _price_cache.get('ts', 0),
             'hub_count': len(prices),
             'cache_age_seconds': cached_age,
             'source': 'yfinance+EIA+NYISO+EIA-spot-scrape'

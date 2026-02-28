@@ -197,18 +197,107 @@ const SIM_PEERS = [
 // Populated on init and refreshed every 15 minutes.
 let _livePrices = {};
 let _liveHubSet = new Set();   // Hub names confirmed live from external APIs
+let _hubSources = {};           // hub_name → source key (e.g. 'eia_spot_page')
+let _pricesFetchedAt = 0;       // Unix timestamp of last successful fetch
 const LIVE_PRICE_REFRESH = 900000; // 15 minutes
 
-// Returns true if hub price came from a real external source (EIA / yfinance)
+// Source metadata displayed in the info popover.
+// Keys match what routes_prices.py sets in hub_srcs.
+const PRICE_SOURCE_META = {
+  eia_spot_page:      { name: 'EIA Today in Energy',           url: 'https://www.eia.gov/todayinenergy/prices.php',                     freq: 'Daily (business days)',   desc: 'Physical spot price for delivery today, sourced from NGI/SNL and published by EIA.' },
+  eia_spot_page_proxy:{ name: 'EIA Today in Energy (proxy)',   url: 'https://www.eia.gov/todayinenergy/prices.php',                     freq: 'Daily (business days)',   desc: 'Nearest available EIA hub used as a proxy — El Paso San Juan represents the Permian/Waha region.' },
+  eia_api_rwtc:       { name: 'EIA API v2 — RWTC',            url: 'https://www.eia.gov/dnav/pet/pet_pri_spt_s1_d.htm',                freq: 'Daily',                   desc: 'WTI Cushing spot price from the EIA official v2 API (series RWTC).' },
+  eia_api_brent:      { name: 'EIA API v2 — RBRTE',           url: 'https://www.eia.gov/dnav/pet/pet_pri_spt_s1_d.htm',                freq: 'Daily',                   desc: 'Brent crude spot price from EIA official API (series RBRTE).' },
+  eia_power_snl:      { name: 'EIA Today in Energy (SNL data)',url: 'https://www.eia.gov/todayinenergy/prices.php',                     freq: 'Daily (business days)',   desc: 'Regional electricity spot price from SNL Financial, republished daily by EIA.' },
+  nyiso_rt_lmp:       { name: 'NYISO Real-Time LMP',          url: 'https://mis.nyiso.com/public/',                                    freq: 'Every 5 minutes',         desc: '5-minute zone locational marginal price from the NYISO public real-time CSV feed.' },
+  yfinance_ng:        { name: 'NYMEX NG=F via yfinance',      url: 'https://finance.yahoo.com/quote/NG%3DF/',                          freq: '15-min delayed',          desc: 'Henry Hub natural gas front-month futures settlement price. 15-minute delay during market hours.' },
+  yfinance_cl:        { name: 'NYMEX CL=F via yfinance',      url: 'https://finance.yahoo.com/quote/CL%3DF/',                          freq: '15-min delayed',          desc: 'WTI crude front-month futures settlement price. 15-minute delay during market hours.' },
+  yfinance_bz:        { name: 'ICE BZ=F via yfinance',        url: 'https://finance.yahoo.com/quote/BZ%3DF/',                          freq: '15-min delayed',          desc: 'Brent crude front-month futures settlement price. 15-minute delay during market hours.' },
+  yfinance_comex:     { name: 'COMEX / NYMEX via yfinance',   url: 'https://finance.yahoo.com/',                                       freq: '15-min delayed',          desc: 'Exchange-traded metals futures (GC=F gold, SI=F silver, HG=F copper, PL=F platinum, PA=F palladium).' },
+  yfinance_ag:        { name: 'CBOT / CME / ICE via yfinance',url: 'https://finance.yahoo.com/',                                       freq: '15-min delayed',          desc: 'Exchange-traded agricultural futures from CBOT, CME, and ICE. 15-minute delay during market hours.' },
+  fred_propane:       { name: 'FRED — DPROPANEMBTX',          url: 'https://fred.stlouisfed.org/series/DPROPANEMBTX',                  freq: 'Weekly (Wednesdays)',      desc: 'Mont Belvieu, TX propane spot price from the EIA weekly petroleum survey, via FRED API.' },
+  fred_backup:        { name: 'FRED (backup source)',          url: 'https://fred.stlouisfed.org/',                                     freq: 'Daily / Weekly',          desc: 'Price sourced from FRED (Federal Reserve Economic Data), used as fallback when primary API is unavailable.' },
+  hh_spread:          { name: 'HH + basis spread (est.)',      url: null,                                                               freq: 'Derived',                 desc: 'Estimated from live Henry Hub price plus a fixed historical basis differential for this hub.' },
+  wti_diff:           { name: 'WTI + grade differential (est.)',url: null,                                                              freq: 'Derived',                 desc: 'Estimated from live WTI price plus a fixed grade and location differential for this crude grade.' },
+  heat_rate_est:      { name: 'Heat-rate formula (est.)',      url: null,                                                               freq: 'Derived',                 desc: 'Estimated: gas_price × heat_rate (MMBtu/MWh) + non-fuel adder (capacity, O&M, congestion).' },
+  hh_ratio_est:       { name: 'NG ratio estimate',             url: null,                                                               freq: 'Derived',                 desc: 'Estimated from live Henry Hub price using a historical NGL energy content ratio.' },
+  wti_ratio_est:      { name: 'Crude ratio estimate',          url: null,                                                               freq: 'Derived',                 desc: 'Estimated from live WTI crude price using a historical NGL-to-crude price ratio.' },
+  hh_netback_est:     { name: 'HH Netback formula',            url: null,                                                               freq: 'Derived',                 desc: 'Estimated: Henry Hub spot + blended LNG export cost (~$3.30/MMBtu for liquefaction + shipping).' },
+};
+const _fallbackMeta = { name: 'Simulation engine', url: null, freq: 'Every 8 seconds', desc: 'Price generated by the Brownian motion simulation engine, seeded from market anchors on startup.' };
+
+// Returns true if hub price came from a real external source
 function isHubLive(name) { return _liveHubSet.has(name); }
 
-// Returns a small LIVE or EST badge HTML string for a hub.
-// Always shows EST by default; upgrades to LIVE when confirmed by the external API.
-function priceBadge(name) {
-  return isHubLive(name)
-    ? '<span class="price-badge live">LIVE</span>'
-    : '<span class="price-badge est">EST</span>';
+// Returns source metadata object for a hub (falls back to simulation engine)
+function getHubSource(name) {
+  const key = _hubSources[name];
+  return (key && PRICE_SOURCE_META[key]) ? PRICE_SOURCE_META[key] : _fallbackMeta;
 }
+
+// Returns a clickable LIVE/EST badge button that opens the source info popover.
+function priceBadge(name) {
+  const live = isHubLive(name);
+  const safeHub = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  return `<button type="button" class="price-badge ${live ? 'live' : 'est'}" data-hub="${safeHub}" onclick="showPriceSource(event,this.dataset.hub)" title="View data source">${live ? 'LIVE' : 'EST'}</button>`;
+}
+
+// ---------- Price Source Popover ----------
+function showPriceSource(event, hubName) {
+  event.stopPropagation();
+  const pop = document.getElementById('priceSourcePop');
+  if (!pop) return;
+  const src = getHubSource(hubName);
+
+  pop.querySelector('.psp-hub').textContent = hubName;
+  pop.querySelector('.psp-src-name').textContent = src.name;
+  pop.querySelector('.psp-desc').textContent = src.desc;
+  pop.querySelector('.psp-freq').textContent = 'Updates: ' + src.freq;
+
+  const link = pop.querySelector('.psp-link');
+  if (src.url) {
+    link.href = src.url;
+    link.textContent = src.url.replace('https://', '').split('/')[0] + ' ↗';
+    link.style.display = 'inline-block';
+  } else {
+    link.style.display = 'none';
+  }
+
+  const ageEl = pop.querySelector('.psp-age');
+  if (_pricesFetchedAt) {
+    const mins = Math.round((Date.now() - _pricesFetchedAt * 1000) / 60000);
+    ageEl.textContent = mins <= 1 ? 'Price data fetched just now' : `Price data fetched ${mins}m ago`;
+    ageEl.style.display = 'block';
+  } else {
+    ageEl.style.display = 'none';
+  }
+
+  // Position near the clicked badge; clamp to viewport edges
+  pop.style.display = 'block';
+  const rect = event.currentTarget.getBoundingClientRect();
+  const pw = pop.offsetWidth || 280;
+  let left = rect.left + window.scrollX;
+  let top  = rect.bottom + window.scrollY + 6;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (left < 8) left = 8;
+  // Flip above if it would clip the bottom
+  if (top + 180 > window.scrollY + window.innerHeight) top = rect.top + window.scrollY - 186;
+  pop.style.left = left + 'px';
+  pop.style.top  = top + 'px';
+}
+
+function hidePriceSource() {
+  const pop = document.getElementById('priceSourcePop');
+  if (pop) pop.style.display = 'none';
+}
+
+// Close popover when clicking outside it
+document.addEventListener('click', function(e) {
+  const pop = document.getElementById('priceSourcePop');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target)) {
+    pop.style.display = 'none';
+  }
+});
 
 function genHistory(base, days, vol) {
   const h = [base];
@@ -225,8 +314,10 @@ async function fetchLivePrices() {
     const r = await fetch(API_BASE + '/api/live-prices');
     const d = await r.json();
     if (d.success && d.prices && Object.keys(d.prices).length > 0) {
-      _livePrices = d.prices;
-      _liveHubSet = new Set(d.live_hubs || []);
+      _livePrices      = d.prices;
+      _liveHubSet      = new Set(d.live_hubs || []);
+      _hubSources      = d.hub_sources || {};
+      _pricesFetchedAt = d.fetched_at  || 0;
       const srcEl = document.getElementById('livePriceSrc');
       if (srcEl) {
         srcEl.textContent = `Live prices: ${d.live_hubs ? d.live_hubs.length : d.hub_count} hubs (${d.source})`;

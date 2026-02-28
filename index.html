@@ -1341,5 +1341,18 @@
 <script src="chat.js"></script>
 <script src="engine-init.js"></script>
 
+<!-- Price Source Info Popover — populated by showPriceSource() in state.js -->
+<div id="priceSourcePop" style="display:none">
+  <div class="psp-header">
+    <span class="psp-hub"></span>
+    <button type="button" class="psp-close" onclick="hidePriceSource()" aria-label="Close">×</button>
+  </div>
+  <div class="psp-src-name"></div>
+  <a class="psp-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+  <div class="psp-desc"></div>
+  <div class="psp-freq"></div>
+  <div class="psp-age"></div>
+</div>
+
 </body>
 </html>
