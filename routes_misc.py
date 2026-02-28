@@ -6,7 +6,7 @@ import math
 import logging
 import threading
 import time as _time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 import requests
 from flask import Blueprint, request, jsonify
@@ -93,7 +93,6 @@ def submit_otc_trade(trader):
         'notes': data.get('notes', ''), 'status': 'OPEN', 'timestamp': datetime.utcnow().isoformat(),
     }
     cur = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)", (trader, json.dumps(trade_data)))
-    db.commit()
     my_trade_id = cur.lastrowid
 
     mirror_data = dict(trade_data)
@@ -103,7 +102,6 @@ def submit_otc_trade(trader):
     mirror_data['otcMirrorOf'] = my_trade_id
     mirror_data['notes'] = f'OTC mirror — initiated by {me["display_name"]}'
     cur2 = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)", (cpty_name, json.dumps(mirror_data)))
-    db.commit()
     mirror_id = cur2.lastrowid
 
     trade_data['otcMirrorOf'] = mirror_id

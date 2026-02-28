@@ -96,6 +96,18 @@ function processPendingOrders() {
         fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(trade)
+        }).then(r => r.json()).then(d => {
+          if (!d.success) {
+            // Server rejected — roll back the local fill
+            STATE.trades = STATE.trades.filter(t => t.id !== trade.id);
+            localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+            addNotification('order', 'Order Rejected', `${order.direction} ${order.hub} rejected: ${d.error || 'Server error'}`);
+            toast(`Order rejected by server: ${d.error || 'Unknown error'}`, 'error');
+          } else if (d.trade_id) {
+            // Update local id to match server-assigned id
+            const t = STATE.trades.find(x => x.id === trade.id);
+            if (t) { t.id = d.trade_id; localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades)); }
+          }
         }).catch(() => {});
       }
 

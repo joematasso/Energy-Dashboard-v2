@@ -5,6 +5,7 @@ import json
 import csv
 import io
 import random
+import sqlite3
 import string
 from datetime import datetime
 

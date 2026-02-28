@@ -6,12 +6,13 @@ import hashlib
 import math
 import random
 import re
+import sqlite3
 import string
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
 
-from app import get_db, active_connections, connections_lock, socketio, _calc_margin
+from app import get_db, active_connections, connections_lock, socketio, _calc_margin, logger
 
 public_bp = Blueprint('public', __name__)
 

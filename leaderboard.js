@@ -48,7 +48,7 @@ function renderLeaderboardData(serverData, isLive) {
   const equity=balance+realized;
   const myRet=((equity-balance)/balance)*100;
   const myWR=(wins+losses)>0?((wins/(wins+losses))*100):0;
-  const myPF=grossLosses>0?(grossWins/grossLosses):(grossWins>0?999:0);
+  const myPF=grossLosses>0?(grossWins/grossLosses):(grossWins>0?999:((wins+losses)>0?0:null));
   const myName=STATE.trader?STATE.trader.display_name:'You';
   const myRealName=STATE.trader?STATE.trader.real_name:'';
   const myFirm=STATE.trader?STATE.trader.firm:'';
@@ -58,7 +58,7 @@ function renderLeaderboardData(serverData, isLive) {
   if (serverData && isLive) {
     entries = serverData.map(s => ({name:s.display_name,realName:s.real_name||s.display_name,firm:s.firm,ret:s.return_pct,winRate:s.win_rate,pf:s.profit_factor,trades:s.trade_count,equity:s.equity,photo:s.photo_url||'',isMe:s.trader_name===myTraderName,team:s.team||null,traderName:s.trader_name,lastSeen:s.last_seen||null}));
     const myIdx=entries.findIndex(e=>e.isMe);
-    if(myIdx>=0){entries[myIdx].ret=parseFloat(myRet.toFixed(2));entries[myIdx].winRate=parseFloat(myWR.toFixed(1));entries[myIdx].pf=parseFloat(myPF.toFixed(2));entries[myIdx].trades=STATE.trades.length;entries[myIdx].equity=equity;entries[myIdx].photo=myPhoto||entries[myIdx].photo;}
+    if(myIdx>=0){entries[myIdx].ret=parseFloat(myRet.toFixed(2));entries[myIdx].winRate=parseFloat(myWR.toFixed(1));entries[myIdx].pf=myPF===null?null:parseFloat(myPF.toFixed(2));entries[myIdx].trades=STATE.trades.length;entries[myIdx].equity=equity;entries[myIdx].photo=myPhoto||entries[myIdx].photo;}
     // Keep STATE.trader in sync with server (team assignments, etc.)
     if(myIdx>=0 && STATE.trader){
       STATE.trader.team = entries[myIdx].team || null;
@@ -85,7 +85,7 @@ function renderLeaderboardData(serverData, isLive) {
       // Build sparkline from real snapshots
       const snaps = (window._lbSnapshots || {})[e.traderName] || [];
       const sparkData = snaps.length >= 2 ? snaps.map(s=>s.equity) : [e.equity, e.equity];
-      return `<tr class="${highlight} lb-clickable" onclick="openLbProfile(${i})"><td style="font-weight:700">${e.rank}</td><td><div style="display:flex;align-items:center;gap:8px">${avatar}<div><div style="font-weight:600">${onlineDot}${teamDot}${e.name}</div><div style="font-size:11px;color:var(--text-muted)">${e.firm}</div></div></div></td><td class="mono ${retColor}" style="font-weight:700">${e.ret>=0?'+':''}${e.ret.toFixed(1)}%</td><td class="mono">$${e.equity.toLocaleString(undefined,{maximumFractionDigits:0})}</td><td class="mono">${e.winRate.toFixed(0)}%</td><td class="mono">${e.pf.toFixed(2)}</td><td class="mono">${e.trades}</td><td>${sparklineSVG(sparkData,e.ret>=0?'#10b981':'#ef4444',60,20)}</td></tr>`;
+      return `<tr class="${highlight} lb-clickable" onclick="openLbProfile(${i})"><td style="font-weight:700">${e.rank}</td><td><div style="display:flex;align-items:center;gap:8px">${avatar}<div><div style="font-weight:600">${onlineDot}${teamDot}${e.name}</div><div style="font-size:11px;color:var(--text-muted)">${e.firm}</div></div></div></td><td class="mono ${retColor}" style="font-weight:700">${e.ret>=0?'+':''}${e.ret.toFixed(1)}%</td><td class="mono">$${e.equity.toLocaleString(undefined,{maximumFractionDigits:0})}</td><td class="mono">${e.winRate.toFixed(0)}%</td><td class="mono">${e.pf===null||e.pf===undefined?'—':e.pf.toFixed(2)}</td><td class="mono">${e.trades}</td><td>${sparklineSVG(sparkData,e.ret>=0?'#10b981':'#ef4444',60,20)}</td></tr>`;
     }).join('');
     window._lbEntries = entries;
     const myEntry = entries.find(e=>e.isMe);
@@ -94,7 +94,7 @@ function renderLeaderboardData(serverData, isLive) {
     const metrics = [
       {label:'Return %', value:(myRet>=0?'+':'')+myRet.toFixed(1)+'%', pct:Math.round(((totalCount-myRank+1)/totalCount)*100)},
       {label:'Win Rate', value:myWR.toFixed(1)+'%', pct:Math.round((entries.filter(e=>myWR>=e.winRate).length/totalCount)*100)},
-      {label:'Profit Factor', value:myPF.toFixed(2), pct:Math.round((entries.filter(e=>myPF>=e.pf).length/totalCount)*100)},
+      {label:'Profit Factor', value:myPF===null?'—':myPF.toFixed(2), pct:myPF===null?0:Math.round((entries.filter(e=>myPF>=(e.pf??0)).length/totalCount)*100)},
       {label:'# Trades', value:STATE.trades.length.toString(), pct:Math.round((entries.filter(e=>STATE.trades.length>=e.trades).length/totalCount)*100)},
     ];
     document.getElementById('percentileContainer').innerHTML = metrics.map(m => `<div class="pct-row"><span class="pct-label">${m.label}</span><span class="pct-value">${m.value}</span><div class="pct-bar-wrap"><div class="pct-bar" style="width:${m.pct}%"></div></div><span class="pct-rank">Top ${100-m.pct}%</span></div>`).join('');
