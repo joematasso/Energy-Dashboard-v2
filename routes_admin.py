@@ -783,3 +783,45 @@ def get_tournament_standings(tid):
     })
 
 
+# ---------------------------------------------------------------------------
+# Seed Export — download current traders/teams as traders_seed.json
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/admin/export-seed', methods=['GET'])
+@admin_required
+def export_seed():
+    """
+    Export all teams and traders to a JSON seed file.
+    Save this file as traders_seed.json in the repo root — the server
+    auto-imports it on startup whenever the traders table is empty, so
+    your traders survive fresh deployments.
+    """
+    db = get_db()
+    teams = [dict(r) for r in db.execute(
+        "SELECT name, description, color FROM teams ORDER BY id"
+    ).fetchall()]
+    traders = []
+    for r in db.execute(
+        """SELECT t.trader_name, t.real_name, t.display_name, t.firm,
+                  t.pin, t.status, t.starting_balance, t.photo_url,
+                  tm.name as team
+           FROM traders t
+           LEFT JOIN teams tm ON tm.id = t.team_id
+           ORDER BY t.id"""
+    ).fetchall():
+        traders.append({
+            'trader_name':      r['trader_name'],
+            'real_name':        r['real_name'],
+            'display_name':     r['display_name'],
+            'firm':             r['firm'],
+            'pin':              r['pin'],
+            'status':           r['status'],
+            'starting_balance': r['starting_balance'],
+            'photo_url':        r['photo_url'],
+            'team':             r['team'],
+        })
+    payload = json.dumps({'teams': teams, 'traders': traders}, indent=2)
+    return Response(
+        payload,
+        mimetype='application/json',
+        headers={'Content-Disposition': 'attachment; filename="traders_seed.json"'}
+    )

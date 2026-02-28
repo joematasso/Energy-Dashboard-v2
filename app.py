@@ -268,8 +268,57 @@ def init_db():
         cur.execute("ALTER TABLE conversations ADD COLUMN avatar TEXT DEFAULT ''")
 
     conn.commit()
+
+    # Auto-seed traders from traders_seed.json if the traders table is empty
+    _maybe_seed_traders(conn)
+
     conn.close()
     logger.info("Database initialized successfully.")
+
+
+def _maybe_seed_traders(conn):
+    """
+    If no traders exist, load teams + traders from traders_seed.json (if present).
+    This keeps trader accounts alive across fresh deployments — just export once,
+    commit the seed file to the repo, and it auto-imports on every fresh startup.
+    """
+    seed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'traders_seed.json')
+    if not os.path.exists(seed_path):
+        return
+    cur = conn.cursor()
+    count = cur.execute("SELECT COUNT(*) FROM traders").fetchone()[0]
+    if count > 0:
+        return  # already populated — don't overwrite live data
+    try:
+        with open(seed_path) as f:
+            seed = json.load(f)
+        # Insert teams first
+        for t in seed.get('teams', []):
+            cur.execute(
+                "INSERT OR IGNORE INTO teams (name, description, color) VALUES (?,?,?)",
+                (t['name'], t.get('description', ''), t.get('color', '#22d3ee'))
+            )
+        # Insert traders — look up team_id by name
+        for t in seed.get('traders', []):
+            team_id = None
+            if t.get('team'):
+                row = cur.execute("SELECT id FROM teams WHERE name=?", (t['team'],)).fetchone()
+                team_id = row[0] if row else None
+            cur.execute("""
+                INSERT OR IGNORE INTO traders
+                  (trader_name, real_name, display_name, firm, pin, team_id,
+                   status, starting_balance, photo_url)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            """, (
+                t['trader_name'], t.get('real_name', ''), t.get('display_name', t['trader_name']),
+                t.get('firm', ''), t['pin'], team_id,
+                t.get('status', 'ACTIVE'), t.get('starting_balance', 1000000),
+                t.get('photo_url', '')
+            ))
+        conn.commit()
+        logger.info(f"Seeded {len(seed.get('traders', []))} traders from traders_seed.json")
+    except Exception as e:
+        logger.warning(f"traders_seed.json load failed: {e}")
 
 # ---------------------------------------------------------------------------
 # Auth Helpers

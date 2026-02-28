@@ -88,10 +88,14 @@ def _fetch_yfinance(tickers):
 
         for ticker in tickers:
             try:
+                # yfinance >=1.0 uses (ticker, price_type) MultiIndex when multi-ticker
                 if len(tickers) == 1:
                     col_data = raw['Close']
+                elif isinstance(raw.columns, __import__('pandas').MultiIndex):
+                    # New format: top-level is ticker, second level is price type
+                    col_data = raw[ticker]['Close']
                 else:
-                    col_data = raw['Close'][ticker] if ('Close', ticker) in raw.columns or ticker in raw['Close'].columns else raw[ticker]['Close']
+                    col_data = raw['Close'][ticker]
                 col_data = col_data.dropna()
                 if col_data.empty:
                     continue
@@ -150,43 +154,49 @@ def _fetch_eia_prices():
 def _fetch_ercot_lmps():
     """
     Fetch ERCOT real-time settlement point prices (no API key required).
-    Uses the ERCOT public dashboard API — updated every 5 minutes.
+    Uses the ERCOT public API v2 grid-status endpoint — updated every 5 minutes.
     Returns dict: hub_name -> float ($/MWh)
     """
-    try:
-        url = 'https://www.ercot.com/api/1/services/read/dashboards/real-time-dispatch.json'
-        r = requests.get(url, timeout=8, headers={'Accept': 'application/json'})
-        data = r.json()
-        # Response structure: {"data": {"rtSpp": [{"settlementPointName": "HB_HUBAVG", "settlementPointPrice": 28.5}, ...]}}
-        spp_list = data.get('data', {}).get('rtSpp') or data.get('rtSpp', [])
-        if not spp_list:
-            # Try alternate key structure
-            for val in data.values():
-                if isinstance(val, dict):
-                    spp_list = val.get('rtSpp', [])
-                    if spp_list: break
-        result = {}
-        # Map ERCOT settlement point names to our hub names
-        NAME_MAP = {
-            'HB_HUBAVG': 'ERCOT Hub',
-            'HB_NORTH':  'ERCOT North',
-            'HB_SOUTH':  'ERCOT South',
-            'HB_WEST':   'ERCOT Hub',    # fallback alias
-            'HB_BUSAVG': 'ERCOT Hub',
-        }
-        for item in spp_list:
-            sp_name = item.get('settlementPointName', '')
-            sp_price = item.get('settlementPointPrice')
-            if sp_name in NAME_MAP and sp_price is not None:
-                hub = NAME_MAP[sp_name]
-                # Only set if not already set (prefer more specific names)
-                if hub not in result:
-                    result[hub] = round(float(sp_price), 2)
-        logger.debug(f'ERCOT LMPs fetched: {result}')
-        return result
-    except Exception as e:
-        logger.debug(f'ERCOT LMP fetch failed: {e}')
-        return {}
+    NAME_MAP = {
+        'HB_HUBAVG': 'ERCOT Hub',
+        'HB_NORTH':  'ERCOT North',
+        'HB_SOUTH':  'ERCOT South',
+        'HB_WEST':   'ERCOT Hub',
+        'HB_BUSAVG': 'ERCOT Hub',
+    }
+    # Try the newer ERCOT API v2 endpoint (grid conditions / realtime LMPs)
+    urls_to_try = [
+        'https://www.ercot.com/api/1/services/read/dashboards/current-condition.json',
+        'https://www.ercot.com/api/1/services/read/dashboards/systemWidePrices.json',
+    ]
+    result = {}
+    for url in urls_to_try:
+        try:
+            r = requests.get(url, timeout=8, headers={'Accept': 'application/json',
+                                                       'User-Agent': 'Mozilla/5.0'})
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            # Walk all nested dicts/lists looking for settlement point price data
+            def _walk(obj):
+                if isinstance(obj, list):
+                    for item in obj:
+                        sp = item.get('settlementPointName', '') if isinstance(item, dict) else ''
+                        pr = item.get('settlementPointPrice') if isinstance(item, dict) else None
+                        if sp in NAME_MAP and pr is not None and NAME_MAP[sp] not in result:
+                            result[NAME_MAP[sp]] = round(float(pr), 2)
+                        _walk(item) if isinstance(item, dict) else None
+                elif isinstance(obj, dict):
+                    for v in obj.values():
+                        _walk(v)
+            _walk(data)
+            if result:
+                logger.debug(f'ERCOT LMPs fetched from {url}: {result}')
+                return result
+        except Exception as e:
+            logger.debug(f'ERCOT attempt {url} failed: {e}')
+    logger.debug('ERCOT LMP fetch: all endpoints failed, returning empty')
+    return result
 
 
 def _fetch_caiso_lmps():
