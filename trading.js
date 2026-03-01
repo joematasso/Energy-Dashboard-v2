@@ -5,6 +5,47 @@ let tradeDirection = '';
 let blotterPage = 0;
 const BLOTTER_PAGE_SIZE = 10;
 
+/* --- Click-to-show field info tooltips --- */
+function toggleFieldTip(el) {
+  const wasActive = el.classList.contains('active');
+  // Close all open tips first
+  document.querySelectorAll('.field-info.active').forEach(fi => fi.classList.remove('active'));
+  if (!wasActive) el.classList.add('active');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.field-info')) {
+    document.querySelectorAll('.field-info.active').forEach(fi => fi.classList.remove('active'));
+  }
+});
+
+/* --- Volume unit config per sector --- */
+const SECTOR_VOLUME = {
+  ng:      { unit:'MMBtu',    placeholder:'10000', step:'1000', tip:'Volume in MMBtu (million British thermal units). Standard lot: 10,000 MMBtu. Larger volume = more margin required.' },
+  crude:   { unit:'BBL',      placeholder:'1000',  step:'100',  tip:'Volume in barrels (BBL). Standard lot: 1,000 BBL. Each contract = 1,000 barrels of crude oil.' },
+  power:   { unit:'MWh',      placeholder:'50',    step:'25',   tip:'Volume in megawatt-hours (MWh). Standard block: 50 MWh. On-peak vs off-peak hours affect total delivery.' },
+  freight: { unit:'Lots',     placeholder:'5',     step:'1',    tip:'Number of lots. Each lot represents a standard cargo size for the route (e.g., Capesize = 150k MT).' },
+  ag:      { unit:'Bushels',  placeholder:'5000',  step:'1000', tip:'Volume in bushels (corn/wheat/soy) or metric tonnes. Standard CBOT contract: 5,000 bushels.' },
+  metals:  { unit:'Troy oz',  placeholder:'100',   step:'10',   tip:'Volume in troy ounces (gold/silver) or metric tonnes (base metals). Standard gold lot: 100 troy oz.' },
+  ngls:    { unit:'Gallons',  placeholder:'42000', step:'1000', tip:'Volume in gallons or barrels. Standard NGL lot: 42,000 gallons (1,000 BBL). Priced per gallon.' },
+  lng:     { unit:'MMBtu',    placeholder:'10000', step:'1000', tip:'Volume in MMBtu. LNG cargo trades may also reference TBtu or cargo lots (~3.4M MMBtu per standard cargo).' },
+};
+
+function updateVolumeField(sector) {
+  const cfg = SECTOR_VOLUME[sector];
+  const label = document.getElementById('volumeLabel');
+  const input = document.getElementById('tradeVolume');
+  const tip   = document.getElementById('volumeTip');
+  if (cfg) {
+    if (label) label.textContent = 'Volume (' + cfg.unit + ')';
+    if (input) { input.placeholder = cfg.placeholder; input.step = cfg.step; }
+    if (tip) tip.textContent = cfg.tip;
+  } else {
+    if (label) label.textContent = 'Volume';
+    if (input) { input.placeholder = '10000'; input.step = '1'; }
+    if (tip) tip.textContent = 'Number of units. Larger volume = more margin required.';
+  }
+}
+
 function _updateSpotBadge(hubName) {
   const el = document.getElementById('tradeSpotBadge');
   if (!el) return;
@@ -272,6 +313,8 @@ function onTradeSectorChange() {
   populateHubDropdown();
   // Auto-populate venue dropdown for this sector
   populateVenueDropdown(sector);
+  // Update volume field units for this sector
+  updateVolumeField(sector);
 }
 
 // Auto-incrementing confirmation reference per session

@@ -765,7 +765,7 @@
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
           <div class="form-group">
-            <label>Commodity Sector <span class="field-info" title="The commodity market to trade in (Natural Gas, Crude Oil, Power, etc.)">?</span></label>
+            <label>Commodity Sector <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The commodity market to trade in (Natural Gas, Crude Oil, Power, etc.)</span></span></label>
             <select id="tradeSector" onchange="onTradeSectorChange()">
               <option value="">Select sector...</option>
               <option value="ng">Natural Gas</option>
@@ -779,24 +779,24 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Trade Type <span class="field-info" title="Swap = fixed-for-floating contract. Basis Swap = spread between two hubs. Option = right to buy/sell at a strike price. Spread = calendar or location spread.">?</span></label>
+            <label>Trade Type <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Swap = fixed-for-floating contract. Basis Swap = spread between two hubs. Option = right to buy/sell at a strike price. Spread = calendar or location spread.</span></span></label>
             <select id="tradeType" onchange="onTradeTypeChange()">
               <option value="">Select sector first...</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Direction <span class="field-info" title="BUY (go long) if you expect prices to rise. SELL (go short) if you expect prices to fall.">?</span></label>
+            <label>Direction <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">BUY (go long) if you expect prices to rise. SELL (go short) if you expect prices to fall.</span></span></label>
             <div style="display:flex;gap:4px">
               <button class="btn btn-sm" id="dirBuy" onclick="setDirection('BUY')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">BUY</button>
               <button class="btn btn-sm" id="dirSell" onclick="setDirection('SELL')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">SELL</button>
             </div>
           </div>
-          <div class="form-group"><label>Hub / Location <span class="field-info" title="The delivery point or pricing index (e.g., Henry Hub for gas, WTI Cushing for crude).">?</span></label><select id="tradeHub"></select></div>
-          <div class="form-group"><label>Volume <span class="field-info" title="Number of units. Gas = MMBtu, Crude = BBL, Power = MWh. Larger volume = more margin required.">?</span></label><input type="number" id="tradeVolume" placeholder="10000"></div>
-          <div class="form-group"><label>Entry Price <span class="field-info" title="The price you lock in. BUY must be at or above spot. SELL at or below. Leave blank for current spot.">?</span> <span style="font-size:11px;color:var(--text-muted)" id="priceHint">(at or above spot for BUY)</span></label><input type="number" id="tradeEntry" step="0.001" placeholder="Select hub"></div>
-          <div class="form-group"><label>Spot Reference <span class="field-info" title="Current live market price for this hub. Your entry price is validated against this.">?</span> <span id="tradeSpotBadge" style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle;display:none"></span></label><input id="tradeSpot" readonly style="color:var(--text-muted)"></div>
-          <div class="form-group"><label>Delivery Month <span class="field-info" title="The contract month for settlement. Optional for spot trades.">?</span></label><input type="month" id="tradeDelivery"></div>
-          <div class="form-group"><label>Counterparty <span class="field-info" title="For OTC trades, select the trader on the other side. Leave as None for exchange trades.">?</span> <span id="cptyHint" style="font-size:10px;color:var(--text-muted)"></span></label><select id="tradeCpty"><option value="">None (Exchange)</option></select></div>
+          <div class="form-group"><label>Hub / Location <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The delivery point or pricing index (e.g., Henry Hub for gas, WTI Cushing for crude).</span></span></label><select id="tradeHub"></select></div>
+          <div class="form-group"><label><span id="volumeLabel">Volume</span> <span class="field-info" id="volumeFieldInfo" onclick="toggleFieldTip(this)">?<span class="field-tip" id="volumeTip">Number of units. Gas = MMBtu, Crude = BBL, Power = MWh. Larger volume = more margin required.</span></span></label><input type="number" id="tradeVolume" placeholder="10000"></div>
+          <div class="form-group"><label>Entry Price <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The price you lock in. BUY must be at or above spot. SELL at or below. Leave blank for current spot.</span></span> <span style="font-size:11px;color:var(--text-muted)" id="priceHint">(at or above spot for BUY)</span></label><input type="number" id="tradeEntry" step="0.001" placeholder="Select hub"></div>
+          <div class="form-group"><label>Spot Reference <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Current live market price for this hub. Your entry price is validated against this.</span></span> <span id="tradeSpotBadge" style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle;display:none"></span></label><input id="tradeSpot" readonly style="color:var(--text-muted)"></div>
+          <div class="form-group"><label>Delivery Month <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The contract month for settlement. Optional for spot trades.</span></span></label><input type="month" id="tradeDelivery"></div>
+          <div class="form-group"><label>Counterparty <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">For OTC trades, select the trader on the other side. Leave as None for exchange trades.</span></span> <span id="cptyHint" style="font-size:10px;color:var(--text-muted)"></span></label><select id="tradeCpty"><option value="">None (Exchange)</option></select></div>
         </div>
 
         <!-- Conditional fields -->
@@ -814,7 +814,7 @@
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px">
-          <div class="form-group"><label>Order Type <span class="field-info" title="Market = execute now. Limit = execute when price reaches target. Stop = trigger at stop level. Stop-Limit = combines both.">?</span></label>
+          <div class="form-group"><label>Order Type <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Market = execute now. Limit = execute when price reaches target. Stop = trigger at stop level. Stop-Limit = combines both.</span></span></label>
             <select id="tradeOrderType" onchange="onOrderTypeChange()">
               <option value="MARKET">Market Order</option>
               <option value="LIMIT">Limit Order</option>
@@ -822,23 +822,23 @@
               <option value="STOP_LIMIT">Stop-Limit Order</option>
             </select>
           </div>
-          <div class="form-group" id="limitPriceGroup" style="display:none"><label>Limit Price <span class="field-info" title="The price at which your limit order will execute. BUY limits below market, SELL limits above.">?</span></label><input type="number" id="tradeLimitPrice" step="0.001" placeholder="Limit price"></div>
-          <div class="form-group" id="stopPriceGroup" style="display:none"><label>Stop Trigger <span class="field-info" title="The price that triggers your stop order. BUY stops above market, SELL stops below.">?</span></label><input type="number" id="tradeStopPrice" step="0.001" placeholder="Stop trigger price"></div>
-          <div class="form-group"><label>Time in Force <span class="field-info" title="DAY = expires end of session. GTC = stays open until filled or cancelled. IOC = fill immediately or discard.">?</span></label>
+          <div class="form-group" id="limitPriceGroup" style="display:none"><label>Limit Price <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The price at which your limit order will execute. BUY limits below market, SELL limits above.</span></span></label><input type="number" id="tradeLimitPrice" step="0.001" placeholder="Limit price"></div>
+          <div class="form-group" id="stopPriceGroup" style="display:none"><label>Stop Trigger <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The price that triggers your stop order. BUY stops above market, SELL stops below.</span></span></label><input type="number" id="tradeStopPrice" step="0.001" placeholder="Stop trigger price"></div>
+          <div class="form-group"><label>Time in Force <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">DAY = expires end of session. GTC = stays open until filled or cancelled. IOC = fill immediately or discard.</span></span></label>
             <select id="tradeTIF">
               <option value="DAY">Day (expires EOD)</option>
               <option value="GTC">Good 'Til Cancelled</option>
               <option value="IOC">Immediate or Cancel</option>
             </select>
           </div>
-          <div class="form-group"><label>Stop Loss <span class="field-info" title="Auto-close if price hits this level. Protects against large losses.">?</span></label><input type="number" id="tradeStop" step="0.01" placeholder="Optional"></div>
-          <div class="form-group"><label>Target Exit <span class="field-info" title="Auto-close when price reaches this profit target.">?</span></label><input type="number" id="tradeTarget" step="0.01" placeholder="Optional"></div>
-          <div class="form-group"><label>Venue <span class="field-info" title="OTC Bilateral = direct deal with counterparty. Exchange = through central exchange (requires market hours).">?</span></label>
+          <div class="form-group"><label>Stop Loss <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Auto-close if price hits this level. Protects against large losses.</span></span></label><input type="number" id="tradeStop" step="0.01" placeholder="Optional"></div>
+          <div class="form-group"><label>Target Exit <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Auto-close when price reaches this profit target.</span></span></label><input type="number" id="tradeTarget" step="0.01" placeholder="Optional"></div>
+          <div class="form-group"><label>Venue <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">OTC Bilateral = direct deal with counterparty. Exchange = through central exchange (requires market hours).</span></span></label>
             <select id="tradeVenue">
               <option value="OTC">OTC Bilateral</option>
             </select>
           </div>
-          <div class="form-group"><label>Broker / FCM <span class="field-info" title="The intermediary handling your trade. Direct = no broker fee.">?</span></label>
+          <div class="form-group"><label>Broker / FCM <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The intermediary handling your trade. Direct = no broker fee.</span></span></label>
             <select id="tradeBroker">
               <option value="">Direct / None</option>
               <option value="Tradition">Tradition Energy</option>
@@ -849,13 +849,13 @@
               <option value="StoneX">StoneX</option>
             </select>
           </div>
-          <div class="form-group"><label>Settlement Type <span class="field-info" title="Financial = settled in cash at expiry. Physical = actual delivery of the commodity.">?</span></label>
+          <div class="form-group"><label>Settlement Type <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Financial = settled in cash at expiry. Physical = actual delivery of the commodity.</span></span></label>
             <select id="tradeSettlement" onchange="onSettlementChange()">
               <option value="FINANCIAL">Financial (Cash-Settled)</option>
               <option value="PHYSICAL">Physical Delivery</option>
             </select>
           </div>
-          <div class="form-group"><label>Commission ($/unit) <span class="field-info" title="Per-unit fee charged by the broker. Deducted from your P&L.">?</span></label>
+          <div class="form-group"><label>Commission ($/unit) <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Per-unit fee charged by the broker. Deducted from your P&L.</span></span></label>
             <input type="number" id="tradeCommission" step="0.0001" placeholder="e.g. 0.010">
           </div>
           <div class="form-group"><label>Notes</label><input id="tradeNotes" placeholder="Optional notes"></div>
