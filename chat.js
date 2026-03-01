@@ -1080,15 +1080,20 @@ const CALL_STATE = {
   startTime: null,
   ringTimeout: null,    // caller-side unanswered timeout
   disconnectTimeout: null, // delay before ending on 'disconnected'
+  iceRestarted: false,  // track if we already tried ICE restart
+  pendingCandidates: [], // buffer ICE candidates before peer is ready
   incomingOffer: null,
   incomingCaller: null,
   incomingCallType: 'audio',
-  remoteAudio: null     // stored ref for cleanup
+  remoteAudio: null     // stored ref for cleanup (audio-only calls)
 };
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' }
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' }
 ];
 
 function getCallTargetName() {
@@ -1130,7 +1135,7 @@ async function startCall(type) {
   }, 45000);
 
   try {
-    CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 5 });
     CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
 
     // Show local video preview
@@ -1148,17 +1153,18 @@ async function startCall(type) {
     CALL_STATE.peer.ontrack = (e) => {
       const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
       CALL_STATE.remoteStream = stream;
-      // Attach video
       if (CALL_STATE.callType === 'video') {
+        // Video element handles both audio and video
         const remoteVid = document.getElementById('callRemoteVideo');
-        if (remoteVid && remoteVid.srcObject !== stream) {
+        if (remoteVid) {
           remoteVid.srcObject = stream;
           remoteVid.play().catch(()=>{});
         }
-      }
-      // Route audio through a separate Audio element (only once)
-      if (!CALL_STATE.remoteAudio) {
-        CALL_STATE.remoteAudio = new Audio();
+      } else {
+        // Audio-only: use a separate Audio element
+        if (!CALL_STATE.remoteAudio) {
+          CALL_STATE.remoteAudio = new Audio();
+        }
         CALL_STATE.remoteAudio.srcObject = stream;
         CALL_STATE.remoteAudio.play().catch(() => {});
       }
@@ -1167,15 +1173,35 @@ async function startCall(type) {
     CALL_STATE.peer.oniceconnectionstatechange = () => {
       if (!CALL_STATE.peer) return;
       const st = CALL_STATE.peer.iceConnectionState;
+      console.log('[Call] ICE state:', st);
       if (st === 'connected' || st === 'completed') {
+        CALL_STATE.iceRestarted = false;
         if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
         if (CALL_STATE.disconnectTimeout) { clearTimeout(CALL_STATE.disconnectTimeout); CALL_STATE.disconnectTimeout = null; }
         document.getElementById('callStatus').textContent = 'Connected';
         if (!CALL_STATE.startTime) startCallTimer();
       } else if (st === 'failed') {
-        endCall();
+        // Try one ICE restart before giving up
+        if (!CALL_STATE.iceRestarted && CALL_STATE.peer) {
+          CALL_STATE.iceRestarted = true;
+          console.log('[Call] ICE failed, attempting restart...');
+          document.getElementById('callStatus').textContent = 'Reconnecting...';
+          CALL_STATE.peer.createOffer({ iceRestart: true }).then(offer => {
+            return CALL_STATE.peer.setLocalDescription(offer);
+          }).then(() => {
+            if (typeof socket !== 'undefined') {
+              socket.emit('call_initiate', {
+                caller: STATE.trader.trader_name,
+                callee: CALL_STATE.remoteTarget,
+                offer: CALL_STATE.peer.localDescription,
+                callType: CALL_STATE.callType
+              });
+            }
+          }).catch(() => { endCall(); });
+        } else {
+          endCall();
+        }
       } else if (st === 'disconnected') {
-        // Transient — wait 5s before ending (ICE may reconnect)
         if (!CALL_STATE.disconnectTimeout) {
           CALL_STATE.disconnectTimeout = setTimeout(() => {
             if (CALL_STATE.peer && CALL_STATE.peer.iceConnectionState === 'disconnected') {
@@ -1231,7 +1257,7 @@ async function acceptCall() {
   showCallOverlay('Connecting...', CALL_STATE.remoteTarget, type);
 
   try {
-    CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 5 });
     CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
 
     if (type === 'video') {
@@ -1250,13 +1276,14 @@ async function acceptCall() {
       CALL_STATE.remoteStream = stream;
       if (CALL_STATE.callType === 'video') {
         const remoteVid = document.getElementById('callRemoteVideo');
-        if (remoteVid && remoteVid.srcObject !== stream) {
+        if (remoteVid) {
           remoteVid.srcObject = stream;
           remoteVid.play().catch(()=>{});
         }
-      }
-      if (!CALL_STATE.remoteAudio) {
-        CALL_STATE.remoteAudio = new Audio();
+      } else {
+        if (!CALL_STATE.remoteAudio) {
+          CALL_STATE.remoteAudio = new Audio();
+        }
         CALL_STATE.remoteAudio.srcObject = stream;
         CALL_STATE.remoteAudio.play().catch(() => {});
       }
@@ -1267,6 +1294,7 @@ async function acceptCall() {
     CALL_STATE.peer.oniceconnectionstatechange = () => {
       if (!CALL_STATE.peer) return;
       const st = CALL_STATE.peer.iceConnectionState;
+      console.log('[Call] ICE state (acceptor):', st);
       if (st === 'failed') {
         endCall();
       } else if (st === 'disconnected') {
@@ -1279,11 +1307,17 @@ async function acceptCall() {
           }, 5000);
         }
       } else if (st === 'connected' || st === 'completed') {
+        CALL_STATE.iceRestarted = false;
         if (CALL_STATE.disconnectTimeout) { clearTimeout(CALL_STATE.disconnectTimeout); CALL_STATE.disconnectTimeout = null; }
       }
     };
 
     await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(CALL_STATE.incomingOffer));
+    // Flush any ICE candidates that arrived while waiting to accept
+    while (CALL_STATE.pendingCandidates.length > 0) {
+      const c = CALL_STATE.pendingCandidates.shift();
+      try { await CALL_STATE.peer.addIceCandidate(new RTCIceCandidate(c)); } catch(e) {}
+    }
     const answer = await CALL_STATE.peer.createAnswer();
     await CALL_STATE.peer.setLocalDescription(answer);
 
@@ -1342,6 +1376,8 @@ function endCallLocal() {
   CALL_STATE.videoOff = false;
   CALL_STATE.startTime = null;
   CALL_STATE.callType = 'audio';
+  CALL_STATE.iceRestarted = false;
+  CALL_STATE.pendingCandidates = [];
 
   // Clear video elements
   const lv = document.getElementById('callLocalVideo');
@@ -1445,6 +1481,11 @@ function initCallSocketListeners() {
     if (!CALL_STATE.peer) return;
     try {
       await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+      // Flush any buffered ICE candidates now that remote description is set
+      while (CALL_STATE.pendingCandidates.length > 0) {
+        const c = CALL_STATE.pendingCandidates.shift();
+        try { await CALL_STATE.peer.addIceCandidate(new RTCIceCandidate(c)); } catch(e) {}
+      }
       if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
       document.getElementById('callStatus').textContent = 'Connected';
       if (!CALL_STATE.startTime) startCallTimer();
@@ -1455,10 +1496,14 @@ function initCallSocketListeners() {
   });
 
   socket.on('call_ice', async (data) => {
-    if (!CALL_STATE.peer) return;
+    // Buffer candidates if peer doesn't exist yet or remote description not set
+    if (!CALL_STATE.peer || !CALL_STATE.peer.remoteDescription) {
+      CALL_STATE.pendingCandidates.push(data.candidate);
+      return;
+    }
     try {
       await CALL_STATE.peer.addIceCandidate(new RTCIceCandidate(data.candidate));
-    } catch(e) { /* ignore late candidates */ }
+    } catch(e) { console.log('[Call] ICE candidate error:', e.message); }
   });
 
   socket.on('call_ended', () => {
