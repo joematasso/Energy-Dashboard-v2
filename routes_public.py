@@ -147,7 +147,8 @@ def login_trader():
         'status': 'ACTIVE',
         'starting_balance': trader['starting_balance'],
         'photo_url': trader['photo_url'],
-        'team': team_info
+        'team': team_info,
+        'privileged': bool(trader['privileged']) if 'privileged' in trader.keys() else False
     })
 
 @public_bp.route('/api/traders/heartbeat/<trader>', methods=['POST'])
@@ -303,13 +304,26 @@ def submit_trade(trader):
 
     # Store trade
     data['status'] = 'OPEN'
-    data['timestamp'] = datetime.utcnow().isoformat()
+    # Privileged traders can backdate trades
+    backdate = data.pop('backdate', None)
+    is_privileged = trader_row['privileged'] if 'privileged' in trader_row.keys() else False
+    if backdate and is_privileged:
+        data['timestamp'] = backdate
+        data['backdated'] = True
+    else:
+        data['timestamp'] = datetime.utcnow().isoformat()
     trade_json = json.dumps(data)
 
-    cur = db.execute(
-        "INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
-        (trader, trade_json)
-    )
+    if backdate and is_privileged:
+        cur = db.execute(
+            "INSERT INTO trades (trader_name, trade_data, created_at) VALUES (?, ?, ?)",
+            (trader, trade_json, backdate)
+        )
+    else:
+        cur = db.execute(
+            "INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
+            (trader, trade_json)
+        )
     db.commit()
     trade_id = cur.lastrowid
 

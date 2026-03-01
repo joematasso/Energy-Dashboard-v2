@@ -82,7 +82,8 @@ async function doLogin() {
         firm: d.firm,
         pin: pin,
         starting_balance: d.starting_balance,
-        team: d.team || null
+        team: d.team || null,
+        privileged: d.privileged || false
       };
       if (d.photo_url) setTraderPhoto(d.photo_url);
       localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));

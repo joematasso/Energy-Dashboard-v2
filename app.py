@@ -280,6 +280,12 @@ def init_db():
     except sqlite3.OperationalError:
         cur.execute("ALTER TABLE messages ADD COLUMN image TEXT DEFAULT ''")
 
+    # Migration: add privileged column to traders (after-hours + backdate)
+    try:
+        cur.execute("SELECT privileged FROM traders LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE traders ADD COLUMN privileged INTEGER DEFAULT 0")
+
     conn.commit()
 
     # Auto-seed traders from traders_seed.json if the traders table is empty

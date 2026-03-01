@@ -52,7 +52,8 @@ def admin_list_traders():
             'realized_pnl': realized,
             'photo_url': t['photo_url'],
             'created_at': t['created_at'],
-            'last_seen': t['last_seen']
+            'last_seen': t['last_seen'],
+            'privileged': bool(t['privileged']) if 'privileged' in t.keys() else False
         })
 
     return jsonify({'success': True, 'traders': results})
@@ -80,6 +81,19 @@ def admin_enable_trader(tid):
     db.execute("UPDATE traders SET status='ACTIVE' WHERE id=?", (tid,))
     db.commit()
     return jsonify({'success': True})
+
+@admin_bp.route('/api/admin/traders/privilege/<int:tid>', methods=['POST'])
+@admin_required
+def admin_toggle_privilege(tid):
+    """Toggle privileged status (after-hours trading + backdate)."""
+    db = get_db()
+    trader = db.execute("SELECT privileged FROM traders WHERE id=?", (tid,)).fetchone()
+    if not trader:
+        return jsonify({'success': False, 'error': 'Trader not found'}), 404
+    new_val = 0 if trader['privileged'] else 1
+    db.execute("UPDATE traders SET privileged=? WHERE id=?", (new_val, tid))
+    db.commit()
+    return jsonify({'success': True, 'privileged': bool(new_val)})
 
 @admin_bp.route('/api/admin/traders/reset/<int:tid>', methods=['POST'])
 @admin_required

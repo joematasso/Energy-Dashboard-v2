@@ -859,6 +859,10 @@
             <input type="number" id="tradeCommission" step="0.0001" placeholder="e.g. 0.010">
           </div>
           <div class="form-group"><label>Notes</label><input id="tradeNotes" placeholder="Optional notes"></div>
+          <div class="form-group" id="backdateGroup" style="display:none">
+            <label>Backdate <span style="font-size:10px;color:var(--amber)">(Privileged)</span></label>
+            <input type="datetime-local" id="tradeBackdate" style="color-scheme:dark">
+          </div>
         </div>
 
         <!-- Physical delivery fields (shown when Settlement=Physical) -->
@@ -897,8 +901,67 @@
     <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
       <input id="blotterSearch" placeholder="Search trades (hub, type, notes...)" oninput="renderBlotterTable()" style="flex:1;min-width:200px">
       <span style="font-size:12px;color:var(--text-muted)" id="blotterCount">0 trades</span>
+      <button class="btn btn-sm btn-ghost" onclick="toggleBlotterHelp()" title="Trading guide for new traders" style="display:flex;align-items:center;gap:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Guide</button>
       <button class="btn btn-sm btn-ghost" onclick="exportTradesCSV()" title="Export all trades to CSV">Export CSV</button>
       <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:var(--red);border-color:rgba(239,68,68,0.3)" onclick="flatAll()" title="Close all open positions at market (F to flip direction, B=BUY, S=SELL)">Flat All</button>
+    </div>
+
+    <!-- Trading Guide Panel (hidden by default) -->
+    <div id="blotterHelpPanel" class="card" style="display:none;margin-bottom:16px;border:1px solid var(--accent);border-radius:var(--radius)">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>New Trader Guide</span>
+        <button class="btn btn-ghost btn-sm" onclick="toggleBlotterHelp()" style="font-size:18px;line-height:1">&times;</button>
+      </div>
+      <div class="card-body" style="font-size:13px;line-height:1.7;max-height:420px;overflow-y:auto">
+        <div style="margin-bottom:16px">
+          <h4 style="color:var(--accent);margin-bottom:6px;font-size:14px">How to Place a Trade</h4>
+          <ol style="padding-left:18px;color:var(--text-dim)">
+            <li><b>Commodity Sector</b> — Choose the market: Natural Gas, Crude Oil, Power, Freight, Agriculture, Metals, NGLs, or LNG.</li>
+            <li><b>Trade Type</b> — The instrument. <b>Swap</b> = fixed-for-floating price contract. <b>Basis Swap</b> = spread between two hubs. <b>Option</b> = right (not obligation) to buy/sell. <b>Spread</b> = calendar or location spread.</li>
+            <li><b>Direction</b> — <span style="color:var(--green);font-weight:700">BUY</span> if you think prices will rise. <span style="color:var(--red);font-weight:700">SELL</span> if you think prices will fall.</li>
+            <li><b>Hub / Location</b> — The delivery point or pricing index (e.g., Henry Hub for gas, WTI Cushing for crude).</li>
+            <li><b>Volume</b> — How many units. Gas = MMBtu, Crude = BBL, Power = MWh. Larger volume = more profit potential but more margin required.</li>
+            <li><b>Entry Price</b> — The price you lock in. For BUY orders it must be at or above the current spot. For SELL orders it must be at or below spot. Leave blank to use the live spot price.</li>
+            <li><b>Delivery Month</b> — The contract month for the trade (optional).</li>
+          </ol>
+        </div>
+        <div style="margin-bottom:16px">
+          <h4 style="color:var(--accent);margin-bottom:6px;font-size:14px">Order Settings</h4>
+          <ul style="padding-left:18px;color:var(--text-dim)">
+            <li><b>Order Type</b> — <b>Market</b> = execute now at current price. <b>Limit</b> = execute only when price reaches your target. <b>Stop</b> = trigger when price hits your stop level.</li>
+            <li><b>Time in Force</b> — <b>Immediate or Cancel</b> = fill now or discard. <b>DAY</b> = active until end of session. <b>GTC</b> = stays open until filled or cancelled.</li>
+            <li><b>Stop Loss</b> — Auto-close the trade if price drops to this level (protects you from large losses).</li>
+            <li><b>Target Exit</b> — Auto-close the trade when price reaches this profit target.</li>
+            <li><b>Venue</b> — <b>OTC Bilateral</b> = direct deal with a counterparty. <b>Exchange</b> = through a central exchange.</li>
+            <li><b>Broker / FCM</b> — The intermediary handling your trade (Direct = no broker).</li>
+            <li><b>Settlement Type</b> — <b>Financial (Cash-Settle)</b> = settled in cash at expiry. <b>Physical</b> = actual delivery of the commodity.</li>
+            <li><b>Commission</b> — Per-unit fee charged by the broker (in $/unit).</li>
+            <li><b>Counterparty</b> — Who is on the other side of the trade (OTC only).</li>
+          </ul>
+        </div>
+        <div style="margin-bottom:16px">
+          <h4 style="color:var(--accent);margin-bottom:6px;font-size:14px">Reading the Blotter Table</h4>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Ref#</td><td style="padding:4px 8px;color:var(--text-dim)">Unique trade confirmation reference number</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Date</td><td style="padding:4px 8px;color:var(--text-dim)">When the trade was executed</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Type</td><td style="padding:4px 8px;color:var(--text-dim)">Instrument type (SWAP, BASIS_SWAP, OPTION, SPREAD)</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Dir</td><td style="padding:4px 8px;color:var(--text-dim)">Direction — BUY (long) or SELL (short)</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Hub</td><td style="padding:4px 8px;color:var(--text-dim)">Pricing location / delivery point</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Vol</td><td style="padding:4px 8px;color:var(--text-dim)">Trade volume in units (MMBtu, BBL, MWh, etc.)</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Entry</td><td style="padding:4px 8px;color:var(--text-dim)">The price you locked in when the trade was placed</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Spot</td><td style="padding:4px 8px;color:var(--text-dim)">Current live market price for that hub</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Settle</td><td style="padding:4px 8px;color:var(--text-dim)">Financial (cash) or Physical delivery settlement</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Broker</td><td style="padding:4px 8px;color:var(--text-dim)">The broker or FCM handling the trade</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">MTM P&amp;L</td><td style="padding:4px 8px;color:var(--text-dim)">Mark-to-Market Profit &amp; Loss. <span style="color:var(--green)">Green = profit</span>, <span style="color:var(--red)">Red = loss</span>. Calculated as (Spot - Entry) x Volume x Direction.</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Status</td><td style="padding:4px 8px;color:var(--text-dim)">OPEN = active position. CLOSED = trade has been exited. PENDING = limit/stop order waiting to fill.</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:700;white-space:nowrap;color:var(--text)">Actions</td><td style="padding:4px 8px;color:var(--text-dim)">Close = exit position. Delete = remove (within 1 hour). Clone = duplicate the trade. Share = post to chat.</td></tr>
+          </table>
+        </div>
+        <div>
+          <h4 style="color:var(--accent);margin-bottom:6px;font-size:14px">Margin &amp; Risk</h4>
+          <p style="color:var(--text-dim)">Each trade requires margin (collateral). The margin bar at the bottom of the trade form shows: <b>Margin Required</b> (how much this trade locks up), <b>Available</b> (your remaining buying power), and <b>Utilization</b> (% of capital in use). Keep utilization low to avoid margin calls. Use the Risk Analytics tab for detailed VaR and exposure analysis.</p>
+        </div>
+      </div>
     </div>
 
     <!-- Blotter Table -->

@@ -30,6 +30,9 @@ function renderBlotterPage() {
   renderNetPositions();
   drawPnlChart();
   try { initPnlCrosshair(); } catch(e) {}
+  // Show backdate field for privileged traders
+  const bdGroup = document.getElementById('backdateGroup');
+  if (bdGroup) bdGroup.style.display = (STATE.trader && STATE.trader.privileged) ? '' : 'none';
 
   // Pre-fill entry price if clicked from chart
   if (STATE.clickedPrice !== null) {
@@ -477,11 +480,18 @@ async function submitTrade() {
     incoterms: document.getElementById('tradeIncoterms')?.value || '',
   };
 
-  // Market hours check for exchange trades
+  // Market hours check for exchange trades (privileged traders bypass)
   const venue = trade.venue;
   const isExchange = venue && venue !== 'OTC';
-  if (isExchange && !MARKET_OPEN) {
+  const isPrivileged = STATE.trader && STATE.trader.privileged;
+  if (isExchange && !MARKET_OPEN && !isPrivileged) {
     return toast('Exchange is closed (' + MARKET_REASON + '). Use OTC or wait for market open.', 'error');
+  }
+
+  // Backdate for privileged traders
+  const backdateInput = document.getElementById('tradeBackdate');
+  if (isPrivileged && backdateInput && backdateInput.value) {
+    trade.backdate = backdateInput.value;
   }
 
   // OTC bilateral routing
@@ -588,6 +598,8 @@ function resetTradeForm() {
   document.getElementById('tradeOrderType').value = 'MARKET';
   document.getElementById('tradeTIF').value = 'DAY';
   document.getElementById('tradeFormHint').textContent = '';
+  const bdInput = document.getElementById('tradeBackdate');
+  if (bdInput) bdInput.value = '';
   onOrderTypeChange();
   tradeDirection = '';
   setDirection('');
@@ -599,3 +611,7 @@ function resetTradeForm() {
   document.getElementById('dirSell').style.borderColor = 'var(--border)';
 }
 
+function toggleBlotterHelp() {
+  const panel = document.getElementById('blotterHelpPanel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
