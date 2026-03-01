@@ -440,14 +440,15 @@ def handle_leaderboard_request():
 # ---------------------------------------------------------------------------
 @socketio.on('call_initiate')
 def handle_call_initiate(data):
-    """Caller sends: { caller, callee, offer (SDP) }"""
+    """Caller sends: { caller, callee, offer (SDP), callType }"""
     callee = data.get('callee', '')
     with trader_sids_lock:
         callee_sid = trader_sids.get(callee)
     if callee_sid:
         emit('call_incoming', {
             'caller': data.get('caller', ''),
-            'offer': data.get('offer')
+            'offer': data.get('offer'),
+            'callType': data.get('callType', 'audio')
         }, to=callee_sid)
     else:
         emit('call_error', {'error': f'{callee} is not online'})

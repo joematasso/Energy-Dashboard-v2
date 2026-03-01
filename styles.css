@@ -878,9 +878,15 @@ input:focus,select:focus{border-color:var(--accent)}
   .bench-card .hub-price{font-size:16px}
 }
 
-/* Voice Call UI */
-.call-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+/* Call UI (Audio + Video) */
+.call-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
 .call-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 40px;text-align:center;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.call-overlay.video-mode .call-card{min-width:520px;max-width:90vw;padding:20px 24px}
+.call-avatar-area{display:flex;justify-content:center;margin-bottom:16px}
+.call-avatar-circle{width:80px;height:80px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;animation:callPulse 2s ease-in-out infinite}
+.call-video-area{position:relative;width:100%;aspect-ratio:16/9;max-height:60vh;background:#000;border-radius:10px;overflow:hidden;margin-bottom:16px}
+.call-remote-video{width:100%;height:100%;object-fit:cover;background:#111}
+.call-local-video{position:absolute;bottom:12px;right:12px;width:140px;height:105px;object-fit:cover;border-radius:8px;border:2px solid var(--border);background:#111;z-index:2;transition:opacity 0.2s}
 .call-status{font-size:13px;color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase}
 .call-name{font-size:22px;font-weight:700;color:var(--text);margin-bottom:16px}
 .call-timer{font-size:16px;color:var(--accent);font-family:var(--font-mono);margin-bottom:16px}
@@ -889,11 +895,14 @@ input:focus,select:focus{border-color:var(--accent)}
 .call-btn:hover{transform:scale(1.1)}
 .call-mute{background:var(--surface2);color:var(--text)}
 .call-mute.active{background:var(--red);color:#fff}
+.call-video-toggle{background:var(--surface2);color:var(--text)}
+.call-video-toggle.active{background:var(--red);color:#fff}
 .call-end{background:var(--red);color:#fff}
 .call-accept{background:var(--green);color:#fff;width:auto;border-radius:24px;padding:0 20px;gap:8px;font-size:13px;font-weight:600}
 .call-reject-btn{background:var(--red);color:#fff;width:auto;border-radius:24px;padding:0 20px;gap:8px;font-size:13px;font-weight:600}
 .call-incoming{position:fixed;top:20px;right:20px;z-index:9998;animation:slideInCall 0.3s ease}
 .call-incoming-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.4);min-width:240px}
+.call-incoming-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .call-incoming-name{font-size:18px;font-weight:700;color:var(--text);margin:6px 0 12px}
 .call-incoming-btns{display:flex;gap:8px}
 @keyframes slideInCall{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}

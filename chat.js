@@ -119,6 +119,7 @@ async function openConvo(convId) {
   document.getElementById('chatRenameBtn').style.display = convo.type === 'group' ? 'block' : 'none';
   document.getElementById('chatAddMembersBtn').style.display = convo.type === 'group' ? 'block' : 'none';
   document.getElementById('chatCallBtn').style.display = convo.type === 'dm' ? 'block' : 'none';
+  document.getElementById('chatVideoBtn').style.display = convo.type === 'dm' ? 'block' : 'none';
   let name = convo.name;
   if(convo.type==='dm') {
     const other = convo.members.find(m=>m.trader_name!==STATE.trader.trader_name);
@@ -657,6 +658,7 @@ function chatShowList() {
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
   document.getElementById('chatCallBtn').style.display = 'none';
+  document.getElementById('chatVideoBtn').style.display = 'none';
   document.getElementById('chatHeaderAvatar').style.display = 'none';
   document.getElementById('chatTitle').textContent = 'Messages';
   loadConversations();
@@ -795,6 +797,7 @@ async function chatNewConvo() {
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
   document.getElementById('chatCallBtn').style.display = 'none';
+  document.getElementById('chatVideoBtn').style.display = 'none';
   CHAT_STATE.activeConvo = null;
   CHAT_STATE.showingPicker = true;
   let traders = [];
@@ -832,6 +835,7 @@ function chatNewGroup() {
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
   document.getElementById('chatCallBtn').style.display = 'none';
+  document.getElementById('chatVideoBtn').style.display = 'none';
   CHAT_STATE.activeConvo = null;
   CHAT_STATE.showingPicker = true;
   const list = document.getElementById('chatConvoList');
@@ -1053,19 +1057,25 @@ function initChat() {
 
 
 /* =====================================================================
-   VOICE CALL SYSTEM (WebRTC)
+   CALL SYSTEM (WebRTC) — Audio + Video
    ===================================================================== */
 const CALL_STATE = {
   active: false,
-  peer: null,         // RTCPeerConnection
+  peer: null,           // RTCPeerConnection
   localStream: null,
-  remoteTarget: null,  // trader name of the other party
+  remoteStream: null,
+  remoteTarget: null,   // trader name of the other party
   isCaller: false,
   muted: false,
+  videoOff: false,
+  callType: 'audio',    // 'audio' or 'video'
   timerInterval: null,
   startTime: null,
+  ringTimeout: null,    // caller-side unanswered timeout
   incomingOffer: null,
-  incomingCaller: null
+  incomingCaller: null,
+  incomingCallType: 'audio',
+  remoteAudio: null     // stored ref for cleanup
 };
 
 const ICE_SERVERS = [
@@ -1074,7 +1084,6 @@ const ICE_SERVERS = [
 ];
 
 function getCallTargetName() {
-  // Get the other person in the active DM conversation
   const convo = CHAT_STATE.activeConvo;
   if (!convo || convo.type !== 'dm' || !convo.members) return null;
   const me = STATE.trader ? STATE.trader.trader_name : '';
@@ -1082,15 +1091,16 @@ function getCallTargetName() {
   return others.length === 1 ? (others[0].trader_name || others[0]) : null;
 }
 
-async function startVoiceCall() {
+async function startCall(type) {
   if (CALL_STATE.active) { toast('Already in a call', 'error'); return; }
   const target = getCallTargetName();
-  if (!target) { toast('Voice calls only work in DM conversations', 'error'); return; }
+  if (!target) { toast('Calls only work in DM conversations', 'error'); return; }
 
+  const constraints = { audio: true, video: type === 'video' };
   try {
-    CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
-    toast('Microphone access denied', 'error');
+    toast(type === 'video' ? 'Camera/microphone access denied' : 'Microphone access denied', 'error');
     return;
   }
 
@@ -1098,51 +1108,91 @@ async function startVoiceCall() {
   CALL_STATE.isCaller = true;
   CALL_STATE.remoteTarget = target;
   CALL_STATE.muted = false;
+  CALL_STATE.videoOff = false;
+  CALL_STATE.callType = type;
 
-  showCallOverlay('Calling...', target);
+  showCallOverlay('Calling...', target, type);
 
-  // Create peer connection
-  CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
-
-  CALL_STATE.peer.onicecandidate = (e) => {
-    if (e.candidate && typeof socket !== 'undefined') {
-      socket.emit('call_ice', { target, candidate: e.candidate, from: STATE.trader.trader_name });
+  // Auto-cancel if no answer in 45s
+  CALL_STATE.ringTimeout = setTimeout(() => {
+    if (CALL_STATE.active && !CALL_STATE.startTime) {
+      toast('No answer', 'info');
+      endCall();
     }
-  };
+  }, 45000);
 
-  CALL_STATE.peer.ontrack = (e) => {
-    const audio = new Audio();
-    audio.srcObject = e.streams[0];
-    audio.play().catch(() => {});
-  };
+  try {
+    CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
 
-  CALL_STATE.peer.onconnectionstatechange = () => {
-    if (CALL_STATE.peer && (CALL_STATE.peer.connectionState === 'disconnected' || CALL_STATE.peer.connectionState === 'failed')) {
-      endVoiceCall();
+    // Show local video preview
+    if (type === 'video') {
+      const localVid = document.getElementById('callLocalVideo');
+      if (localVid) { localVid.srcObject = CALL_STATE.localStream; localVid.play().catch(()=>{}); }
     }
-  };
 
-  const offer = await CALL_STATE.peer.createOffer();
-  await CALL_STATE.peer.setLocalDescription(offer);
+    CALL_STATE.peer.onicecandidate = (e) => {
+      if (e.candidate && typeof socket !== 'undefined') {
+        socket.emit('call_ice', { target, candidate: e.candidate, from: STATE.trader.trader_name });
+      }
+    };
 
-  if (typeof socket !== 'undefined') {
-    socket.emit('call_initiate', {
-      caller: STATE.trader.trader_name,
-      callee: target,
-      offer: CALL_STATE.peer.localDescription
-    });
+    CALL_STATE.peer.ontrack = (e) => {
+      CALL_STATE.remoteStream = e.streams[0];
+      if (CALL_STATE.callType === 'video') {
+        const remoteVid = document.getElementById('callRemoteVideo');
+        if (remoteVid) { remoteVid.srcObject = e.streams[0]; remoteVid.play().catch(()=>{}); }
+      }
+      // Always route audio
+      if (!CALL_STATE.remoteAudio) {
+        CALL_STATE.remoteAudio = new Audio();
+      }
+      CALL_STATE.remoteAudio.srcObject = e.streams[0];
+      CALL_STATE.remoteAudio.play().catch(() => {});
+    };
+
+    CALL_STATE.peer.onconnectionstatechange = () => {
+      if (!CALL_STATE.peer) return;
+      const st = CALL_STATE.peer.connectionState;
+      if (st === 'connected') {
+        if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
+        document.getElementById('callStatus').textContent = 'Connected';
+        if (!CALL_STATE.startTime) startCallTimer();
+      } else if (st === 'disconnected' || st === 'failed') {
+        endCall();
+      }
+    };
+
+    const offer = await CALL_STATE.peer.createOffer();
+    await CALL_STATE.peer.setLocalDescription(offer);
+
+    if (typeof socket !== 'undefined') {
+      socket.emit('call_initiate', {
+        caller: STATE.trader.trader_name,
+        callee: target,
+        offer: CALL_STATE.peer.localDescription,
+        callType: type
+      });
+    }
+  } catch(e) {
+    toast('Failed to start call', 'error');
+    endCallLocal();
   }
 }
 
-async function acceptVoiceCall() {
+function startVoiceCall() { startCall('audio'); }
+function startVideoCall() { startCall('video'); }
+
+async function acceptCall() {
   if (!CALL_STATE.incomingOffer || !CALL_STATE.incomingCaller) return;
 
+  const type = CALL_STATE.incomingCallType || 'audio';
+  const constraints = { audio: true, video: type === 'video' };
   try {
-    CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
-    toast('Microphone access denied', 'error');
-    rejectVoiceCall();
+    toast(type === 'video' ? 'Camera/microphone access denied' : 'Microphone access denied', 'error');
+    rejectCall();
     return;
   }
 
@@ -1150,83 +1200,114 @@ async function acceptVoiceCall() {
   CALL_STATE.isCaller = false;
   CALL_STATE.remoteTarget = CALL_STATE.incomingCaller;
   CALL_STATE.muted = false;
+  CALL_STATE.videoOff = false;
+  CALL_STATE.callType = type;
 
-  // Hide incoming notification
   document.getElementById('callIncoming').style.display = 'none';
+  showCallOverlay('Connecting...', CALL_STATE.remoteTarget, type);
 
-  showCallOverlay('Connecting...', CALL_STATE.remoteTarget);
+  try {
+    CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
 
-  // Create peer connection
-  CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
-
-  CALL_STATE.peer.onicecandidate = (e) => {
-    if (e.candidate && typeof socket !== 'undefined') {
-      socket.emit('call_ice', { target: CALL_STATE.remoteTarget, candidate: e.candidate, from: STATE.trader.trader_name });
+    if (type === 'video') {
+      const localVid = document.getElementById('callLocalVideo');
+      if (localVid) { localVid.srcObject = CALL_STATE.localStream; localVid.play().catch(()=>{}); }
     }
-  };
 
-  CALL_STATE.peer.ontrack = (e) => {
-    const audio = new Audio();
-    audio.srcObject = e.streams[0];
-    audio.play().catch(() => {});
-    // Call connected
-    document.getElementById('callStatus').textContent = 'Connected';
-    startCallTimer();
-  };
+    CALL_STATE.peer.onicecandidate = (e) => {
+      if (e.candidate && typeof socket !== 'undefined') {
+        socket.emit('call_ice', { target: CALL_STATE.remoteTarget, candidate: e.candidate, from: STATE.trader.trader_name });
+      }
+    };
 
-  CALL_STATE.peer.onconnectionstatechange = () => {
-    if (CALL_STATE.peer && (CALL_STATE.peer.connectionState === 'disconnected' || CALL_STATE.peer.connectionState === 'failed')) {
-      endVoiceCall();
+    CALL_STATE.peer.ontrack = (e) => {
+      CALL_STATE.remoteStream = e.streams[0];
+      if (CALL_STATE.callType === 'video') {
+        const remoteVid = document.getElementById('callRemoteVideo');
+        if (remoteVid) { remoteVid.srcObject = e.streams[0]; remoteVid.play().catch(()=>{}); }
+      }
+      if (!CALL_STATE.remoteAudio) {
+        CALL_STATE.remoteAudio = new Audio();
+      }
+      CALL_STATE.remoteAudio.srcObject = e.streams[0];
+      CALL_STATE.remoteAudio.play().catch(() => {});
+      document.getElementById('callStatus').textContent = 'Connected';
+      if (!CALL_STATE.startTime) startCallTimer();
+    };
+
+    CALL_STATE.peer.onconnectionstatechange = () => {
+      if (!CALL_STATE.peer) return;
+      const st = CALL_STATE.peer.connectionState;
+      if (st === 'disconnected' || st === 'failed') {
+        endCall();
+      }
+    };
+
+    await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(CALL_STATE.incomingOffer));
+    const answer = await CALL_STATE.peer.createAnswer();
+    await CALL_STATE.peer.setLocalDescription(answer);
+
+    if (typeof socket !== 'undefined') {
+      socket.emit('call_answer', {
+        caller: CALL_STATE.incomingCaller,
+        callee: STATE.trader.trader_name,
+        answer: CALL_STATE.peer.localDescription
+      });
     }
-  };
-
-  await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(CALL_STATE.incomingOffer));
-  const answer = await CALL_STATE.peer.createAnswer();
-  await CALL_STATE.peer.setLocalDescription(answer);
-
-  if (typeof socket !== 'undefined') {
-    socket.emit('call_answer', {
-      caller: CALL_STATE.incomingCaller,
-      callee: STATE.trader.trader_name,
-      answer: CALL_STATE.peer.localDescription
-    });
+  } catch(e) {
+    toast('Failed to connect call', 'error');
+    endCallLocal();
   }
 
   CALL_STATE.incomingOffer = null;
   CALL_STATE.incomingCaller = null;
+  CALL_STATE.incomingCallType = 'audio';
 }
 
-function rejectVoiceCall() {
+// Keep old name as alias for backwards compat in HTML onclick
+function acceptVoiceCall() { acceptCall(); }
+
+function rejectCall() {
   document.getElementById('callIncoming').style.display = 'none';
   if (typeof socket !== 'undefined' && CALL_STATE.incomingCaller) {
     socket.emit('call_reject', { caller: CALL_STATE.incomingCaller, callee: STATE.trader ? STATE.trader.trader_name : '' });
   }
   CALL_STATE.incomingOffer = null;
   CALL_STATE.incomingCaller = null;
+  CALL_STATE.incomingCallType = 'audio';
 }
+function rejectVoiceCall() { rejectCall(); }
 
-function endVoiceCall() {
-  if (CALL_STATE.peer) {
-    CALL_STATE.peer.close();
-    CALL_STATE.peer = null;
-  }
-  if (CALL_STATE.localStream) {
-    CALL_STATE.localStream.getTracks().forEach(t => t.stop());
-    CALL_STATE.localStream = null;
-  }
-  if (CALL_STATE.timerInterval) {
-    clearInterval(CALL_STATE.timerInterval);
-    CALL_STATE.timerInterval = null;
-  }
+function endCall() {
+  // Send end signal before cleanup
   if (typeof socket !== 'undefined' && CALL_STATE.remoteTarget) {
     socket.emit('call_end', { target: CALL_STATE.remoteTarget, from: STATE.trader ? STATE.trader.trader_name : '' });
   }
+  endCallLocal();
+}
+function endVoiceCall() { endCall(); }
+
+function endCallLocal() {
+  if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
+  if (CALL_STATE.peer) { try { CALL_STATE.peer.close(); } catch(e){} CALL_STATE.peer = null; }
+  if (CALL_STATE.localStream) { CALL_STATE.localStream.getTracks().forEach(t => t.stop()); CALL_STATE.localStream = null; }
+  if (CALL_STATE.remoteAudio) { CALL_STATE.remoteAudio.pause(); CALL_STATE.remoteAudio.srcObject = null; CALL_STATE.remoteAudio = null; }
+  CALL_STATE.remoteStream = null;
+  if (CALL_STATE.timerInterval) { clearInterval(CALL_STATE.timerInterval); CALL_STATE.timerInterval = null; }
 
   CALL_STATE.active = false;
   CALL_STATE.remoteTarget = null;
   CALL_STATE.muted = false;
+  CALL_STATE.videoOff = false;
   CALL_STATE.startTime = null;
+  CALL_STATE.callType = 'audio';
+
+  // Clear video elements
+  const lv = document.getElementById('callLocalVideo');
+  const rv = document.getElementById('callRemoteVideo');
+  if (lv) { lv.srcObject = null; }
+  if (rv) { rv.srcObject = null; }
 
   document.getElementById('callOverlay').style.display = 'none';
 }
@@ -1240,13 +1321,45 @@ function toggleCallMute() {
   if (btn) btn.classList.toggle('active', CALL_STATE.muted);
 }
 
-function showCallOverlay(status, name) {
+function toggleCallVideo() {
+  if (CALL_STATE.callType !== 'video') return;
+  CALL_STATE.videoOff = !CALL_STATE.videoOff;
+  if (CALL_STATE.localStream) {
+    CALL_STATE.localStream.getVideoTracks().forEach(t => { t.enabled = !CALL_STATE.videoOff; });
+  }
+  const btn = document.getElementById('callVideoToggleBtn');
+  if (btn) btn.classList.toggle('active', CALL_STATE.videoOff);
+  const localVid = document.getElementById('callLocalVideo');
+  if (localVid) localVid.style.opacity = CALL_STATE.videoOff ? '0.3' : '1';
+}
+
+function showCallOverlay(status, name, type) {
   document.getElementById('callStatus').textContent = status;
   document.getElementById('callName').textContent = name;
   document.getElementById('callTimer').style.display = 'none';
-  document.getElementById('callOverlay').style.display = 'flex';
+
+  const overlay = document.getElementById('callOverlay');
+  const videoArea = document.getElementById('callVideoArea');
+  const avatarArea = document.getElementById('callAvatarArea');
+  const videoToggle = document.getElementById('callVideoToggleBtn');
+
+  // Show/hide video area
+  if (type === 'video') {
+    overlay.classList.add('video-mode');
+    if (videoArea) videoArea.style.display = 'flex';
+    if (avatarArea) avatarArea.style.display = 'none';
+    if (videoToggle) videoToggle.style.display = 'flex';
+  } else {
+    overlay.classList.remove('video-mode');
+    if (videoArea) videoArea.style.display = 'none';
+    if (avatarArea) avatarArea.style.display = 'flex';
+    if (videoToggle) videoToggle.style.display = 'none';
+  }
+
+  overlay.style.display = 'flex';
   const muteBtn = document.getElementById('callMuteBtn');
   if (muteBtn) muteBtn.classList.remove('active');
+  if (videoToggle) videoToggle.classList.remove('active');
 }
 
 function startCallTimer() {
@@ -1267,61 +1380,64 @@ function initCallSocketListeners() {
 
   socket.on('call_incoming', (data) => {
     if (CALL_STATE.active) {
-      // Already in a call, auto-reject
       socket.emit('call_reject', { caller: data.caller, callee: STATE.trader ? STATE.trader.trader_name : '' });
       return;
     }
     CALL_STATE.incomingCaller = data.caller;
     CALL_STATE.incomingOffer = data.offer;
+    CALL_STATE.incomingCallType = data.callType || 'audio';
+
+    const isVideo = CALL_STATE.incomingCallType === 'video';
+    document.getElementById('callIncomingLabel').textContent = isVideo ? 'Incoming Video Call' : 'Incoming Voice Call';
     document.getElementById('callIncomingName').textContent = data.caller;
+    document.getElementById('callIncomingIcon').innerHTML = isVideo
+      ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>'
+      : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
     document.getElementById('callIncoming').style.display = 'block';
+
     // Auto-dismiss after 30s
     setTimeout(() => {
-      if (CALL_STATE.incomingCaller === data.caller) rejectVoiceCall();
+      if (CALL_STATE.incomingCaller === data.caller) rejectCall();
     }, 30000);
   });
 
   socket.on('call_answered', async (data) => {
     if (!CALL_STATE.peer) return;
-    await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(data.answer));
-    document.getElementById('callStatus').textContent = 'Connected';
-    startCallTimer();
+    try {
+      await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+      if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
+      document.getElementById('callStatus').textContent = 'Connected';
+      if (!CALL_STATE.startTime) startCallTimer();
+    } catch(e) {
+      toast('Connection error', 'error');
+      endCallLocal();
+    }
   });
 
   socket.on('call_ice', async (data) => {
     if (!CALL_STATE.peer) return;
     try {
       await CALL_STATE.peer.addIceCandidate(new RTCIceCandidate(data.candidate));
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* ignore late candidates */ }
   });
 
   socket.on('call_ended', () => {
     if (CALL_STATE.active) {
       toast('Call ended', 'info');
-      endVoiceCallLocal();
+      endCallLocal();
     }
   });
 
   socket.on('call_rejected', (data) => {
     toast((data.callee || 'User') + ' declined the call', 'info');
-    endVoiceCallLocal();
+    endCallLocal();
   });
 
   socket.on('call_error', (data) => {
     toast(data.error || 'Call failed', 'error');
-    endVoiceCallLocal();
+    endCallLocal();
   });
 }
 
-function endVoiceCallLocal() {
-  // Cleanup without sending signal back
-  if (CALL_STATE.peer) { CALL_STATE.peer.close(); CALL_STATE.peer = null; }
-  if (CALL_STATE.localStream) { CALL_STATE.localStream.getTracks().forEach(t => t.stop()); CALL_STATE.localStream = null; }
-  if (CALL_STATE.timerInterval) { clearInterval(CALL_STATE.timerInterval); CALL_STATE.timerInterval = null; }
-  CALL_STATE.active = false;
-  CALL_STATE.remoteTarget = null;
-  CALL_STATE.muted = false;
-  CALL_STATE.startTime = null;
-  document.getElementById('callOverlay').style.display = 'none';
-}
+function endVoiceCallLocal() { endCallLocal(); }
 
