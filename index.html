@@ -860,8 +860,8 @@
           </div>
           <div class="form-group"><label>Notes</label><input id="tradeNotes" placeholder="Optional notes"></div>
           <div class="form-group" id="backdateGroup" style="display:none">
-            <label>Backdate <span style="font-size:10px;color:var(--amber)">(Privileged)</span></label>
-            <input type="datetime-local" id="tradeBackdate" style="color-scheme:dark">
+            <label>Trade Date Override</label>
+            <input type="datetime-local" id="tradeBackdate" style="color-scheme:dark" onchange="onBackdateChange()">
           </div>
         </div>
 
@@ -1254,6 +1254,13 @@
       <div class="form-group" style="flex-direction:row;align-items:center;gap:12px">
         <label style="margin:0">Sound Alerts</label>
         <input type="checkbox" id="setSoundEnabled" style="width:auto">
+      </div>
+    </div>
+    <div class="panel-section" id="settingsDateOverride" style="display:none">
+      <h3>Advanced</h3>
+      <div class="otc-toggle">
+        <label style="flex:1;font-size:12px">Custom trade date entry</label>
+        <label class="otc-switch"><input type="checkbox" id="setDateOverride" onchange="toggleDateOverride(this.checked)"><span class="slider"></span></label>
       </div>
     </div>
     <button class="btn btn-primary" onclick="saveSettings()" style="width:100%;justify-content:center">Save Settings</button>

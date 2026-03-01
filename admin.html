@@ -527,11 +527,10 @@ function renderTraderTable(list){
     a+='<button class="btn btn-ghost btn-sm" onclick="resetTrader('+t.id+',\''+t.display_name.replace(/'/g,"\\'")+'\')">Reset</button>';
     a+='<button class="btn btn-ghost btn-sm" onclick="changeTraderPin('+t.id+',\''+t.display_name.replace(/'/g,"\\'")+'\')" title="Change PIN">PIN</button>';
     a+='<button class="btn btn-ghost btn-sm" onclick="adjustBalance('+t.id+','+t.starting_balance+')">Balance</button>';
-    a+='<button class="btn btn-ghost btn-sm" style="'+(t.privileged?'color:var(--amber);border-color:var(--amber)':'color:var(--text-muted)')+'" onclick="togglePrivilege('+t.id+')" title="Privileged: trade after hours + backdate">'+(t.privileged?'Priv ON':'Priv')+'</button>';
+    a+='<button class="btn btn-ghost btn-sm" style="font-size:14px;padding:2px 6px;'+(t.privileged?'color:var(--amber)':'color:var(--text-muted);opacity:0.4')+'" onclick="togglePrivilege('+t.id+')" title="Extended access">'+(t.privileged?'\u2605':'\u2606')+'</button>';
     a+='<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTrader('+t.id+',\''+t.display_name.replace(/'/g,"\\'")+'\')">Delete</button>';
     const pinCell='<span style="font-family:monospace;cursor:pointer;background:var(--bg);padding:2px 6px;border-radius:4px;color:transparent;text-shadow:0 0 5px var(--text-muted)" onclick="this.style.color=\'var(--text)\';this.style.textShadow=\'none\'" title="Click to reveal">'+(t.pin||'????')+'</span>';
-    const privBadge=t.privileged?'<span class="badge" style="background:rgba(245,158,11,0.15);color:var(--amber);font-size:10px;margin-left:4px" title="Can trade after hours &amp; backdate">PRIV</span>':'';
-    return '<tr><td><strong>'+t.display_name+'</strong>'+privBadge+'</td><td>'+(t.firm||'\u2014')+'</td><td>'+tb+'</td><td>'+pinCell+'</td><td><span class="badge '+sc+'">'+t.status+'</span></td><td>'+t.trade_count+'</td><td style="'+pc+'">$'+(t.realized_pnl||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</td><td>$'+(t.starting_balance||1000000).toLocaleString()+'</td><td style="font-size:12px;color:var(--text-dim)">'+ls+'</td><td><div class="actions-cell">'+a+'</div></td></tr>';
+    return '<tr><td><strong>'+t.display_name+'</strong></td><td>'+(t.firm||'\u2014')+'</td><td>'+tb+'</td><td>'+pinCell+'</td><td><span class="badge '+sc+'">'+t.status+'</span></td><td>'+t.trade_count+'</td><td style="'+pc+'">$'+(t.realized_pnl||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</td><td>$'+(t.starting_balance||1000000).toLocaleString()+'</td><td style="font-size:12px;color:var(--text-dim)">'+ls+'</td><td><div class="actions-cell">'+a+'</div></td></tr>';
   }).join('');
 }
 function filterTraders(){renderTraderTable(traders)}
@@ -545,7 +544,7 @@ async function addTrader(){
   else toast(d.error||'Failed','error');
 }
 async function approveTrader(id){await api('/api/admin/traders/approve/'+id,{method:'POST'});toast('Trader approved','success');loadTraders()}
-async function togglePrivilege(id){const d=await api('/api/admin/traders/privilege/'+id,{method:'POST'});if(d.success){toast(d.privileged?'Trader granted privileged access (after-hours + backdate)':'Privileged access revoked',d.privileged?'success':'info');loadTraders()}else toast(d.error||'Failed','error')}
+async function togglePrivilege(id){const d=await api('/api/admin/traders/privilege/'+id,{method:'POST'});if(d.success){toast(d.privileged?'Extended access enabled':'Extended access removed',d.privileged?'success':'info');loadTraders()}else toast(d.error||'Failed','error')}
 async function disableTrader(id){await api('/api/admin/traders/disable/'+id,{method:'POST'});toast('Trader disabled','info');loadTraders()}
 async function enableTrader(id){await api('/api/admin/traders/enable/'+id,{method:'POST'});toast('Trader enabled','success');loadTraders()}
 function resetTrader(id,name){showModal('Reset Trader','Reset all trades for "'+name+'"? This cannot be undone.',async()=>{await api('/api/admin/traders/reset/'+id,{method:'POST'});toast('Trades reset for '+name,'success');loadTraders()})}

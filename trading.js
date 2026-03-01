@@ -30,9 +30,9 @@ function renderBlotterPage() {
   renderNetPositions();
   drawPnlChart();
   try { initPnlCrosshair(); } catch(e) {}
-  // Show backdate field for privileged traders
+  // Show backdate field only when privileged AND user has enabled it in settings
   const bdGroup = document.getElementById('backdateGroup');
-  if (bdGroup) bdGroup.style.display = (STATE.trader && STATE.trader.privileged) ? '' : 'none';
+  if (bdGroup) bdGroup.style.display = (STATE.trader && STATE.trader.privileged && STATE.settings.dateOverride) ? '' : 'none';
 
   // Pre-fill entry price if clicked from chart
   if (STATE.clickedPrice !== null) {
@@ -417,8 +417,16 @@ async function submitTrade() {
   if (!hub) return toast('Select a hub', 'error');
   if (!volume || parseFloat(volume) <= 0) return toast('Enter a valid volume', 'error');
 
-  // Get spot price and validate entry price
-  const spotPrice = getPrice(hub);
+  // Get spot price — use historical price if backdating
+  const backdateInput = document.getElementById('tradeBackdate');
+  const isBackdating = STATE.trader && STATE.trader.privileged && STATE.settings.dateOverride && backdateInput && backdateInput.value;
+  let spotPrice;
+  if (isBackdating) {
+    const displayedSpot = parseFloat(document.getElementById('tradeSpot').value);
+    spotPrice = displayedSpot > 0 ? displayedSpot : getPrice(hub);
+  } else {
+    spotPrice = getPrice(hub);
+  }
   const isBasisType = type === 'BASIS_SWAP';
   if (!isBasisType && (!spotPrice || spotPrice <= 0)) return toast('No market price available', 'error');
   const enteredPrice = parseFloat(document.getElementById('tradeEntry').value);
@@ -609,6 +617,45 @@ function resetTradeForm() {
   document.getElementById('dirSell').style.background = 'var(--surface2)';
   document.getElementById('dirSell').style.color = 'var(--text-dim)';
   document.getElementById('dirSell').style.borderColor = 'var(--border)';
+}
+
+function onBackdateChange() {
+  const bdInput = document.getElementById('tradeBackdate');
+  const hub = document.getElementById('tradeHub').value;
+  const spotEl = document.getElementById('tradeSpot');
+  const badgeEl = document.getElementById('tradeSpotBadge');
+  if (!bdInput || !bdInput.value || !hub) {
+    // Reset to live price
+    if (hub && spotEl) spotEl.value = getPrice(hub).toFixed(4);
+    if (badgeEl) { badgeEl.textContent = 'LIVE'; badgeEl.style.color = '#10b981'; badgeEl.style.background = 'rgba(16,185,129,0.15)'; badgeEl.style.border = '1px solid rgba(16,185,129,0.3)'; }
+    return;
+  }
+  // Look up historical price for the selected date
+  const targetDate = new Date(bdInput.value);
+  const daily = typeof _historicalDaily !== 'undefined' ? _historicalDaily[hub] : null;
+  if (daily && daily.length > 0) {
+    // Historical daily is an array of closing prices, most recent last.
+    // Approximate the index: count trading days back from today.
+    const now = new Date();
+    const diffMs = now.getTime() - targetDate.getTime();
+    const diffDays = Math.round(diffMs / 86400000);
+    const tradingDays = Math.round(diffDays * 5 / 7); // rough weekday approximation
+    const idx = daily.length - 1 - tradingDays;
+    if (idx >= 0 && idx < daily.length) {
+      spotEl.value = daily[idx].toFixed(4);
+      if (badgeEl) { badgeEl.textContent = 'HIST'; badgeEl.style.color = 'var(--amber)'; badgeEl.style.background = 'rgba(245,158,11,0.1)'; badgeEl.style.border = '1px solid rgba(245,158,11,0.3)'; }
+      return;
+    }
+  }
+  // Fallback: estimate from current price with random walk backwards
+  const current = getPrice(hub);
+  const hubObj = typeof findHub === 'function' ? findHub(hub) : null;
+  const vol = hubObj ? hubObj.vol : 0.002;
+  const daysDiff = Math.round((new Date().getTime() - targetDate.getTime()) / 86400000);
+  const drift = (Math.random() - 0.5) * vol * Math.sqrt(daysDiff) * current;
+  const estimated = Math.max(current * 0.7, current - drift);
+  spotEl.value = estimated.toFixed(4);
+  if (badgeEl) { badgeEl.textContent = 'EST'; badgeEl.style.color = '#94a3b8'; badgeEl.style.background = 'rgba(148,163,184,0.1)'; badgeEl.style.border = '1px solid rgba(148,163,184,0.2)'; }
 }
 
 function toggleBlotterHelp() {

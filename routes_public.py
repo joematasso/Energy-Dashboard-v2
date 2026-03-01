@@ -186,6 +186,7 @@ def get_trades(trader):
         td = json.loads(row['trade_data'])
         td['id'] = row['id']
         td['server_created_at'] = row['created_at']
+        td.pop('backdated', None)  # Don't leak internal flag to clients
         trades.append(td)
     return jsonify({'success': True, 'trades': trades})
 

@@ -122,6 +122,15 @@ function initAfterLogin() {
   const balEl = document.getElementById('setBalance');
   if (balEl) balEl.value = STATE.settings.balance || 1000000;
   document.getElementById('setSoundEnabled').checked = STATE.settings.sound || false;
+  // Show advanced settings section for privileged traders
+  const advSection = document.getElementById('settingsDateOverride');
+  const doCheckbox = document.getElementById('setDateOverride');
+  if (advSection && STATE.trader && STATE.trader.privileged) {
+    advSection.style.display = '';
+    if (doCheckbox) doCheckbox.checked = STATE.settings.dateOverride || false;
+  } else if (advSection) {
+    advSection.style.display = 'none';
+  }
   updatePhotoPreview();
   updateHeaderProfile();
   connectWebSocket();
@@ -336,10 +345,20 @@ function saveSettings() {
   const marginEl = document.getElementById('setMargin');
   STATE.settings.margin = marginEl ? marginEl.value : (STATE.settings.margin || 'nymex');
   STATE.settings.sound = document.getElementById('setSoundEnabled').checked;
+  const doEl = document.getElementById('setDateOverride');
+  if (doEl) STATE.settings.dateOverride = doEl.checked;
   localStorage.setItem(traderStorageKey('settings'), JSON.stringify(STATE.settings));
   toast('Settings saved', 'success');
   updateHeaderProfile();
   closeAllPanels();
+}
+
+function toggleDateOverride(val) {
+  STATE.settings.dateOverride = val;
+  localStorage.setItem(traderStorageKey('settings'), JSON.stringify(STATE.settings));
+  // Immediately show/hide the backdate field on the trade form
+  const bdGroup = document.getElementById('backdateGroup');
+  if (bdGroup) bdGroup.style.display = (STATE.trader && STATE.trader.privileged && val) ? '' : 'none';
 }
 
 function handlePhotoUpload(input) {
