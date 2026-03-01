@@ -176,7 +176,7 @@ const priceHistory = {};
 const basisHistory = {};
 
 // Message 5 globals (must be declared before any render calls)
-const MAP_STATE = { ng: false, crude: false };
+const MAP_STATE = { ng: false, crude: false, lng: false };
 let lbTab = 'individual';
 let mobDir = '';
 const SCENARIOS = [

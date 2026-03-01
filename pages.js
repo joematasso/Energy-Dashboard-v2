@@ -582,6 +582,8 @@ function renderLNGPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#fff;border-color:'+h.color:''}">${h.name.replace(/ \(.*\)/,'')}</button>`
   ).join('');
 
+  if (MAP_STATE.lng) renderPipelineMap('lng');
+
   // Bench grid
   const grid = document.getElementById('lngBenchGrid');
   grid.innerHTML = LNG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {

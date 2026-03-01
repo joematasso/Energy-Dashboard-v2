@@ -84,6 +84,13 @@ const HUB_POSITIONS = {
   'Tapis':          { x:815, y:287 },
   'Basra Medium':   { x:651, y:213 },
   'Daqing':         { x:879, y:148 },
+  // LNG hubs
+  'JKM (Platts)':   { x:900, y:197 },
+  'TTF (ICE)':      { x:528, y:126 },
+  'NBP (ICE)':      { x:510, y:118 },
+  'HH Netback':     { x:241, y:212 },
+  'DES South America': { x:393, y:303 },
+  'Brent-Linked LNG': { x:675, y:228 },
 };
 
 // Pipeline routes (Mercator projected from real lat/lon)
@@ -115,7 +122,13 @@ const PIPELINES = [
   { name:'East-West', points:'659,227 648,228 638,229 625,232', color:'#d97706', sector:'crude' },
   { name:'ESPO', points:'660,126 700,130 740,133 780,138 820,142 860,146', color:'#f43f5e', sector:'crude' },
   { name:'Forties', points:'495,95 500,90 504,85', color:'#f59e0b', sector:'crude' },
-  { name:'SUMED', points:'608,215 604,212 600,209', color:'#14b8a6', sector:'crude' }
+  { name:'SUMED', points:'608,215 604,212 600,209', color:'#14b8a6', sector:'crude' },
+  // === LNG SHIPPING ROUTES ===
+  { name:'US Gulf → Asia', points:'241,216 220,230 200,250 230,280 300,310 400,310 500,290 600,270 700,260 800,240 860,210 900,197', color:'#ef4444', sector:'lng' },
+  { name:'US Gulf → Europe', points:'241,216 280,200 340,170 400,145 450,130 500,126 528,126', color:'#3b82f6', sector:'lng' },
+  { name:'US Gulf → S. America', points:'241,216 260,240 300,270 340,290 370,300 393,303', color:'#10b981', sector:'lng' },
+  { name:'Qatar → Asia', points:'675,228 720,240 770,250 830,230 870,210 900,197', color:'#f59e0b', sector:'lng' },
+  { name:'Qatar → Europe', points:'675,228 650,215 620,200 590,180 560,155 540,135 528,126', color:'#8b5cf6', sector:'lng' }
 ];
 
 // Pipe legend names per sector
@@ -133,6 +146,11 @@ const PIPE_LEGENDS = {
     { name:'Trans Mountain', color:'#06b6d4' }, { name:'Druzhba', color:'#6366f1' },
     { name:'BTC', color:'#fbbf24' }, { name:'ESPO', color:'#f43f5e' },
     { name:'East-West', color:'#d97706' }, { name:'SUMED', color:'#14b8a6' }
+  ],
+  lng: [
+    { name:'US Gulf → Asia', color:'#ef4444' }, { name:'US Gulf → Europe', color:'#3b82f6' },
+    { name:'US Gulf → S. America', color:'#10b981' }, { name:'Qatar → Asia', color:'#f59e0b' },
+    { name:'Qatar → Europe', color:'#8b5cf6' }
   ]
 };
 
@@ -178,18 +196,25 @@ const PIPELINE_INFO = {
   'ESPO':              { operator:'Transneft', length:'2,694 mi', capacity:'1.6 MMbbl/d', route:'Taishet, Siberia to Kozmino, Pacific (+ China spur)', diameter:'48 in' },
   'Forties':           { operator:'INEOS', length:'140 mi', capacity:'600 Kbbl/d', route:'North Sea platforms to Grangemouth, Scotland', diameter:'32 in' },
   'SUMED':             { operator:'Arab Petroleum Pipelines Co', length:'200 mi', capacity:'2.5 MMbbl/d', route:'Ain Sukhna (Red Sea) to Sidi Kerir (Mediterranean), Egypt', diameter:'42 in (twin)' },
+  'US Gulf → Asia':    { operator:'Various (Cheniere, Freeport, etc.)', length:'~11,000 nmi', capacity:'~12 Bcf/d US export', route:'Sabine Pass / Cameron / Freeport → Panama Canal → Japan/Korea/China', diameter:'LNG Carrier (160-180K m³)' },
+  'US Gulf → Europe':  { operator:'Various', length:'~4,500 nmi', capacity:'~12 Bcf/d US export', route:'Sabine Pass / Cameron → NW Europe (Gate, Grain, Zeebrugge)', diameter:'LNG Carrier (160-180K m³)' },
+  'US Gulf → S. America': { operator:'Various', length:'~5,000 nmi', capacity:'Spot cargoes', route:'US Gulf Coast → Bahia / Guanabara Bay / Escobar', diameter:'LNG Carrier (145-175K m³)' },
+  'Qatar → Asia':      { operator:'QatarEnergy / Nakilat', length:'~6,500 nmi', capacity:'~10 Bcf/d Qatar export', route:'Ras Laffan → Strait of Hormuz → Japan/Korea/China', diameter:'Q-Max (266K m³)' },
+  'Qatar → Europe':    { operator:'QatarEnergy', length:'~6,000 nmi', capacity:'~10 Bcf/d Qatar export', route:'Ras Laffan → Suez Canal → NW Europe / Mediterranean', diameter:'Q-Flex / Q-Max' },
 };
 
 // Layer visibility state
 const MAP_LAYERS = {
   ng:    { pipelines: true, hubs: true, basins: true },
-  crude: { pipelines: true, hubs: true, basins: true }
+  crude: { pipelines: true, hubs: true, basins: true },
+  lng:   { pipelines: true, hubs: true, basins: false }
 };
 
 // Map zoom state per sector (Mercator world projection, 1000x600 canvas)
 const MAP_ZOOM = {
   ng:    { vx: 50, vy: 50, vw: 350, vh: 230, baseVx: 50, baseVy: 50, baseVw: 350, baseVh: 230, zoom: 1 },
-  crude: { vx: 0, vy: 30, vw: 1000, vh: 320, baseVx: 0, baseVy: 30, baseVw: 1000, baseVh: 320, zoom: 1 }
+  crude: { vx: 0, vy: 30, vw: 1000, vh: 320, baseVx: 0, baseVy: 30, baseVw: 1000, baseVh: 320, zoom: 1 },
+  lng:   { vx: 0, vy: 30, vw: 1000, vh: 320, baseVx: 0, baseVy: 30, baseVw: 1000, baseVh: 320, zoom: 1 }
 };
 
 function renderPipelineMap(sector) {
@@ -207,77 +232,74 @@ function renderPipelineMap(sector) {
   const brightText = isLight ? '#1e293b' : '#e2e8f0';
 
   const sectorPipes = PIPELINES.filter(p => p.sector === sector);
-  const legends = PIPE_LEGENDS[sector] || [];
-  const sectorTitle = sector === 'ng' ? 'Natural Gas Pipeline Network' : 'Crude Oil Pipeline Network';
+  const titles = { ng:'Natural Gas Pipeline Network', crude:'Crude Oil Pipeline Network', lng:'LNG Shipping Routes' };
+  const sectorTitle = titles[sector] || sector;
+  const isLNG = sector === 'lng';
 
-  // Build SVG with viewBox for Mercator world projection
+  // Compute scale factor: at zoom > 1, shrink elements so they stay constant screen size
   const z = MAP_ZOOM[sector];
-  let svg = `<svg viewBox="${z.vx} ${z.vy} ${z.vw} ${z.vh}" width="100%" style="max-width:850px;min-width:450px" xmlns="http://www.w3.org/2000/svg" data-sector="${sector}">`;
-  // Ocean background (extended for horizontal wrapping: -1000 to 2000)
-  svg += `<rect x="-1000" y="0" width="3000" height="600" fill="${waterFill}"/>`;
+  const s = 1 / z.zoom; // inverse scale factor
 
-  // Draw all countries — define once, repeat 3x for seamless horizontal wrap
+  let svg = `<svg viewBox="${z.vx} ${z.vy} ${z.vw} ${z.vh}" width="100%" style="max-width:900px;min-width:320px" xmlns="http://www.w3.org/2000/svg" data-sector="${sector}">`;
+  svg += `<rect x="-1000" y="-600" width="3000" height="1800" fill="${waterFill}"/>`;
+
   svg += `<defs><g id="${sector}World">`;
   for (const [country, path] of Object.entries(COUNTRY_PATHS)) {
-    svg += `<path d="${path}" fill="${landFill}" stroke="${borderStroke}" stroke-width="0.3"/>`;
+    svg += `<path d="${path}" fill="${landFill}" stroke="${borderStroke}" stroke-width="${0.3 * s}"/>`;
   }
   svg += `</g></defs>`;
-  // 3x3 tiled grid for seamless horizontal + vertical wrapping
   for (const dy of [-600, 0, 600]) {
     for (const dx of [-1000, 0, 1000]) {
       svg += `<use href="#${sector}World" x="${dx}" y="${dy}"/>`;
     }
   }
 
-  // North Sea label (for crude)
-  if (sector === 'crude') {
-    svg += `<text x="510" y="80" text-anchor="middle" fill="${textFill}" style="font-size:5px;font-family:var(--font-sans)">North Sea</text>`;
-  }
-
   const layers = MAP_LAYERS[sector];
 
-  // Basins (semi-transparent polygons, rendered below pipes/hubs)
+  // Basins
   if (layers.basins) {
     const sectorBasins = BASINS.filter(b => b.sector === sector || b.sector === 'both');
     sectorBasins.forEach(b => {
       svg += `<polygon class="basin" points="${b.points}" fill="${b.color}" stroke="${b.color}" stroke-width="0.5" onclick="mapBasinClick(event,'${sector}','${b.name}')"/>`;
-      svg += `<text class="basin-label" x="${b.cx}" y="${b.cy}" text-anchor="middle" dominant-baseline="central" fill="${b.color}" data-base-size="5" style="font-size:5px">${b.name}</text>`;
+      svg += `<text class="basin-label" x="${b.cx}" y="${b.cy}" text-anchor="middle" dominant-baseline="central" fill="${b.color}" data-base-size="5" style="font-size:${5*s}px">${b.name}</text>`;
     });
   }
 
-  // Pipelines
+  // Pipelines / shipping routes
   if (layers.pipelines) {
     sectorPipes.forEach(pipe => {
-      svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}" vector-effect="non-scaling-stroke"/>`;
-      svg += `<polyline class="pipe-hit" points="${pipe.points}" stroke="transparent" stroke-width="12" fill="none" vector-effect="non-scaling-stroke" style="cursor:pointer" onclick="mapPipeClick(event,'${sector}','${pipe.name}')"/>`;
+      const dashAttr = isLNG ? ' stroke-dasharray="6,3"' : '';
+      svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}" vector-effect="non-scaling-stroke"${dashAttr}/>`;
+      svg += `<polyline class="pipe-hit" points="${pipe.points}" stroke="transparent" stroke-width="14" fill="none" vector-effect="non-scaling-stroke" style="cursor:pointer" onclick="mapPipeClick(event,'${sector}','${pipe.name}')"/>`;
       const pts = pipe.points.split(' ').map(p => p.split(',').map(Number));
       const mid = pts[Math.floor(pts.length / 2)];
       if (mid) {
-        svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0" data-base-size="7" data-pipe="${pipe.name}">${pipe.name}</text>`;
+        svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 4*s}" text-anchor="middle" fill="${pipe.color}" opacity="0" data-base-size="7" data-pipe="${pipe.name}" style="font-size:${7*s}px">${pipe.name}</text>`;
       }
     });
   }
 
-  // Hub dots and labels
+  // Hub dots and labels — scale radii and font sizes with zoom
   if (layers.hubs) {
     hubs.forEach(h => {
       const pos = HUB_POSITIONS[h.name];
       if (!pos) return;
       const price = getPrice(h.name);
       const isSelected = STATE.selectedHubs[sector] === h.name;
-      const r = isSelected ? 6 : 4.5;
-      const strokeW = isSelected ? 2 : 1.2;
+      const baseR = isSelected ? 5 : 3.5;
+      const r = baseR * s;
+      const strokeW = (isSelected ? 1.5 : 0.8) * s;
 
-      svg += `<circle class="hub-dot" cx="${pos.x}" cy="${pos.y}" r="${r}" data-base-r="${r}" fill="${h.color}" stroke="${isSelected ? '#fff' : h.color}" stroke-width="${strokeW}" opacity="${isSelected ? 1 : 0.85}" onclick="mapHubClick(event,'${sector}','${h.name}')" vector-effect="non-scaling-stroke"/>`;
+      svg += `<circle class="hub-dot" cx="${pos.x}" cy="${pos.y}" r="${r}" data-base-r="${baseR}" fill="${h.color}" stroke="${isSelected ? '#fff' : h.color}" stroke-width="${strokeW}" opacity="${isSelected ? 1 : 0.85}" onclick="mapHubClick(event,'${sector}','${h.name}')" data-hub="${h.name}"/>`;
 
       const anchor = pos.x > 500 ? 'end' : 'start';
-      const lx = pos.x > 500 ? pos.x - 6 : pos.x + 6;
-      const ly = pos.y - 2;
+      const lx = pos.x > 500 ? pos.x - 5*s : pos.x + 5*s;
+      const ly = pos.y - 2*s;
 
-      svg += `<text class="hub-label" x="${lx}" y="${ly}" text-anchor="${anchor}" fill="${textFill}" data-base-size="7" style="font-size:7px">${h.name}</text>`;
+      svg += `<text class="hub-label" x="${lx}" y="${ly}" text-anchor="${anchor}" fill="${textFill}" data-base-size="6" style="font-size:${6*s}px">${h.name}</text>`;
       const isLargeNum = h.name.includes('Baltic') || h.name.includes('Index') || h.base > 100;
       const priceStr = isLargeNum ? '$' + price.toFixed(0) : '$' + price.toFixed(2);
-      svg += `<text class="hub-price-label" x="${lx}" y="${ly + 9}" text-anchor="${anchor}" fill="${brightText}" data-base-size="8" style="font-size:8px;font-weight:600">${priceStr}</text>`;
+      svg += `<text class="hub-price-label" x="${lx}" y="${ly + 8*s}" text-anchor="${anchor}" fill="${brightText}" data-base-size="7" style="font-size:${7*s}px;font-weight:600">${priceStr}</text>`;
     });
   }
 
@@ -285,19 +307,17 @@ function renderPipelineMap(sector) {
 
   // Layer control panel
   const sectorBasins = BASINS.filter(b => b.sector === sector || b.sector === 'both');
+  const hasBasins = sectorBasins.length > 0;
   let layerPanel = `<div class="map-layer-panel">`;
-  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.basins?'checked':''} onchange="mapToggleLayer('${sector}','basins')"><span class="layer-swatch" style="background:rgba(168,85,247,0.4);border-radius:3px;width:12px;height:12px"></span> Basins (${sectorBasins.length})</label>`;
-  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.pipelines?'checked':''} onchange="mapToggleLayer('${sector}','pipelines')"><span class="layer-swatch" style="background:var(--accent)"></span> Pipelines (${sectorPipes.length})</label>`;
-  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.hubs?'checked':''} onchange="mapToggleLayer('${sector}','hubs')"><span class="layer-swatch-dot"></span> Hubs (${hubs.length})</label>`;
+  if (hasBasins) layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.basins?'checked':''} onchange="mapToggleLayer('${sector}','basins')"><span class="layer-swatch" style="background:rgba(168,85,247,0.4);border-radius:3px;width:12px;height:12px"></span> Basins</label>`;
+  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.pipelines?'checked':''} onchange="mapToggleLayer('${sector}','pipelines')"><span class="layer-swatch" style="background:var(--accent)"></span> ${isLNG ? 'Routes' : 'Pipelines'}</label>`;
+  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.hubs?'checked':''} onchange="mapToggleLayer('${sector}','hubs')"><span class="layer-swatch-dot"></span> Hubs</label>`;
   layerPanel += `</div>`;
 
   const zoomPct = Math.round(z.zoom * 100);
-  container.innerHTML = `<div class="pipeline-map-card"><div class="card-header"><span>${sectorTitle}</span><div style="display:flex;align-items:center;gap:4px"><div class="map-zoom-controls"><button class="map-zoom-btn" onclick="mapZoom('${sector}',-1)" title="Zoom out">−</button><span class="map-zoom-level" id="${sector}ZoomLvl">${zoomPct}%</span><button class="map-zoom-btn" onclick="mapZoom('${sector}',1)" title="Zoom in">+</button><button class="map-zoom-btn" onclick="mapZoomReset('${sector}')" title="Reset" style="font-size:12px">⌂</button></div><button class="btn btn-ghost btn-sm" onclick="toggleMap('${sector}')">Hide</button></div></div><div class="pipeline-map-wrap" id="${sector}MapWrap">${svg}<div class="map-info-tooltip" id="${sector}MapInfo"></div></div>${layerPanel}</div>`;
+  container.innerHTML = `<div class="pipeline-map-card"><div class="card-header"><span>${sectorTitle}</span><div style="display:flex;align-items:center;gap:6px"><div class="map-zoom-controls"><button class="map-zoom-btn" onclick="mapZoom('${sector}',-1)" title="Zoom out">−</button><span class="map-zoom-level" id="${sector}ZoomLvl">${zoomPct}%</span><button class="map-zoom-btn" onclick="mapZoom('${sector}',1)" title="Zoom in">+</button><button class="map-zoom-btn" onclick="mapZoomReset('${sector}')" title="Reset">↺</button></div><button class="btn btn-ghost btn-sm" onclick="toggleMap('${sector}')">Hide</button></div></div><div class="pipeline-map-wrap" id="${sector}MapWrap">${svg}<div class="map-info-tooltip" id="${sector}MapInfo"></div></div>${layerPanel}</div>`;
 
-  // Attach wheel zoom + drag pan
   initMapZoom(sector);
-  // Restore element scaling if currently zoomed in/out
-  if (z.zoom !== 1) mapScaleElements(sector);
 }
 
 function initMapZoom(sector) {
@@ -392,18 +412,16 @@ function mapScaleElements(sector) {
   const wrap = document.getElementById(sector + 'MapWrap');
   const svgEl = wrap && wrap.querySelector('svg');
   if (!svgEl) return;
-  const scale = 1 / z.zoom; // inverse: as zoom increases, elements shrink in SVG units
-  // Scale text elements
+  const s = 1 / z.zoom;
   svgEl.querySelectorAll('[data-base-size]').forEach(el => {
-    el.style.fontSize = (parseFloat(el.dataset.baseSize) * scale) + 'px';
+    el.style.fontSize = (parseFloat(el.dataset.baseSize) * s) + 'px';
   });
-  // Scale hub dot radii
   svgEl.querySelectorAll('.hub-dot[data-base-r]').forEach(el => {
-    el.setAttribute('r', parseFloat(el.dataset.baseR) * scale);
+    el.setAttribute('r', parseFloat(el.dataset.baseR) * s);
+    el.setAttribute('stroke-width', (el.getAttribute('data-hub') === STATE.selectedHubs[sector] ? 1.5 : 0.8) * s);
   });
-  // Scale country border stroke width (paths inside defs)
   svgEl.querySelectorAll('defs path').forEach(el => {
-    el.setAttribute('stroke-width', 0.3 * scale);
+    el.setAttribute('stroke-width', 0.3 * s);
   });
 }
 
@@ -413,9 +431,15 @@ function mapZoomAt(sector, dir, e) {
   const svgEl = wrap && wrap.querySelector('svg');
   if (!svgEl) return;
 
-  const factor = dir > 0 ? 0.8 : 1.25;
-  const newW = z.vw * factor;
-  const newH = z.vh * factor;
+  // Compute proposed zoom
+  const factor = dir > 0 ? 0.85 : 1 / 0.85;
+  let newW = z.vw * factor;
+  let newH = z.vh * factor;
+  let newZoom = z.baseVw / newW;
+
+  // Clamp zoom 0.5x – 4x (prevent extreme values that cause rendering bugs)
+  if (newZoom < 0.5) { mapZoomReset(sector); return; }
+  if (newZoom > 4) return; // already at max, ignore
 
   // Zoom toward mouse position
   if (e) {
@@ -430,11 +454,7 @@ function mapZoomAt(sector, dir, e) {
   }
 
   z.vw = newW; z.vh = newH;
-  z.zoom = z.baseVw / z.vw;
-
-  // Clamp zoom 0.5x – 5x
-  if (z.zoom < 0.5) { mapZoomReset(sector); return; }
-  if (z.zoom > 5) { z.zoom = 5; z.vw = z.baseVw / 5; z.vh = z.baseVh / 5; }
+  z.zoom = newZoom;
 
   mapWrapXY(sector);
   svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
@@ -487,10 +507,24 @@ function mapBasinClick(event, sector, basinName) {
 function mapHubClick(event, sector, hubName) {
   event.stopPropagation();
   setSelectedHub(sector, hubName);
-  if (MAP_STATE[sector]) renderPipelineMap(sector);
+
+  // Update selection visually without re-rendering entire map
+  const wrap = document.getElementById(sector + 'MapWrap');
+  if (wrap) {
+    const z = MAP_ZOOM[sector];
+    const s = 1 / z.zoom;
+    wrap.querySelectorAll('.hub-dot').forEach(el => {
+      const isThis = el.getAttribute('data-hub') === hubName;
+      el.setAttribute('r', (isThis ? 5 : 3.5) * s);
+      el.setAttribute('stroke', isThis ? '#fff' : el.getAttribute('fill'));
+      el.setAttribute('stroke-width', (isThis ? 1.5 : 0.8) * s);
+      el.setAttribute('opacity', isThis ? '1' : '0.85');
+    });
+  }
+
   // Show info tooltip
   const hubInfo = typeof HUB_INFO !== 'undefined' ? HUB_INFO[hubName] : null;
-  const hub = (STATE.hubs[sector] || []).find(h => h.name === hubName);
+  const hub = (ALL_HUB_SETS[sector] || []).find(h => h.name === hubName);
   const color = hub ? hub.color : 'var(--accent)';
   const price = getPrice(hubName);
   let body = '';
