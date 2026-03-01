@@ -1085,6 +1085,7 @@ const CALL_STATE = {
   incomingOffer: null,
   incomingCaller: null,
   incomingCallType: 'audio',
+  incomingDismissTimeout: null, // 30s auto-dismiss timer
   remoteAudio: null     // stored ref for cleanup (audio-only calls)
 };
 
@@ -1190,11 +1191,10 @@ async function startCall(type) {
             return CALL_STATE.peer.setLocalDescription(offer);
           }).then(() => {
             if (typeof socket !== 'undefined') {
-              socket.emit('call_initiate', {
-                caller: STATE.trader.trader_name,
-                callee: CALL_STATE.remoteTarget,
-                offer: CALL_STATE.peer.localDescription,
-                callType: CALL_STATE.callType
+              socket.emit('call_restart', {
+                from: STATE.trader.trader_name,
+                target: CALL_STATE.remoteTarget,
+                offer: CALL_STATE.peer.localDescription
               });
             }
           }).catch(() => { endCall(); });
@@ -1252,6 +1252,10 @@ async function acceptCall() {
   CALL_STATE.muted = false;
   CALL_STATE.videoOff = false;
   CALL_STATE.callType = type;
+  CALL_STATE.pendingCandidates = CALL_STATE.pendingCandidates || []; // keep buffered candidates
+
+  // Clear the 30s auto-dismiss timer
+  if (CALL_STATE.incomingDismissTimeout) { clearTimeout(CALL_STATE.incomingDismissTimeout); CALL_STATE.incomingDismissTimeout = null; }
 
   document.getElementById('callIncoming').style.display = 'none';
   showCallOverlay('Connecting...', CALL_STATE.remoteTarget, type);
@@ -1342,6 +1346,7 @@ async function acceptCall() {
 function acceptVoiceCall() { acceptCall(); }
 
 function rejectCall() {
+  if (CALL_STATE.incomingDismissTimeout) { clearTimeout(CALL_STATE.incomingDismissTimeout); CALL_STATE.incomingDismissTimeout = null; }
   document.getElementById('callIncoming').style.display = 'none';
   if (typeof socket !== 'undefined' && CALL_STATE.incomingCaller) {
     socket.emit('call_reject', { caller: CALL_STATE.incomingCaller, callee: STATE.trader ? STATE.trader.trader_name : '' });
@@ -1349,22 +1354,34 @@ function rejectCall() {
   CALL_STATE.incomingOffer = null;
   CALL_STATE.incomingCaller = null;
   CALL_STATE.incomingCallType = 'audio';
+  CALL_STATE.pendingCandidates = [];
 }
 function rejectVoiceCall() { rejectCall(); }
 
 function endCall() {
-  // Send end signal before cleanup
-  if (typeof socket !== 'undefined' && CALL_STATE.remoteTarget) {
-    socket.emit('call_end', { target: CALL_STATE.remoteTarget, from: STATE.trader ? STATE.trader.trader_name : '' });
-  }
+  if (!CALL_STATE.active && !CALL_STATE.peer) return; // guard against double-end
+  // Capture target before cleanup clears it
+  const target = CALL_STATE.remoteTarget;
   endCallLocal();
+  // Send end signal after cleanup so we don't react to our own signal
+  if (typeof socket !== 'undefined' && target) {
+    socket.emit('call_end', { target, from: STATE.trader ? STATE.trader.trader_name : '' });
+  }
 }
 function endVoiceCall() { endCall(); }
 
 function endCallLocal() {
   if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
   if (CALL_STATE.disconnectTimeout) { clearTimeout(CALL_STATE.disconnectTimeout); CALL_STATE.disconnectTimeout = null; }
-  if (CALL_STATE.peer) { try { CALL_STATE.peer.close(); } catch(e){} CALL_STATE.peer = null; }
+  if (CALL_STATE.incomingDismissTimeout) { clearTimeout(CALL_STATE.incomingDismissTimeout); CALL_STATE.incomingDismissTimeout = null; }
+  if (CALL_STATE.peer) {
+    // Remove handlers to prevent callbacks during close
+    CALL_STATE.peer.oniceconnectionstatechange = null;
+    CALL_STATE.peer.onicecandidate = null;
+    CALL_STATE.peer.ontrack = null;
+    try { CALL_STATE.peer.close(); } catch(e){}
+    CALL_STATE.peer = null;
+  }
   if (CALL_STATE.localStream) { CALL_STATE.localStream.getTracks().forEach(t => t.stop()); CALL_STATE.localStream = null; }
   if (CALL_STATE.remoteAudio) { CALL_STATE.remoteAudio.pause(); CALL_STATE.remoteAudio.srcObject = null; CALL_STATE.remoteAudio = null; }
   CALL_STATE.remoteStream = null;
@@ -1372,20 +1389,25 @@ function endCallLocal() {
 
   CALL_STATE.active = false;
   CALL_STATE.remoteTarget = null;
+  CALL_STATE.isCaller = false;
   CALL_STATE.muted = false;
   CALL_STATE.videoOff = false;
   CALL_STATE.startTime = null;
   CALL_STATE.callType = 'audio';
   CALL_STATE.iceRestarted = false;
   CALL_STATE.pendingCandidates = [];
+  CALL_STATE.incomingOffer = null;
+  CALL_STATE.incomingCaller = null;
+  CALL_STATE.incomingCallType = 'audio';
 
-  // Clear video elements
+  // Clear video elements — pause before clearing srcObject
   const lv = document.getElementById('callLocalVideo');
   const rv = document.getElementById('callRemoteVideo');
-  if (lv) { lv.srcObject = null; }
-  if (rv) { rv.srcObject = null; }
+  if (lv) { lv.pause(); lv.srcObject = null; }
+  if (rv) { rv.pause(); rv.srcObject = null; }
 
   document.getElementById('callOverlay').style.display = 'none';
+  document.getElementById('callIncoming').style.display = 'none';
 }
 
 function toggleCallMute() {
@@ -1462,6 +1484,7 @@ function initCallSocketListeners() {
     CALL_STATE.incomingCaller = data.caller;
     CALL_STATE.incomingOffer = data.offer;
     CALL_STATE.incomingCallType = data.callType || 'audio';
+    CALL_STATE.pendingCandidates = []; // clear stale candidates from any previous call
 
     const isVideo = CALL_STATE.incomingCallType === 'video';
     document.getElementById('callIncomingLabel').textContent = isVideo ? 'Incoming Video Call' : 'Incoming Voice Call';
@@ -1471,10 +1494,34 @@ function initCallSocketListeners() {
       : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
     document.getElementById('callIncoming').style.display = 'block';
 
-    // Auto-dismiss after 30s
-    setTimeout(() => {
+    // Auto-dismiss after 30s — store timeout so it can be cleared on accept
+    if (CALL_STATE.incomingDismissTimeout) clearTimeout(CALL_STATE.incomingDismissTimeout);
+    CALL_STATE.incomingDismissTimeout = setTimeout(() => {
       if (CALL_STATE.incomingCaller === data.caller) rejectCall();
+      CALL_STATE.incomingDismissTimeout = null;
     }, 30000);
+  });
+
+  // ICE restart: other side re-offers on the existing call
+  socket.on('call_restart', async (data) => {
+    if (!CALL_STATE.active || !CALL_STATE.peer) return;
+    // Only accept restart from current call partner
+    if (data.from !== CALL_STATE.remoteTarget) return;
+    try {
+      console.log('[Call] Received ICE restart offer');
+      await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await CALL_STATE.peer.createAnswer();
+      await CALL_STATE.peer.setLocalDescription(answer);
+      if (typeof socket !== 'undefined') {
+        socket.emit('call_answer', {
+          caller: data.from,
+          callee: STATE.trader.trader_name,
+          answer: CALL_STATE.peer.localDescription
+        });
+      }
+    } catch(e) {
+      console.log('[Call] ICE restart failed:', e.message);
+    }
   });
 
   socket.on('call_answered', async (data) => {

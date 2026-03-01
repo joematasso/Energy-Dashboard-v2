@@ -477,6 +477,18 @@ def handle_call_ice(data):
             'from': data.get('from', '')
         }, to=target_sid)
 
+@socketio.on('call_restart')
+def handle_call_restart(data):
+    """ICE restart: relay new offer to existing call partner"""
+    target = data.get('target', '')
+    with trader_sids_lock:
+        target_sid = trader_sids.get(target)
+    if target_sid:
+        emit('call_restart', {
+            'from': data.get('from', ''),
+            'offer': data.get('offer')
+        }, to=target_sid)
+
 @socketio.on('call_end')
 def handle_call_end(data):
     """End call: { target }"""
