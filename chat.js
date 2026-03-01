@@ -113,9 +113,10 @@ function renderConvoList() {
     }
     const preview = c.last_msg ? (c.last_sender === STATE.trader.trader_name ? 'You: ' : '') + c.last_msg.substring(0,40) : 'No messages yet';
     const time = c.last_msg_time ? new Date(c.last_msg_time+'Z').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-    const presenceDot = otherTrader ? `<span class="presence-dot" style="position:absolute;bottom:0;right:0;width:8px;height:8px;border-radius:50%;border:2px solid var(--surface);background:${CHAT_STATE.onlineTraders.has(otherTrader)?'#10b981':'#64748b'}" title="${CHAT_STATE.onlineTraders.has(otherTrader)?'Online':'Offline'}"></span>` : '';
+    const isOnline = otherTrader && CHAT_STATE.onlineTraders.has(otherTrader);
+    const presenceDot = otherTrader ? `<span class="presence-dot" style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface);background:${isOnline?'#10b981':'#64748b'};z-index:1" title="${isOnline?'Online':'Offline'}"></span>` : '';
     return `<div class="chat-convo-item ${isActive?'active':''} ${unread?'unread':''}" ${otherTrader?'data-trader="'+otherTrader+'"':''} onclick="openConvo(${c.id})">
-      <div class="convo-avatar" style="position:relative">${avatarContent}${presenceDot}</div>
+      <div class="convo-avatar">${avatarContent}${presenceDot}</div>
       <div class="convo-info"><div class="convo-name">${name}</div><div class="convo-preview">${preview}</div></div>
       <div class="convo-meta"><span>${time}</span>${unread?`<span class="convo-unread">${c.unread}</span>`:''}</div>
     </div>`;

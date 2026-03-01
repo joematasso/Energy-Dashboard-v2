@@ -205,7 +205,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .chat-convo-item:hover{background:var(--surface2)}
 .chat-convo-item.active{background:var(--surface2);border-left:3px solid var(--accent)}
 .chat-convo-item.unread .convo-name{font-weight:700}
-.convo-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+.convo-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;position:relative}
 .convo-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .chat-header-avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;cursor:pointer;transition:opacity 0.15s;position:relative}
 .chat-header-avatar:hover{opacity:0.8}
@@ -853,7 +853,7 @@ input:focus,select:focus{border-color:var(--accent)}
 .chat-convo-item:hover{background:var(--surface2)}
 .chat-convo-item.active{background:rgba(34,211,238,0.08);border-left:3px solid var(--accent);padding-left:9px}
 .chat-convo-item.unread .convo-name{font-weight:700}
-.convo-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#a78bfa);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+.convo-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#a78bfa);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0;position:relative}
 .convo-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .convo-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .convo-preview{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
