@@ -212,15 +212,15 @@ const PIPELINE_INFO = {
 
 // Layer visibility state
 const MAP_LAYERS = {
-  ng:    { pipelines: true, hubs: true, basins: true },
-  crude: { pipelines: true, hubs: true, basins: true },
-  lng:   { pipelines: true, hubs: true, basins: false }
+  ng:    { pipelines: true, hubs: true, basins: true, network: true },
+  crude: { pipelines: true, hubs: true, basins: true, network: true },
+  lng:   { pipelines: true, hubs: true, basins: false, network: false }
 };
 
 // Map zoom state per sector (Mercator world projection, 1000x600 canvas)
 const MAP_ZOOM = {
   ng:    { vx: 50, vy: 50, vw: 350, vh: 230, baseVx: 50, baseVy: 50, baseVw: 350, baseVh: 230, zoom: 1 },
-  crude: { vx: 0, vy: 30, vw: 1000, vh: 320, baseVx: 0, baseVy: 30, baseVw: 1000, baseVh: 320, zoom: 1 },
+  crude: { vx: 80, vy: 80, vw: 400, vh: 220, baseVx: 80, baseVy: 80, baseVw: 400, baseVh: 220, zoom: 1 },
   lng:   { vx: 0, vy: 30, vw: 1000, vh: 320, baseVx: 0, baseVy: 30, baseVw: 1000, baseVh: 320, zoom: 1 }
 };
 
@@ -270,16 +270,16 @@ function renderPipelineMap(sector) {
     }
   }
 
+  const layers = MAP_LAYERS[sector];
+
   // Background pipeline network (thin, semi-transparent)
-  if (typeof PIPELINE_NETWORK !== 'undefined' && (sector === 'ng' || sector === 'crude')) {
+  if (layers.network && typeof PIPELINE_NETWORK !== 'undefined' && (sector === 'ng' || sector === 'crude')) {
     const netSegs = PIPELINE_NETWORK[sector] || [];
-    const netColor = sector === 'ng' ? 'rgba(34,211,238,0.15)' : 'rgba(245,158,11,0.15)';
+    const netColor = sector === 'ng' ? 'rgba(34,211,238,0.1)' : 'rgba(245,158,11,0.1)';
     netSegs.forEach(seg => {
-      svg += `<polyline points="${seg}" fill="none" stroke="${netColor}" stroke-width="${0.6 * s}" stroke-linecap="round"/>`;
+      svg += `<polyline points="${seg}" fill="none" stroke="${netColor}" stroke-width="${0.4 * s}" stroke-linecap="round"/>`;
     });
   }
-
-  const layers = MAP_LAYERS[sector];
 
   // Basins
   if (layers.basins) {
@@ -336,6 +336,7 @@ function renderPipelineMap(sector) {
   let layerPanel = `<div class="map-layer-panel">`;
   if (hasBasins) layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.basins?'checked':''} onchange="mapToggleLayer('${sector}','basins')"><span class="layer-swatch" style="background:rgba(168,85,247,0.4);border-radius:3px;width:12px;height:12px"></span> Basins</label>`;
   layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.pipelines?'checked':''} onchange="mapToggleLayer('${sector}','pipelines')"><span class="layer-swatch" style="background:var(--accent)"></span> ${isLNG ? 'Routes' : 'Pipelines'}</label>`;
+  if (!isLNG) layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.network?'checked':''} onchange="mapToggleLayer('${sector}','network')"><span class="layer-swatch" style="background:${sector==='ng'?'rgba(34,211,238,0.4)':'rgba(245,158,11,0.4)'}"></span> Network</label>`;
   layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.hubs?'checked':''} onchange="mapToggleLayer('${sector}','hubs')"><span class="layer-swatch-dot"></span> Hubs</label>`;
   layerPanel += `</div>`;
 
