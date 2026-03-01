@@ -270,6 +270,12 @@ def init_db():
     except sqlite3.OperationalError:
         cur.execute("ALTER TABLE conversations ADD COLUMN avatar TEXT DEFAULT ''")
 
+    # Migration: add image column to messages (for image attachments)
+    try:
+        cur.execute("SELECT image FROM messages LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE messages ADD COLUMN image TEXT DEFAULT ''")
+
     conn.commit()
 
     # Auto-seed traders from traders_seed.json if the traders table is empty

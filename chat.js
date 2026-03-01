@@ -63,17 +63,24 @@ function renderConvoList() {
     const isActive = CHAT_STATE.activeConvo && CHAT_STATE.activeConvo.id === c.id;
     const unread = c.unread > 0;
     let name = c.name || '';
+    let avatarContent = '';
     if(c.type === 'dm') {
       const other = c.members.find(m => m.trader_name !== STATE.trader.trader_name);
       name = other ? other.display_name : 'DM';
+      avatarContent = other && other.photo_url ? '<img src="'+other.photo_url+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">' : name.charAt(0).toUpperCase();
+    } else if(c.type === 'team') {
+      name = '🏢 ' + (c.name || 'Team');
+      avatarContent = c.avatar ? '<img src="'+c.avatar+'" alt="">' : '🏢';
+    } else if(c.type === 'system' || c.type === 'admin_inbox') {
+      name = '📡 ' + (c.name || 'System');
+      avatarContent = '📡';
+    } else {
+      avatarContent = c.avatar ? '<img src="'+c.avatar+'" alt="">' : (c.type === 'group' ? '👥' : name.charAt(0).toUpperCase());
     }
-    if(c.type === 'team') name = '🏢 ' + (c.name || 'Team');
-    if(c.type === 'system' || c.type === 'admin_inbox') name = '📡 ' + (c.name || 'System');
-    const icon = c.type === 'team' ? '🏢' : c.type === 'group' ? '👥' : (c.type === 'system' || c.type === 'admin_inbox') ? '📡' : '';
     const preview = c.last_msg ? (c.last_sender === STATE.trader.trader_name ? 'You: ' : '') + c.last_msg.substring(0,40) : 'No messages yet';
     const time = c.last_msg_time ? new Date(c.last_msg_time+'Z').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
     return `<div class="chat-convo-item ${isActive?'active':''} ${unread?'unread':''}" onclick="openConvo(${c.id})">
-      <div class="convo-avatar">${c.avatar ? '<img src="'+c.avatar+'" alt="">' : (icon || name.charAt(0).toUpperCase())}</div>
+      <div class="convo-avatar">${avatarContent}</div>
       <div class="convo-info"><div class="convo-name">${name}</div><div class="convo-preview">${preview}</div></div>
       <div class="convo-meta"><span>${time}</span>${unread?`<span class="convo-unread">${c.unread}</span>`:''}</div>
     </div>`;
@@ -137,7 +144,11 @@ async function openConvo(convId) {
     const other = convo.members.find(m=>m.trader_name!==STATE.trader.trader_name);
     headerAvatar.style.display = 'flex';
     headerAvatar.classList.remove('clickable');
-    headerAvatar.innerHTML = (other ? other.display_name : 'D').charAt(0).toUpperCase();
+    if (other && other.photo_url) {
+      headerAvatar.innerHTML = '<img src="' + other.photo_url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    } else {
+      headerAvatar.innerHTML = (other ? other.display_name : 'D').charAt(0).toUpperCase();
+    }
   } else {
     headerAvatar.style.display = 'none';
   }
@@ -199,13 +210,16 @@ function renderMessages(msgs) {
     }
 
     const pinIndicator = m.pinned ? '<div class="msg-pin-indicator">📌 Pinned</div>' : '';
+    const deleteBtn = isMe ? `<button class="msg-action-btn" onclick="deleteMessage(${m.id})" title="Delete">🗑</button>` : '';
     const actionsHtml = `<div class="msg-actions-inline">
       <button class="msg-action-btn" onclick="showReactPicker(event,${m.id})" title="React">😊</button>
       <button class="msg-action-btn" onclick="togglePin(${m.id})" title="${m.pinned ? 'Unpin' : 'Pin'}">${m.pinned ? '📌' : '📍'}</button>
+      ${deleteBtn}
     </div>`;
 
     const teamDot = m.team_color ? `<span style="width:6px;height:6px;border-radius:50%;background:${m.team_color};display:inline-block;flex-shrink:0"></span>` : '';
-    const renderedText = formatMentions(escapeHtml(m.text));
+    const renderedText = m.text ? formatMentions(escapeHtml(m.text)) : '';
+    const imageHtml = m.image ? `<img src="${m.image}" class="chat-img-msg" onclick="window.open(this.src,'_blank')" alt="image">` : '';
 
     // Avatar column (other messages only)
     let avatarHtml = '';
@@ -224,7 +238,8 @@ function renderMessages(msgs) {
       <div class="chat-msg-content">
         ${pinIndicator}
         ${!isMe && !isGrouped ? `<div class="msg-sender">${teamDot}${m.display_name}</div>` : ''}
-        <div class="msg-bubble">${renderedText}</div>
+        ${renderedText ? `<div class="msg-bubble">${renderedText}</div>` : ''}
+        ${imageHtml}
         ${reactionsHtml}
         <div class="msg-meta">
           <div class="msg-time">${timeStr}</div>
@@ -258,7 +273,7 @@ function showReactPicker(event, msgId) {
   const msgDiv = btn.closest('.chat-msg');
   const picker = document.createElement('div');
   picker.className = 'react-picker-inline';
-  picker.innerHTML = REACTION_EMOJIS.map(e => `<button class="react-picker-btn" onclick="toggleReaction(${msgId},'${e}');closePickers()">${e}</button>`).join('');
+  picker.innerHTML = REACTION_EMOJIS.map(e => `<button class="react-picker-btn" onclick="event.stopPropagation();toggleReaction(${msgId},'${e}');closePickers()">${e}</button>`).join('');
   // Insert picker after the actions div
   actionsDiv.after(picker);
   actionsDiv.classList.add('picker-open');
@@ -290,6 +305,22 @@ async function toggleReaction(msgId, emoji) {
       await loadMessages(CHAT_STATE.activeConvo.id);
     }
   } catch(e) {}
+}
+
+/* --- Delete Messages --- */
+async function deleteMessage(msgId) {
+  if (!STATE.trader || !CHAT_STATE.activeConvo) return;
+  if (!confirm('Delete this message?')) return;
+  try {
+    const r = await fetch(API_BASE + '/api/chat/messages/' + msgId + '/delete', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ trader: STATE.trader.trader_name })
+    });
+    const d = await r.json();
+    if (d.success) {
+      await loadMessages(CHAT_STATE.activeConvo.id);
+    } else { toast(d.error || 'Delete failed', 'error'); }
+  } catch(e) { toast('Failed to delete message', 'error'); }
 }
 
 /* --- Pinned Messages --- */
@@ -453,18 +484,45 @@ function closeMentionDropdown() {
   document.getElementById('mentionDropdown').classList.remove('open');
 }
 
+let _chatPendingImage = null;
+
+function chatImageSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (!file.type.startsWith('image/')) { toast('Please select an image','error'); input.value=''; return; }
+  if (file.size > 5*1024*1024) { toast('Image too large (max 5 MB)','error'); input.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    _chatPendingImage = e.target.result;
+    document.getElementById('chatImgThumb').src = _chatPendingImage;
+    document.getElementById('chatImgPreview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function clearChatImage() {
+  _chatPendingImage = null;
+  document.getElementById('chatImgPreview').style.display = 'none';
+  document.getElementById('chatImgThumb').src = '';
+}
+
 async function chatSend() {
   if(!CHAT_STATE.activeConvo||!STATE.trader) return;
   if(CHAT_STATE.activeConvo.type === 'system' || CHAT_STATE.activeConvo.type === 'admin_inbox') { toast('This is a read-only broadcast channel','error'); return; }
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
-  if(!text) return;
+  const hasImage = !!_chatPendingImage;
+  if(!text && !hasImage) return;
+  const payload = { sender: STATE.trader.trader_name, text: text || '' };
+  if (hasImage) payload.image = _chatPendingImage;
   input.value = '';
   if (input.tagName === 'TEXTAREA') input.style.height = 'auto';
+  clearChatImage();
   try {
     await fetch(API_BASE+'/api/chat/send/'+CHAT_STATE.activeConvo.id,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sender:STATE.trader.trader_name,text})
+      body:JSON.stringify(payload)
     });
     await loadMessages(CHAT_STATE.activeConvo.id);
   } catch(e) { toast('Failed to send message','error'); }
@@ -750,6 +808,11 @@ if(typeof io !== 'undefined') {
         if (CHAT_STATE.activeConvo) loadMessages(CHAT_STATE.activeConvo.id);
       });
       sock.on('pin_update', function(data) {
+        if (CHAT_STATE.activeConvo && CHAT_STATE.activeConvo.id === data.conversation_id) {
+          loadMessages(CHAT_STATE.activeConvo.id);
+        }
+      });
+      sock.on('message_deleted', function(data) {
         if (CHAT_STATE.activeConvo && CHAT_STATE.activeConvo.id === data.conversation_id) {
           loadMessages(CHAT_STATE.activeConvo.id);
         }

@@ -147,7 +147,7 @@ def get_conversations(trader):
     convos = []
     for r in rows:
         members = db.execute("""
-            SELECT t.trader_name, t.display_name, tm.name as team_name, tm.color as team_color
+            SELECT t.trader_name, t.display_name, t.photo_url, tm.name as team_name, tm.color as team_color
             FROM conversation_members cm JOIN traders t ON cm.trader_name=t.trader_name
             LEFT JOIN teams tm ON t.team_id=tm.id WHERE cm.conversation_id=?
         """, (r['id'],)).fetchall()
@@ -157,6 +157,7 @@ def get_conversations(trader):
             'unread': r['unread'] or 0, 'last_msg': r['last_msg'], 'last_sender': r['last_sender'],
             'last_msg_time': r['last_msg_time'],
             'members': [{'trader_name': m['trader_name'], 'display_name': m['display_name'],
+                         'photo_url': m['photo_url'] or '',
                          'team_name': m['team_name'] or '', 'team_color': m['team_color'] or '#888'} for m in members]
         })
     return jsonify({'success': True, 'conversations': convos})
@@ -247,7 +248,8 @@ def get_messages(conv_id):
         'id': r['id'], 'sender': r['sender'], 'display_name': r['display_name'] or r['sender'],
         'photo_url': (r['photo_url'] or '') if r['display_name'] else '',
         'team_name': r['team_name'] or '', 'team_color': r['team_color'] or '#888',
-        'text': r['text'], 'created_at': r['created_at'],
+        'text': r['text'], 'image': r['image'] if 'image' in r.keys() else '',
+        'created_at': r['created_at'],
         'reactions': reactions_map.get(r['id'], []),
         'pinned': r['id'] in pins_set
     } for r in reversed(rows)]})
@@ -258,10 +260,17 @@ def send_message(conv_id):
     data = request.get_json()
     sender = data.get('sender', '')
     text = data.get('text', '').strip()
-    if not text:
+    image = data.get('image', '').strip() if data.get('image') else ''
+    if not text and not image:
         return jsonify({'success': False, 'error': 'Empty message'}), 400
     if len(text) > 2000:
         return jsonify({'success': False, 'error': 'Too long'}), 400
+    # Validate image if provided (must be data URI, max ~5MB base64)
+    if image:
+        if not image.startswith('data:image/'):
+            return jsonify({'success': False, 'error': 'Invalid image format'}), 400
+        if len(image) > 7 * 1024 * 1024:
+            return jsonify({'success': False, 'error': 'Image too large'}), 400
     member = db.execute("SELECT * FROM conversation_members WHERE conversation_id=? AND trader_name=?", (conv_id, sender)).fetchone()
     if not member:
         return jsonify({'success': False, 'error': 'Not a member'}), 403
@@ -271,7 +280,7 @@ def send_message(conv_id):
         return jsonify({'success': False, 'error': 'This is a read-only broadcast channel'}), 403
     # Apply word filter
     text = censor_text(text)
-    cur = db.execute("INSERT INTO messages (conversation_id, sender, text) VALUES (?, ?, ?)", (conv_id, sender, text))
+    cur = db.execute("INSERT INTO messages (conversation_id, sender, text, image) VALUES (?, ?, ?, ?)", (conv_id, sender, text, image or ''))
     db.commit()
     msg_id = cur.lastrowid
     db.execute("UPDATE conversation_members SET last_read=CURRENT_TIMESTAMP WHERE conversation_id=? AND trader_name=?", (conv_id, sender))
@@ -313,6 +322,28 @@ def send_message(conv_id):
                         })
 
     return jsonify({'success': True, 'message_id': msg_id})
+
+@chat_bp.route('/api/chat/messages/<int:message_id>/delete', methods=['POST'])
+def delete_message(message_id):
+    db = get_db()
+    data = request.get_json()
+    trader = data.get('trader', '')
+    if not trader:
+        return jsonify({'success': False, 'error': 'Trader required'}), 400
+    msg = db.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Message not found'}), 404
+    if msg['sender'] != trader:
+        return jsonify({'success': False, 'error': 'You can only delete your own messages'}), 403
+    conv_id = msg['conversation_id']
+    # Delete related reactions and pins first
+    db.execute("DELETE FROM message_reactions WHERE message_id=?", (message_id,))
+    db.execute("DELETE FROM pinned_messages WHERE message_id=?", (message_id,))
+    db.execute("DELETE FROM messages WHERE id=?", (message_id,))
+    db.commit()
+    socketio.emit('message_deleted', {'conversation_id': conv_id, 'message_id': message_id})
+    return jsonify({'success': True})
+
 
 @chat_bp.route('/api/chat/mark-read/<int:conv_id>/<trader>', methods=['POST'])
 def mark_read(conv_id, trader):
