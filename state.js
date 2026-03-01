@@ -200,6 +200,10 @@ let _livePrices = {};
 let _liveHubSet = new Set();   // Hub names confirmed live from external APIs
 let _hubSources = {};           // hub_name → source key (e.g. 'eia_spot_page')
 let _pricesFetchedAt = 0;       // Unix timestamp of last successful fetch
+
+// Historical daily closes stored separately from tick engine to prevent corruption.
+// Charts read from this; tick engine uses priceHistory for real-time simulation.
+let _historicalDaily = {};
 const LIVE_PRICE_REFRESH = 900000; // 15 minutes
 
 // Source metadata displayed in the info popover.
@@ -386,16 +390,15 @@ function initPrices() {
   }
   initForwardCurves();
 
-  // Then fetch real prices and rebase (non-blocking)
-  fetchLivePrices().then(ok => {
-    if (ok) {
-      // Re-seed history with real prices — patches the last 5 ticks toward reality
+  // Fetch real prices and real history in parallel (non-blocking)
+  Promise.all([fetchLivePrices(), _fetchPriceHistory()]).then(([liveOk, histOk]) => {
+    if (liveOk) {
+      // Re-seed tick engine history with real prices — patches the last 5 ticks toward reality
       for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
         hubs.forEach(h => {
           const real = _livePrices[h.name];
           if (real === undefined) return;
           const hist = priceHistory[h.name];
-          // Gently walk the last 5 entries toward the real price
           const n = Math.min(5, hist.length);
           for (let i = n; i >= 1; i--) {
             const frac = (n - i + 1) / (n + 1);
@@ -404,6 +407,7 @@ function initPrices() {
         });
       }
     }
+    renderCurrentPage();
   });
 
   // Refresh live prices periodically and gently rebase
@@ -434,6 +438,41 @@ function _rebaseToLivePrices() {
       hist[hist.length - 1] = nudged;
     });
   }
+}
+
+async function _fetchPriceHistory() {
+  try {
+    const r = await fetch(API_BASE + '/api/price-history');
+    const d = await r.json();
+    if (d.success && d.history) {
+      let loaded = 0;
+      for (const [hub, dailyCloses] of Object.entries(d.history)) {
+        if (dailyCloses && dailyCloses.length >= 10) {
+          _historicalDaily[hub] = dailyCloses.slice();
+          loaded++;
+        }
+      }
+      console.log('Real price history loaded: ' + loaded + ' hubs stored for charts');
+      return loaded > 0;
+    }
+  } catch(e) {
+    console.warn('Price history fetch failed, using simulated data:', e);
+  }
+  return false;
+}
+
+// Returns daily historical data for charts. Appends current tick price as latest point.
+function getChartHistory(hubName) {
+  const daily = _historicalDaily[hubName];
+  if (daily && daily.length > 0) {
+    const current = priceHistory[hubName];
+    const currentPrice = current ? current[current.length - 1] : null;
+    if (currentPrice !== null) {
+      return daily.concat([currentPrice]);
+    }
+    return daily;
+  }
+  return priceHistory[hubName];
 }
 
 function tickPrices() {

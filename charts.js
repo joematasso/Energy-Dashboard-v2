@@ -17,7 +17,7 @@ function drawChart(canvasId, hubName, range) {
   const W = rect.width, H = 300;
 
   const hub = findHub(hubName);
-  const hist = priceHistory[hubName];
+  const hist = (typeof getChartHistory === 'function') ? getChartHistory(hubName) : priceHistory[hubName];
   if (!hist || !hub) return;
 
   const data = hist.slice(-range);

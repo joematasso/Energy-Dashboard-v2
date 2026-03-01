@@ -22,7 +22,7 @@ function renderNGPage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}${isAECO?' 🇨🇦':''}</div>${priceBadge(h.name)}</div>
       ${priceDisplay}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -39,8 +39,8 @@ function renderNGPage() {
   basisTbody.innerHTML = NG_HUBS.map(h => {
     const p = getPrice(h.name), basis = p - henry, c = getPriceChange(h.name);
     const isAECO = h.currency === 'CAD/GJ';
-    const hist30 = (priceHistory[h.name]||[]).slice(-30);
-    const henryHist30 = (priceHistory['Henry Hub']||[]).slice(-30);
+    const hist30 = (getChartHistory(h.name)||[]).slice(-30);
+    const henryHist30 = (getChartHistory('Henry Hub')||[]).slice(-30);
     const avg30 = hist30.reduce((s,v,i) => s + (v - (henryHist30[i]||henry)), 0) / hist30.length;
     const spotDisplay = isAECO ? `C$${mmbtuToCADGJ(p).toFixed(2)} <span style="font-size:10px;color:var(--text-muted)">(US$${p.toFixed(3)})</span>` : `$${p.toFixed(3)}`;
     return `<tr>
@@ -113,7 +113,7 @@ function renderCrudePage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -129,8 +129,8 @@ function renderCrudePage() {
   const diffTbody = document.querySelector('#crudeDiffTable tbody');
   diffTbody.innerHTML = CRUDE_HUBS.map(h => {
     const p = getPrice(h.name), diff = p - wti, c = getPriceChange(h.name);
-    const hist30 = (priceHistory[h.name]||[]).slice(-30);
-    const wtiHist30 = (priceHistory['WTI Cushing']||[]).slice(-30);
+    const hist30 = (getChartHistory(h.name)||[]).slice(-30);
+    const wtiHist30 = (getChartHistory('WTI Cushing')||[]).slice(-30);
     const avg30 = hist30.reduce((s,v,i) => s + (v - (wtiHist30[i]||wti)), 0) / hist30.length;
     return `<tr>
       <td style="color:${h.color};font-weight:600">${h.name}</td>
@@ -197,7 +197,7 @@ function renderPowerPage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -270,7 +270,7 @@ function renderFreightPage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${isIdx ? p.toFixed(0) : '$'+p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${isIdx?c.toFixed(0):c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -288,7 +288,7 @@ function renderFreightPage() {
     const isIdx = h.base > 100;
     const diff = isIdx ? p - bdi : p; // tanker rates aren't comparable to BDI directly
     const diffLabel = h.name === 'Baltic Dry Index' ? '—' : (isIdx ? (diff>=0?'+':'')+diff.toFixed(0) : '$'+p.toFixed(2));
-    const hist30 = (priceHistory[h.name]||[0]).slice(-30);
+    const hist30 = (getChartHistory(h.name)||[0]).slice(-30);
     const avg = hist30.length ? hist30.reduce((s,v)=>s+v,0)/hist30.length : 0;
     return `<tr>
       <td style="color:${h.color};font-weight:600">${h.name}</td>
@@ -346,7 +346,7 @@ function renderAgPage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatAgPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -360,7 +360,7 @@ function renderAgPage() {
   const diffTbody = document.querySelector('#agDiffTable tbody');
   diffTbody.innerHTML = AG_HUBS.map(h => {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
-    const hist30 = (priceHistory[h.name]||[0]).slice(-30);
+    const hist30 = (getChartHistory(h.name)||[0]).slice(-30);
     const avg = hist30.length ? hist30.reduce((s,v)=>s+v,0)/hist30.length : 0;
     return `<tr>
       <td style="color:${h.color};font-weight:600">${h.name}</td>
@@ -417,7 +417,7 @@ function renderMetalsPage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatMetalPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -431,7 +431,7 @@ function renderMetalsPage() {
   const diffTbody = document.querySelector('#metalsDiffTable tbody');
   diffTbody.innerHTML = METALS_HUBS.map(h => {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
-    const hist30 = (priceHistory[h.name]||[0]).slice(-30);
+    const hist30 = (getChartHistory(h.name)||[0]).slice(-30);
     const avg = hist30.length ? hist30.reduce((s,v)=>s+v,0)/hist30.length : 0;
     return `<tr>
       <td style="color:${h.color};font-weight:600">${h.name}</td>
@@ -485,7 +485,7 @@ function renderNGLsPage() {
       <div class="hub-price">${p.toFixed(1)}¢<span style="font-size:11px;color:var(--text-muted)">/gal</span></div>
       <div style="font-size:11px;color:var(--text-dim)">$${bblPrice}/bbl</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)}¢ (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -592,7 +592,7 @@ function renderLNGPage() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${regionFlag} ${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)">/MMBtu</span></div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
-      <div class="sparkline">${sparklineSVG(priceHistory[h.name], h.color, 150, 24)}</div>
+      <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
     </div>`;
   }).join('');
@@ -652,8 +652,8 @@ function renderLNGPage() {
   if (spreadTbody) {
     spreadTbody.innerHTML = LNG_HUBS.map(h => {
       const p = getPrice(h.name), spread = p - jkm, c = getPriceChange(h.name);
-      const hist30 = (priceHistory[h.name]||[]).slice(-30);
-      const jkmHist30 = (priceHistory['JKM (Platts)']||[]).slice(-30);
+      const hist30 = (getChartHistory(h.name)||[]).slice(-30);
+      const jkmHist30 = (getChartHistory('JKM (Platts)')||[]).slice(-30);
       const avg30 = hist30.reduce((s,v,i) => s + (v - (jkmHist30[i]||jkm)), 0) / hist30.length;
       return `<tr>
         <td style="color:${h.color};font-weight:600">${h.name}</td>

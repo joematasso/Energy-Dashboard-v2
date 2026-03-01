@@ -44,6 +44,8 @@ function checkRegistration() {
     document.getElementById('regOverlay').classList.add('hidden');
     document.body.style.overflow = '';
     initAfterLogin();
+  } else {
+    document.body.style.overflow = 'hidden';
   }
 }
 
