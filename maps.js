@@ -76,6 +76,14 @@ const HUB_POSITIONS = {
   'ANS':            { x:86, y:63 },
   'Bakken':         { x:212, y:148 },
   'WCS':            { x:185, y:123 },
+  // International crude hubs
+  'Dubai/Oman':     { x:675, y:228 },
+  'Murban':         { x:672, y:231 },
+  'Urals':          { x:527, y:130 },
+  'Bonny Light':    { x:534, y:290 },
+  'Tapis':          { x:815, y:287 },
+  'Basra Medium':   { x:651, y:213 },
+  'Daqing':         { x:879, y:148 },
 };
 
 // Pipeline routes (Mercator projected from real lat/lon)
@@ -100,7 +108,14 @@ const PIPELINES = [
   { name:'Capline', points:'249,213 250,206 251,198 253,189 254,179', color:'#f97316', sector:'crude' },
   { name:'Longhorn', points:'216,206 229,211', color:'#10b981', sector:'crude' },
   { name:'TAPS', points:'88,24 86,63', color:'#ef4444', sector:'crude' },
-  { name:'Trans Mountain', points:'158,142 167,141 175,137 181,133 185,123', color:'#06b6d4', sector:'crude' }
+  { name:'Trans Mountain', points:'158,142 167,141 175,137 181,133 185,123', color:'#06b6d4', sector:'crude' },
+  // === INTERNATIONAL CRUDE PIPELINES ===
+  { name:'Druzhba', points:'660,126 630,128 599,129 575,128 555,126', color:'#6366f1', sector:'crude' },
+  { name:'BTC', points:'659,179 651,175 644,173 632,180 618,189', color:'#fbbf24', sector:'crude' },
+  { name:'East-West', points:'659,227 648,228 638,229 625,232', color:'#d97706', sector:'crude' },
+  { name:'ESPO', points:'660,126 700,130 740,133 780,138 820,142 860,146', color:'#f43f5e', sector:'crude' },
+  { name:'Forties', points:'495,95 500,90 504,85', color:'#f59e0b', sector:'crude' },
+  { name:'SUMED', points:'608,215 604,212 600,209', color:'#14b8a6', sector:'crude' }
 ];
 
 // Pipe legend names per sector
@@ -115,7 +130,9 @@ const PIPE_LEGENDS = {
     { name:'Keystone', color:'#22d3ee' }, { name:'DAPL', color:'#84cc16' },
     { name:'Seaway', color:'#f59e0b' }, { name:'Permian Express', color:'#a78bfa' },
     { name:'Alberta Clipper', color:'#ec4899' }, { name:'Capline', color:'#f97316' },
-    { name:'Longhorn', color:'#10b981' }, { name:'Trans Mountain', color:'#06b6d4' }
+    { name:'Trans Mountain', color:'#06b6d4' }, { name:'Druzhba', color:'#6366f1' },
+    { name:'BTC', color:'#fbbf24' }, { name:'ESPO', color:'#f43f5e' },
+    { name:'East-West', color:'#d97706' }, { name:'SUMED', color:'#14b8a6' }
   ]
 };
 
@@ -155,6 +172,12 @@ const PIPELINE_INFO = {
   'Longhorn':          { operator:'Magellan Midstream', length:'700 mi', capacity:'275 Kbbl/d', route:'Permian Basin to Houston, TX', diameter:'Various' },
   'TAPS':              { operator:'Alyeska Pipeline', length:'800 mi', capacity:'2.1 MMbbl/d (design)', route:'Prudhoe Bay to Valdez, AK', diameter:'48 in' },
   'Trans Mountain':    { operator:'Trans Mountain Corp', length:'715 mi', capacity:'890 Kbbl/d (expanded)', route:'Edmonton, AB to Burnaby, BC', diameter:'24-36 in' },
+  'Druzhba':           { operator:'Transneft', length:'2,500 mi', capacity:'1.4 MMbbl/d', route:'Samara, Russia to Central Europe (Germany/Poland/Czech)', diameter:'28-48 in' },
+  'BTC':               { operator:'BP (consortium)', length:'1,099 mi', capacity:'1.2 MMbbl/d', route:'Baku, Azerbaijan to Ceyhan, Turkey', diameter:'42 in' },
+  'East-West':         { operator:'Saudi Aramco (Petroline)', length:'746 mi', capacity:'5.0 MMbbl/d', route:'Abqaiq to Yanbu, Saudi Arabia (Red Sea bypass)', diameter:'48-56 in' },
+  'ESPO':              { operator:'Transneft', length:'2,694 mi', capacity:'1.6 MMbbl/d', route:'Taishet, Siberia to Kozmino, Pacific (+ China spur)', diameter:'48 in' },
+  'Forties':           { operator:'INEOS', length:'140 mi', capacity:'600 Kbbl/d', route:'North Sea platforms to Grangemouth, Scotland', diameter:'32 in' },
+  'SUMED':             { operator:'Arab Petroleum Pipelines Co', length:'200 mi', capacity:'2.5 MMbbl/d', route:'Ain Sukhna (Red Sea) to Sidi Kerir (Mediterranean), Egypt', diameter:'42 in (twin)' },
 };
 
 // Layer visibility state
@@ -166,7 +189,7 @@ const MAP_LAYERS = {
 // Map zoom state per sector (Mercator world projection, 1000x600 canvas)
 const MAP_ZOOM = {
   ng:    { vx: 50, vy: 50, vw: 350, vh: 230, baseVx: 50, baseVy: 50, baseVw: 350, baseVh: 230, zoom: 1 },
-  crude: { vx: 30, vy: 30, vw: 550, vh: 260, baseVx: 30, baseVy: 30, baseVw: 550, baseVh: 260, zoom: 1 }
+  crude: { vx: 0, vy: 30, vw: 1000, vh: 320, baseVx: 0, baseVy: 30, baseVw: 1000, baseVh: 320, zoom: 1 }
 };
 
 function renderPipelineMap(sector) {

@@ -70,7 +70,14 @@ const CRUDE_HUBS = [
   { name:'LLS', base:80.70, vol:1.9, color:'#ec4899' },
   { name:'ANS', base:80.40, vol:2.0, color:'#ef4444' },
   { name:'Bakken', base:78.90, vol:2.1, color:'#84cc16' },
-  { name:'WCS', base:65.00, vol:3.0, color:'#f97316' }
+  { name:'WCS', base:65.00, vol:3.0, color:'#f97316' },
+  { name:'Dubai/Oman', base:80.20, vol:1.7, color:'#fbbf24' },
+  { name:'Murban', base:81.10, vol:1.6, color:'#c084fc' },
+  { name:'Urals', base:71.50, vol:2.5, color:'#6366f1' },
+  { name:'Bonny Light', base:83.40, vol:2.0, color:'#14b8a6' },
+  { name:'Tapis', base:84.10, vol:1.8, color:'#fb7185' },
+  { name:'Basra Medium', base:76.80, vol:2.1, color:'#d97706' },
+  { name:'Daqing', base:77.50, vol:1.9, color:'#f43f5e' }
 ];
 
 const POWER_HUBS = [
