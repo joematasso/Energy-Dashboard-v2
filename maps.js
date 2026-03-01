@@ -119,6 +119,50 @@ const PIPE_LEGENDS = {
   ]
 };
 
+// Major oil & gas producing basins (Mercator projected polygons)
+const BASINS = [
+  { name:'Permian',         points:'210,239 221,239 221,247 210,247', cx:215, cy:243, color:'#a855f7', sector:'both', info:{ type:'Shale / Tight Oil', formations:'Wolfcamp, Bone Spring, Spraberry, Delaware', production:'~6.2 MMbbl/d oil, ~25 Bcf/d gas', rigs:'~300-350 active' }},
+  { name:'Eagle Ford',      points:'225,248 233,248 233,251 225,251', cx:229, cy:249, color:'#f59e0b', sector:'both', info:{ type:'Shale', formations:'Eagle Ford Shale (Upper & Lower)', production:'~1.1 MMbbl/d oil, ~7 Bcf/d gas', rigs:'~50-70 active' }},
+  { name:'Haynesville',     points:'236,241 244,241 244,245 236,245', cx:240, cy:243, color:'#ef4444', sector:'ng', info:{ type:'Shale Gas', formations:'Haynesville Shale, Bossier Shale', production:'~16 Bcf/d gas', rigs:'~45-55 active' }},
+  { name:'Marcellus',       points:'275,223 289,223 289,230 281,230 275,227', cx:281, cy:226, color:'#22d3ee', sector:'ng', info:{ type:'Shale Gas', formations:'Marcellus Shale (Upper & Lower)', production:'~28 Bcf/d gas', rigs:'~25-35 active' }},
+  { name:'Utica',           points:'271,223 278,223 282,229 272,229', cx:275, cy:226, color:'#06b6d4', sector:'ng', info:{ type:'Shale Gas / Condensate', formations:'Utica / Point Pleasant', production:'~8 Bcf/d gas', rigs:'~10-15 active' }},
+  { name:'Barnett',         points:'228,241 232,241 232,244 228,244', cx:230, cy:242, color:'#84cc16', sector:'ng', info:{ type:'Shale Gas', formations:'Barnett Shale', production:'~2 Bcf/d gas (declining)', rigs:'~2-5 active' }},
+  { name:'DJ / Niobrara',   points:'206,223 212,223 212,228 206,228', cx:209, cy:225, color:'#f97316', sector:'both', info:{ type:'Tight Oil / Shale', formations:'Niobrara, Codell', production:'~450 Kbbl/d oil, ~5 Bcf/d gas', rigs:'~10-15 active' }},
+  { name:'San Juan',        points:'197,232 203,232 203,236 197,236', cx:200, cy:234, color:'#14b8a6', sector:'ng', info:{ type:'Conventional / CBM', formations:'Fruitland Coal, Pictured Cliffs', production:'~3 Bcf/d gas', rigs:'~5-10 active' }},
+  { name:'Anadarko',        points:'224,235 231,235 231,239 224,239', cx:227, cy:237, color:'#ec4899', sector:'both', info:{ type:'Shale / Tight Oil', formations:'SCOOP, STACK, Woodford, Springer', production:'~400 Kbbl/d oil, ~6 Bcf/d gas', rigs:'~30-40 active' }},
+  { name:'Bakken',          points:'206,206 215,206 215,213 206,213', cx:210, cy:209, color:'#8b5cf6', sector:'crude', info:{ type:'Tight Oil', formations:'Bakken, Three Forks', production:'~1.2 MMbbl/d oil', rigs:'~30-40 active' }},
+  { name:'Gulf of Mexico',  points:'233,249 258,249 258,255 247,255 233,253', cx:245, cy:252, color:'#0ea5e9', sector:'crude', info:{ type:'Deepwater / Ultra-deepwater', formations:'Wilcox, Norphlet, Miocene', production:'~1.8 MMbbl/d oil', rigs:'~15-20 floating rigs' }},
+];
+
+// Pipeline metadata for info tooltip
+const PIPELINE_INFO = {
+  'Transco':           { operator:'Williams Companies', length:'1,800 mi', capacity:'17.7 Bcf/d', route:'Gulf Coast (TX/LA) to New York City', diameter:'36-42 in' },
+  'Tennessee Gas':     { operator:'TC Energy', length:'11,900 mi', capacity:'8.0 Bcf/d', route:'Gulf Coast to New England', diameter:'24-30 in' },
+  'Kern River':        { operator:'Berkshire Hathaway Energy', length:'1,679 mi', capacity:'2.6 Bcf/d', route:'Opal, WY to Kern County, CA', diameter:'36 in' },
+  'Rockies Express':   { operator:'Tallgrass Energy', length:'1,679 mi', capacity:'1.8 Bcf/d', route:'Opal, WY to Clarington, OH (bi-directional)', diameter:'36-42 in' },
+  'Alliance':          { operator:'Pembina Pipeline', length:'2,391 mi', capacity:'1.6 Bcf/d', route:'NE British Columbia to Chicago, IL', diameter:'36 in' },
+  'Texas Eastern':     { operator:'Enbridge', length:'9,100 mi', capacity:'10.2 Bcf/d', route:'Gulf Coast to Northeast (NY/NJ)', diameter:'30-36 in' },
+  'Northwest':         { operator:'Williams Companies', length:'3,900 mi', capacity:'3.8 Bcf/d', route:'San Juan Basin to Pacific NW (Sumas, WA)', diameter:'26-36 in' },
+  'El Paso':           { operator:'Kinder Morgan', length:'10,000 mi', capacity:'5.6 Bcf/d', route:'Permian/San Juan Basin to California', diameter:'24-42 in' },
+  'Algonquin Lateral': { operator:'Enbridge', length:'250 mi', capacity:'3.0 Bcf/d', route:'NJ/CT/MA into New England', diameter:'26 in' },
+  'Dawn-Chicago':      { operator:'TC Energy / Enbridge', length:'~250 mi', capacity:'Multiple systems', route:'Dawn Hub, ON to Chicago, IL', diameter:'Various' },
+  'Keystone':          { operator:'TC Energy', length:'2,687 mi', capacity:'590 Kbbl/d', route:'Hardisty, AB to Cushing, OK & Gulf Coast', diameter:'30-36 in' },
+  'DAPL':              { operator:'Energy Transfer', length:'1,172 mi', capacity:'750 Kbbl/d', route:'Bakken (ND) to Patoka, IL', diameter:'30 in' },
+  'Seaway':            { operator:'Enterprise / Enbridge', length:'500 mi', capacity:'950 Kbbl/d', route:'Cushing, OK to Freeport, TX', diameter:'30 in (twinned)' },
+  'Permian Express':   { operator:'Enterprise Products', length:'~450 mi', capacity:'500 Kbbl/d', route:'Permian Basin to Gulf Coast', diameter:'20-24 in' },
+  'Alberta Clipper':   { operator:'Enbridge (Line 67)', length:'1,000 mi', capacity:'800 Kbbl/d', route:'Hardisty, AB to Superior, WI', diameter:'36 in' },
+  'Capline':           { operator:'Marathon / Plains', length:'667 mi', capacity:'1.2 MMbbl/d', route:'St. James, LA to Patoka, IL (reversed 2022)', diameter:'40 in' },
+  'Longhorn':          { operator:'Magellan Midstream', length:'700 mi', capacity:'275 Kbbl/d', route:'Permian Basin to Houston, TX', diameter:'Various' },
+  'TAPS':              { operator:'Alyeska Pipeline', length:'800 mi', capacity:'2.1 MMbbl/d (design)', route:'Prudhoe Bay to Valdez, AK', diameter:'48 in' },
+  'Trans Mountain':    { operator:'Trans Mountain Corp', length:'715 mi', capacity:'890 Kbbl/d (expanded)', route:'Edmonton, AB to Burnaby, BC', diameter:'24-36 in' },
+};
+
+// Layer visibility state
+const MAP_LAYERS = {
+  ng:    { pipelines: true, hubs: true, basins: true },
+  crude: { pipelines: true, hubs: true, basins: true }
+};
+
 // Map zoom state per sector (Mercator world projection, 1000x600 canvas)
 const MAP_ZOOM = {
   ng:    { vx: 50, vy: 50, vw: 350, vh: 230, baseVx: 50, baseVy: 50, baseVw: 350, baseVh: 230, zoom: 1 },
@@ -164,53 +208,67 @@ function renderPipelineMap(sector) {
     svg += `<text x="510" y="80" text-anchor="middle" fill="${textFill}" style="font-size:5px;font-family:var(--font-sans)">North Sea</text>`;
   }
 
+  const layers = MAP_LAYERS[sector];
+
+  // Basins (semi-transparent polygons, rendered below pipes/hubs)
+  if (layers.basins) {
+    const sectorBasins = BASINS.filter(b => b.sector === sector || b.sector === 'both');
+    sectorBasins.forEach(b => {
+      svg += `<polygon class="basin" points="${b.points}" fill="${b.color}" stroke="${b.color}" stroke-width="0.5" onclick="mapBasinClick(event,'${sector}','${b.name}')"/>`;
+      svg += `<text class="basin-label" x="${b.cx}" y="${b.cy}" text-anchor="middle" dominant-baseline="central" fill="${b.color}" data-base-size="5" style="font-size:5px">${b.name}</text>`;
+    });
+  }
+
   // Pipelines
-  sectorPipes.forEach(pipe => {
-    // Visible styled line
-    svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}" vector-effect="non-scaling-stroke"/>`;
-    // Wider invisible hit area for easier clicking
-    svg += `<polyline class="pipe-hit" points="${pipe.points}" stroke="transparent" stroke-width="12" fill="none" vector-effect="non-scaling-stroke" style="cursor:pointer" onclick="mapPipeClick(event,'${sector}','${pipe.name}')"/>`;
-    const pts = pipe.points.split(' ').map(p => p.split(',').map(Number));
-    const mid = pts[Math.floor(pts.length / 2)];
-    if (mid) {
-      svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0" data-base-size="7" data-pipe="${pipe.name}">${pipe.name}</text>`;
-    }
-  });
+  if (layers.pipelines) {
+    sectorPipes.forEach(pipe => {
+      svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}" vector-effect="non-scaling-stroke"/>`;
+      svg += `<polyline class="pipe-hit" points="${pipe.points}" stroke="transparent" stroke-width="12" fill="none" vector-effect="non-scaling-stroke" style="cursor:pointer" onclick="mapPipeClick(event,'${sector}','${pipe.name}')"/>`;
+      const pts = pipe.points.split(' ').map(p => p.split(',').map(Number));
+      const mid = pts[Math.floor(pts.length / 2)];
+      if (mid) {
+        svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0" data-base-size="7" data-pipe="${pipe.name}">${pipe.name}</text>`;
+      }
+    });
+  }
 
   // Hub dots and labels
-  hubs.forEach(h => {
-    const pos = HUB_POSITIONS[h.name];
-    if (!pos) return;
-    const price = getPrice(h.name);
-    const isSelected = STATE.selectedHubs[sector] === h.name;
-    const r = isSelected ? 6 : 4.5;
-    const strokeW = isSelected ? 2 : 1.2;
+  if (layers.hubs) {
+    hubs.forEach(h => {
+      const pos = HUB_POSITIONS[h.name];
+      if (!pos) return;
+      const price = getPrice(h.name);
+      const isSelected = STATE.selectedHubs[sector] === h.name;
+      const r = isSelected ? 6 : 4.5;
+      const strokeW = isSelected ? 2 : 1.2;
 
-    svg += `<circle class="hub-dot" cx="${pos.x}" cy="${pos.y}" r="${r}" data-base-r="${r}" fill="${h.color}" stroke="${isSelected ? '#fff' : h.color}" stroke-width="${strokeW}" opacity="${isSelected ? 1 : 0.85}" onclick="mapHubClick('${sector}','${h.name}')" vector-effect="non-scaling-stroke"/>`;
+      svg += `<circle class="hub-dot" cx="${pos.x}" cy="${pos.y}" r="${r}" data-base-r="${r}" fill="${h.color}" stroke="${isSelected ? '#fff' : h.color}" stroke-width="${strokeW}" opacity="${isSelected ? 1 : 0.85}" onclick="mapHubClick(event,'${sector}','${h.name}')" vector-effect="non-scaling-stroke"/>`;
 
-    const anchor = pos.x > 500 ? 'end' : 'start';
-    const lx = pos.x > 500 ? pos.x - 6 : pos.x + 6;
-    const ly = pos.y - 2;
+      const anchor = pos.x > 500 ? 'end' : 'start';
+      const lx = pos.x > 500 ? pos.x - 6 : pos.x + 6;
+      const ly = pos.y - 2;
 
-    svg += `<text class="hub-label" x="${lx}" y="${ly}" text-anchor="${anchor}" fill="${textFill}" data-base-size="7" style="font-size:7px">${h.name}</text>`;
-    const isLargeNum = h.name.includes('Baltic') || h.name.includes('Index') || h.base > 100;
-    const priceStr = isLargeNum ? '$' + price.toFixed(0) : '$' + price.toFixed(2);
-    svg += `<text class="hub-price-label" x="${lx}" y="${ly + 9}" text-anchor="${anchor}" fill="${brightText}" data-base-size="8" style="font-size:8px;font-weight:600">${priceStr}</text>`;
-  });
+      svg += `<text class="hub-label" x="${lx}" y="${ly}" text-anchor="${anchor}" fill="${textFill}" data-base-size="7" style="font-size:7px">${h.name}</text>`;
+      const isLargeNum = h.name.includes('Baltic') || h.name.includes('Index') || h.base > 100;
+      const priceStr = isLargeNum ? '$' + price.toFixed(0) : '$' + price.toFixed(2);
+      svg += `<text class="hub-price-label" x="${lx}" y="${ly + 9}" text-anchor="${anchor}" fill="${brightText}" data-base-size="8" style="font-size:8px;font-weight:600">${priceStr}</text>`;
+    });
+  }
 
-  // Title (positioned relative to current viewBox)
+  // Title
   svg += `<text class="map-title" x="${z.vx + z.vw/2}" y="${z.vy + z.vh - 8}" text-anchor="middle" fill="${textFill}" data-base-size="7" style="font-size:7px;font-family:var(--font-sans);font-weight:600">${sectorTitle}</text>`;
   svg += `</svg>`;
 
-  // Legend
-  let legend = '<div class="map-legend">';
-  legends.forEach(l => {
-    legend += `<div class="map-legend-item"><div class="map-legend-line" style="background:${l.color}"></div>${l.name}</div>`;
-  });
-  legend += '</div>';
+  // Layer control panel
+  const sectorBasins = BASINS.filter(b => b.sector === sector || b.sector === 'both');
+  let layerPanel = `<div class="map-layer-panel">`;
+  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.basins?'checked':''} onchange="mapToggleLayer('${sector}','basins')"><span class="layer-swatch" style="background:rgba(168,85,247,0.4);border-radius:3px;width:12px;height:12px"></span> Basins (${sectorBasins.length})</label>`;
+  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.pipelines?'checked':''} onchange="mapToggleLayer('${sector}','pipelines')"><span class="layer-swatch" style="background:var(--accent)"></span> Pipelines (${sectorPipes.length})</label>`;
+  layerPanel += `<label class="layer-toggle"><input type="checkbox" ${layers.hubs?'checked':''} onchange="mapToggleLayer('${sector}','hubs')"><span class="layer-swatch-dot"></span> Hubs (${hubs.length})</label>`;
+  layerPanel += `</div>`;
 
   const zoomPct = Math.round(z.zoom * 100);
-  container.innerHTML = `<div class="pipeline-map-card"><div class="card-header"><span>${sectorTitle}</span><div style="display:flex;align-items:center;gap:4px"><div class="map-zoom-controls"><button class="map-zoom-btn" onclick="mapZoom('${sector}',-1)" title="Zoom out">−</button><span class="map-zoom-level" id="${sector}ZoomLvl">${zoomPct}%</span><button class="map-zoom-btn" onclick="mapZoom('${sector}',1)" title="Zoom in">+</button><button class="map-zoom-btn" onclick="mapZoomReset('${sector}')" title="Reset" style="font-size:12px">⌂</button></div><button class="btn btn-ghost btn-sm" onclick="toggleMap('${sector}')">Hide</button></div></div><div class="pipeline-map-wrap" id="${sector}MapWrap">${svg}</div>${legend}</div>`;
+  container.innerHTML = `<div class="pipeline-map-card"><div class="card-header"><span>${sectorTitle}</span><div style="display:flex;align-items:center;gap:4px"><div class="map-zoom-controls"><button class="map-zoom-btn" onclick="mapZoom('${sector}',-1)" title="Zoom out">−</button><span class="map-zoom-level" id="${sector}ZoomLvl">${zoomPct}%</span><button class="map-zoom-btn" onclick="mapZoom('${sector}',1)" title="Zoom in">+</button><button class="map-zoom-btn" onclick="mapZoomReset('${sector}')" title="Reset" style="font-size:12px">⌂</button></div><button class="btn btn-ghost btn-sm" onclick="toggleMap('${sector}')">Hide</button></div></div><div class="pipeline-map-wrap" id="${sector}MapWrap">${svg}<div class="map-info-tooltip" id="${sector}MapInfo"></div></div>${layerPanel}</div>`;
 
   // Attach wheel zoom + drag pan
   initMapZoom(sector);
@@ -376,27 +434,80 @@ function mapZoomReset(sector) {
 
 function mapPipeClick(event, sector, pipeName) {
   event.stopPropagation();
-  const wrap = document.getElementById(sector + 'MapWrap');
-  if (!wrap) return;
-  const svgEl = wrap.querySelector('svg');
-  if (!svgEl) return;
-  // Toggle: hide all pipe labels, then show the clicked one
-  svgEl.querySelectorAll('.pipe-label').forEach(el => {
-    el.setAttribute('opacity', el.dataset.pipe === pipeName ? (el.getAttribute('opacity') === '1' ? '0' : '1') : '0');
-  });
-  // Highlight the clicked pipe, dim others
-  svgEl.querySelectorAll('.pipe').forEach(el => {
-    if (el.dataset.name === pipeName) {
-      el.style.opacity = '1';
-    } else {
-      el.style.opacity = '';
-    }
-  });
+  const info = PIPELINE_INFO[pipeName];
+  if (!info) return;
+  const pipe = PIPELINES.find(p => p.name === pipeName);
+  const color = pipe ? pipe.color : 'var(--accent)';
+  let body = `<div class="map-info-row"><span class="map-info-label">Operator</span><span>${info.operator}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Capacity</span><span>${info.capacity}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Route</span><span>${info.route}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Length</span><span>${info.length}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Diameter</span><span>${info.diameter}</span></div>`;
+  showMapInfo(event, sector, `<span style="color:${color}">&#9644;</span> ${pipeName}`, body);
 }
 
-function mapHubClick(sector, hubName) {
+function mapBasinClick(event, sector, basinName) {
+  event.stopPropagation();
+  const basin = BASINS.find(b => b.name === basinName);
+  if (!basin) return;
+  const info = basin.info;
+  let body = `<div class="map-info-row"><span class="map-info-label">Type</span><span>${info.type}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Formations</span><span>${info.formations}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Production</span><span>${info.production}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Active Rigs</span><span>${info.rigs}</span></div>`;
+  showMapInfo(event, sector, `<span style="color:${basin.color}">&#9632;</span> ${basin.name} Basin`, body);
+}
+
+function mapHubClick(event, sector, hubName) {
+  event.stopPropagation();
   setSelectedHub(sector, hubName);
   if (MAP_STATE[sector]) renderPipelineMap(sector);
+  // Show info tooltip
+  const hubInfo = typeof HUB_INFO !== 'undefined' ? HUB_INFO[hubName] : null;
+  const hub = (STATE.hubs[sector] || []).find(h => h.name === hubName);
+  const color = hub ? hub.color : 'var(--accent)';
+  const price = getPrice(hubName);
+  let body = '';
+  if (hubInfo && hubInfo.location) body += `<div class="map-info-row"><span class="map-info-label">Location</span><span>${hubInfo.location}</span></div>`;
+  body += `<div class="map-info-row"><span class="map-info-label">Price</span><span style="font-weight:700">$${price.toFixed(2)}</span></div>`;
+  if (hub) body += `<div class="map-info-row"><span class="map-info-label">Base Price</span><span>$${hub.base.toFixed(2)}</span></div>`;
+  if (hubInfo && hubInfo.desc) {
+    const shortDesc = hubInfo.desc.split('. ').slice(0, 2).join('. ') + '.';
+    body += `<div style="margin-top:6px;color:var(--text-muted);font-size:11px;line-height:1.4">${shortDesc}</div>`;
+  }
+  if (hubInfo) body += `<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="closeMapInfo('${sector}');openHubInfo('${hubName}')">Full Details</button></div>`;
+  showMapInfo(event, sector, `<span style="color:${color}">&#9679;</span> ${hubName}`, body);
+}
+
+function showMapInfo(event, sector, titleHtml, bodyHtml) {
+  const wrap = document.getElementById(sector + 'MapWrap');
+  if (!wrap) return;
+  const tooltip = document.getElementById(sector + 'MapInfo');
+  if (!tooltip) return;
+  tooltip.innerHTML = `<button class="map-info-close" onclick="closeMapInfo('${sector}')">&times;</button><h4>${titleHtml}</h4><div>${bodyHtml}</div>`;
+  tooltip.style.display = 'block';
+  // Position near click, clamped within container
+  const rect = wrap.getBoundingClientRect();
+  let x = event.clientX - rect.left + 12;
+  let y = event.clientY - rect.top - 20;
+  // Clamp so tooltip stays within wrap
+  const tw = 260, th = tooltip.offsetHeight || 180;
+  if (x + tw > rect.width) x = rect.width - tw - 8;
+  if (x < 8) x = 8;
+  if (y + th > rect.height) y = rect.height - th - 8;
+  if (y < 8) y = 8;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function closeMapInfo(sector) {
+  const tooltip = document.getElementById(sector + 'MapInfo');
+  if (tooltip) { tooltip.style.display = 'none'; tooltip.innerHTML = ''; }
+}
+
+function mapToggleLayer(sector, layer) {
+  MAP_LAYERS[sector][layer] = !MAP_LAYERS[sector][layer];
+  renderPipelineMap(sector);
 }
 
 
