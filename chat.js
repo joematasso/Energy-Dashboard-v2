@@ -247,8 +247,35 @@ async function loadMessages(convId, isPolling) {
     const c = CHAT_STATE.conversations.find(c=>c.id===convId);
     if(c) c.unread = 0;
     updateUnreadBadge();
+    // Render broadcast banner (skip if we're already in the System Broadcasts convo)
+    if (!isPolling && c && c.type !== 'system') renderBroadcastBanner();
   } catch(e) {}
 }
+
+async function renderBroadcastBanner() {
+  const banner = document.getElementById('chatBroadcastBanner');
+  if (!banner) return;
+  try {
+    const r = await fetch(API_BASE + '/api/broadcasts?limit=3');
+    const d = await r.json();
+    if (!d.success || !d.broadcasts || !d.broadcasts.length) { banner.style.display = 'none'; return; }
+    banner.style.display = 'block';
+    banner.innerHTML = d.broadcasts.map(b => {
+      const isUrgent = b.priority === 'urgent';
+      const icon = isUrgent ? '🔴' : '📡';
+      const ts = b.created_at ? new Date(b.created_at + (b.created_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '';
+      return '<div class="broadcast-item' + (isUrgent ? ' urgent' : '') + '">'
+        + '<span class="broadcast-icon">' + icon + '</span>'
+        + '<div class="broadcast-body">'
+        + (b.subject ? '<div class="broadcast-subject">' + _escHtml(b.subject) + '</div>' : '')
+        + '<div class="broadcast-text">' + _escHtml(b.body) + '</div>'
+        + '</div>'
+        + '<span class="broadcast-time">' + ts + '</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) { banner.style.display = 'none'; }
+}
+function _escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 function renderMessages(msgs, isPolling) {
   const container = document.getElementById('chatMessages');
@@ -1164,6 +1191,9 @@ if(typeof io !== 'undefined') {
 
         // Reload conversations to pick up the system broadcast conversation + unread count
         await loadConversations();
+
+        // Refresh broadcast banner in chat
+        renderBroadcastBanner();
 
         // Toast notification
         if (isUrgent) {
