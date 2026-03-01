@@ -294,35 +294,111 @@ function formatMentions(text) {
 function escapeHtml(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 /* --- Reactions --- */
-const REACTION_EMOJIS = ['👍','🔥','📈','📉','💯','🎯'];
+const QUICK_REACTIONS = ['👍','🔥','📈','📉','💯','😂'];
+const EMOJI_CATEGORIES = {
+  'Frequent': ['👍','👎','🔥','💯','📈','📉','🎯','💰','🚀','⚡','✅','❌','👀','🤝','💪','🙏'],
+  'Trading':  ['📈','📉','💰','💵','💸','🏦','📊','📋','🛢️','⛽','💎','🪙','📦','🔔','⏰','🧾'],
+  'Smileys':  ['😂','😅','🤣','😊','😎','🤔','😬','😱','🥳','😤','🫡','🤯','😏','🙄','😭','🥲'],
+  'Hands':    ['👍','👎','👏','🤝','💪','✌️','🤞','👋','🫶','🙏','🤙','👊','✊','🫰','🤌','☝️'],
+  'Objects':  ['🚀','⚡','🔥','💡','🎯','🏆','⭐','❤️','💔','🔒','🔓','📌','🗑️','✏️','📎','🔗']
+};
+
+let _emojiPickerMsgId = null;
 
 function showReactPicker(event, msgId) {
   event.stopPropagation();
-  // Remove any existing pickers
   closePickers();
+  _emojiPickerMsgId = msgId;
+
   const btn = event.currentTarget;
   const actionsDiv = btn.closest('.msg-actions-inline');
-  const msgDiv = btn.closest('.chat-msg');
+  const msgEl = btn.closest('.chat-msg');
+
   const picker = document.createElement('div');
-  picker.className = 'react-picker-inline';
-  picker.innerHTML = REACTION_EMOJIS.map(e => `<button class="react-picker-btn" onclick="event.stopPropagation();toggleReaction(${msgId},'${e}');closePickers()">${e}</button>`).join('');
-  // Insert picker after the actions div
+  picker.className = 'emoji-picker';
+  picker.onclick = (e) => e.stopPropagation();
+
+  // Quick bar
+  let html = '<div class="emoji-quick-bar">';
+  QUICK_REACTIONS.forEach(e => {
+    html += `<button class="emoji-quick-btn" onclick="pickEmoji('${e}')">${e}</button>`;
+  });
+  html += '</div>';
+
+  // Search
+  html += '<div class="emoji-search-wrap"><input class="emoji-search" placeholder="Search emoji..." oninput="filterEmojis(this.value)"></div>';
+
+  // Category tabs
+  const cats = Object.keys(EMOJI_CATEGORIES);
+  html += '<div class="emoji-tabs">';
+  cats.forEach((cat, i) => {
+    html += `<button class="emoji-tab${i===0?' active':''}" onclick="switchEmojiTab(this,'${cat}')">${cat}</button>`;
+  });
+  html += '</div>';
+
+  // Emoji grid (show first category by default)
+  html += '<div class="emoji-grid" id="emojiGrid">';
+  EMOJI_CATEGORIES[cats[0]].forEach(e => {
+    html += `<button class="emoji-cell" onclick="pickEmoji('${e}')">${e}</button>`;
+  });
+  html += '</div>';
+
+  picker.innerHTML = html;
+
+  // Position: above or below the message depending on space
+  const chatPanel = document.getElementById('chatPanel');
   actionsDiv.after(picker);
   actionsDiv.classList.add('picker-open');
+
+  // Focus search
+  setTimeout(() => { const s = picker.querySelector('.emoji-search'); if (s) s.focus(); }, 50);
+
   // Auto-close on outside click
   setTimeout(() => {
-    document.addEventListener('click', function _closePicker(ev) {
+    document.addEventListener('click', function _close(ev) {
       if (!picker.contains(ev.target) && !btn.contains(ev.target)) {
         closePickers();
-        document.removeEventListener('click', _closePicker);
+        document.removeEventListener('click', _close);
       }
     });
   }, 10);
 }
 
+function pickEmoji(emoji) {
+  if (_emojiPickerMsgId) toggleReaction(_emojiPickerMsgId, emoji);
+  closePickers();
+}
+
+function switchEmojiTab(btn, cat) {
+  btn.parentElement.querySelectorAll('.emoji-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const grid = document.getElementById('emojiGrid');
+  if (!grid) return;
+  const emojis = EMOJI_CATEGORIES[cat] || [];
+  grid.innerHTML = emojis.map(e => `<button class="emoji-cell" onclick="pickEmoji('${e}')">${e}</button>`).join('');
+}
+
+function filterEmojis(query) {
+  const grid = document.getElementById('emojiGrid');
+  if (!grid) return;
+  if (!query.trim()) {
+    // Reset to active tab
+    const activeTab = document.querySelector('.emoji-tab.active');
+    if (activeTab) switchEmojiTab(activeTab, activeTab.textContent);
+    return;
+  }
+  // Search across all categories (match by showing all)
+  const all = [];
+  const seen = new Set();
+  Object.values(EMOJI_CATEGORIES).forEach(arr => arr.forEach(e => { if (!seen.has(e)) { seen.add(e); all.push(e); } }));
+  grid.innerHTML = all.map(e => `<button class="emoji-cell" onclick="pickEmoji('${e}')">${e}</button>`).join('');
+}
+
 function closePickers() {
+  document.querySelectorAll('.emoji-picker').forEach(p => p.remove());
   document.querySelectorAll('.react-picker-inline').forEach(p => p.remove());
   document.querySelectorAll('.msg-actions-inline.picker-open').forEach(a => a.classList.remove('picker-open'));
+  _emojiPickerMsgId = null;
 }
 
 async function toggleReaction(msgId, emoji) {
