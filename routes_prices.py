@@ -29,6 +29,10 @@ from app import EIA_API_KEY, FRED_API_KEY
 logger = logging.getLogger(__name__)
 prices_bp = Blueprint('prices', __name__)
 
+# Suppress noisy yfinance TzCache warnings
+logging.getLogger('yfinance').setLevel(logging.WARNING)
+logging.getLogger('peewee').setLevel(logging.WARNING)
+
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
@@ -631,3 +635,168 @@ def get_live_prices():
     except Exception as e:
         logger.error(f'Live prices endpoint error: {e}')
         return jsonify({'success': False, 'error': str(e), 'prices': {}})
+
+
+# ---------------------------------------------------------------------------
+# Historical Price Data (6 months daily) for charts
+# ---------------------------------------------------------------------------
+_hist_cache = {'data': None, 'ts': 0}
+_hist_lock = threading.Lock()
+HIST_TTL = 3600  # cache for 1 hour
+
+# Reverse mapping: hub_name → yfinance ticker (direct tickers only)
+_TICKER_HUB_MAP = {
+    'NG=F': 'Henry Hub',
+    'CL=F': 'WTI Cushing',
+    'BZ=F': 'Brent Dated',
+    'GC=F': 'Gold (COMEX)',
+    'SI=F': 'Silver (COMEX)',
+    'HG=F': 'Copper (COMEX)',
+    'PL=F': 'Platinum (NYMEX)',
+    'PA=F': 'Palladium (NYMEX)',
+    'ZC=F': 'Corn (CBOT)',
+    'ZS=F': 'Soybeans (CBOT)',
+    'ZW=F': 'Wheat (CBOT)',
+    'ZL=F': 'Soybean Oil (CBOT)',
+    'ZM=F': 'Soybean Meal (CBOT)',
+    'CT=F': 'Cotton (ICE)',
+    'SB=F': 'Sugar #11 (ICE)',
+    'KC=F': 'Coffee C (ICE)',
+    'CC=F': 'Cocoa (ICE)',
+    'LE=F': 'Live Cattle (CME)',
+    'HE=F': 'Lean Hogs (CME)',
+    'GF=F': 'Feeder Cattle (CME)',
+}
+
+# Spread-derived hubs: anchor_hub → {derived_hub: spread}
+_NG_SPREADS = {
+    'Waha': -0.35, 'SoCal Gas': +0.15, 'Chicago': -0.05, 'Algonquin': +0.80,
+    'Transco Zone 6': +0.60, 'Dominion South': -0.45, 'Dawn': +0.10,
+    'Sumas': +0.20, 'Malin': +0.18, 'Opal': -0.08, 'Tetco M3': +0.55,
+    'Kern River': +0.05, 'AECO': -0.80,
+}
+_CRUDE_DIFFS = {
+    'WTI Midland': +0.40, 'Mars Sour': -1.80, 'LLS': +1.20,
+    'ANS': +0.90, 'Bakken': -0.60, 'WCS': -14.50,
+}
+_POWER_HEAT = {
+    'ERCOT Hub': ('Henry Hub', 8.0, +5.00), 'ERCOT North': ('Henry Hub', 7.8, +3.00),
+    'ERCOT South': ('Henry Hub', 8.2, +6.00), 'PJM West Hub': ('Transco Zone 6', 7.5, +2.00),
+    'NEPOOL Mass': ('Algonquin', 8.5, +8.00), 'MISO Illinois': ('Chicago', 7.8, +3.50),
+    'CAISO NP15': ('SoCal Gas', 8.5, +8.00), 'CAISO SP15': ('SoCal Gas', 8.2, +6.00),
+    'NYISO Zone J': ('Transco Zone 6', 8.5, +8.00), 'NYISO Zone A': ('Dawn', 7.5, +3.00),
+    'SPP North': ('Henry Hub', 7.5, +2.00),
+}
+_NGL_RATIOS = {
+    'Ethane (C2)': ('Henry Hub', 8.18), 'Propane (C3)': ('WTI Cushing', 0.905),
+    'Normal Butane (nC4)': ('WTI Cushing', 1.32), 'Isobutane (iC4)': ('WTI Cushing', 1.41),
+    'Nat Gasoline (C5+)': ('WTI Cushing', 1.95),
+}
+
+
+def _fetch_historical():
+    """Fetch 6 months of daily closes and build per-hub history arrays."""
+    try:
+        import yfinance as yf
+        import pandas as pd
+
+        tickers_needed = list(_TICKER_HUB_MAP.keys())
+        raw = yf.download(
+            tickers=' '.join(tickers_needed),
+            period='6mo',
+            interval='1d',
+            group_by='ticker',
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+        if raw.empty:
+            return {}
+
+        # Extract daily close series per ticker
+        ticker_series = {}
+        for ticker in tickers_needed:
+            try:
+                if len(tickers_needed) == 1:
+                    col = raw['Close']
+                elif isinstance(raw.columns, __import__('pandas').MultiIndex):
+                    col = raw[ticker]['Close']
+                else:
+                    col = raw['Close'][ticker]
+                col = col.dropna()
+                if col.empty:
+                    continue
+                values = col.tolist()
+                # Convert cents tickers
+                if ticker in CENTS_TICKERS:
+                    values = [v / 100.0 for v in values]
+                ticker_series[ticker] = values
+            except Exception:
+                continue
+
+        # Build hub histories
+        result = {}
+
+        # Direct-mapped hubs
+        for ticker, hub in _TICKER_HUB_MAP.items():
+            if ticker in ticker_series:
+                result[hub] = [round(v, 4) for v in ticker_series[ticker]]
+
+        # NG spread hubs (from Henry Hub)
+        if 'Henry Hub' in result:
+            hh_hist = result['Henry Hub']
+            for hub, spread in _NG_SPREADS.items():
+                result[hub] = [round(v + spread, 4) for v in hh_hist]
+
+        # Crude diff hubs (from WTI)
+        if 'WTI Cushing' in result:
+            wti_hist = result['WTI Cushing']
+            for hub, diff in _CRUDE_DIFFS.items():
+                result[hub] = [round(v + diff, 2) for v in wti_hist]
+
+        # Power hubs (heat rate from gas hub)
+        for hub, (gas_hub, heat_rate, adder) in _POWER_HEAT.items():
+            if gas_hub in result:
+                result[hub] = [round(v * heat_rate + adder, 2) for v in result[gas_hub]]
+
+        # NGL hubs (ratio from anchor)
+        for hub, (anchor, ratio) in _NGL_RATIOS.items():
+            if anchor in result:
+                result[hub] = [round(v * ratio, 1) for v in result[anchor]]
+
+        # LNG: HH Netback
+        if 'Henry Hub' in result:
+            result['HH Netback'] = [round(v + 3.30, 2) for v in result['Henry Hub']]
+
+        # TTF: need EURUSD history too — approximate with latest rate
+        if 'TTF=F' in ticker_series:
+            eurusd = 1.10
+            try:
+                eu_raw = yf.download('EURUSD=X', period='2d', interval='1d', progress=False)
+                if not eu_raw.empty:
+                    eurusd = float(eu_raw['Close'].dropna().iloc[-1])
+            except Exception:
+                pass
+            result['TTF (ICE)'] = [round(v * eurusd / 3.41214, 2) for v in ticker_series['TTF=F']]
+
+        return result
+    except Exception as e:
+        logger.error(f'Historical price fetch error: {e}')
+        return {}
+
+
+@prices_bp.route('/api/price-history', methods=['GET'])
+def get_price_history():
+    """Return 6 months of daily closes per hub for charting."""
+    now = time.time()
+    with _hist_lock:
+        if _hist_cache['data'] and (now - _hist_cache['ts']) < HIST_TTL:
+            return jsonify({'success': True, 'history': _hist_cache['data'],
+                            'hub_count': len(_hist_cache['data'])})
+
+    data = _fetch_historical()
+    with _hist_lock:
+        _hist_cache['data'] = data
+        _hist_cache['ts'] = time.time()
+
+    return jsonify({'success': True, 'history': data, 'hub_count': len(data)})

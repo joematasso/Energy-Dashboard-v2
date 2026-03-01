@@ -64,16 +64,15 @@ function initPrices() {
   }
   initForwardCurves();
 
-  // Then fetch real prices and rebase (non-blocking)
-  fetchLivePrices().then(ok => {
-    if (ok) {
-      // Re-seed history with real prices — patches the last 5 ticks toward reality
+  // Fetch real prices and real history in parallel (non-blocking)
+  Promise.all([fetchLivePrices(), _fetchPriceHistory()]).then(([liveOk, histOk]) => {
+    if (liveOk && !histOk) {
+      // Fallback: patch simulated history toward live price if real history unavailable
       for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
         hubs.forEach(h => {
           const real = _livePrices[h.name];
           if (real === undefined) return;
           const hist = priceHistory[h.name];
-          // Gently walk the last 5 entries toward the real price
           const n = Math.min(5, hist.length);
           for (let i = n; i >= 1; i--) {
             const frac = (n - i + 1) / (n + 1);
@@ -82,6 +81,7 @@ function initPrices() {
         });
       }
     }
+    renderCurrentPage();
   });
 
   // Refresh live prices periodically and gently rebase
@@ -89,6 +89,27 @@ function initPrices() {
     const ok = await fetchLivePrices();
     if (ok) _rebaseToLivePrices();
   }, LIVE_PRICE_REFRESH);
+}
+
+async function _fetchPriceHistory() {
+  try {
+    const r = await fetch(API_BASE + '/api/price-history');
+    const d = await r.json();
+    if (d.success && d.history) {
+      let replaced = 0;
+      for (const [hub, dailyCloses] of Object.entries(d.history)) {
+        if (dailyCloses && dailyCloses.length >= 10 && priceHistory[hub]) {
+          priceHistory[hub] = dailyCloses.slice();
+          replaced++;
+        }
+      }
+      console.log(`Real price history loaded: ${replaced} hubs replaced`);
+      return replaced > 0;
+    }
+  } catch(e) {
+    console.warn('Price history fetch failed, using simulated data:', e);
+  }
+  return false;
 }
 
 function _rebaseToLivePrices() {
