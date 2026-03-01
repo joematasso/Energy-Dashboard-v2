@@ -1,126 +1,250 @@
+/* --- Blotter sort state --- */
+let _blotterSortCol = '';
+let _blotterSortAsc = true;
+function blotterSort(col) {
+  if (_blotterSortCol === col) _blotterSortAsc = !_blotterSortAsc;
+  else { _blotterSortCol = col; _blotterSortAsc = true; }
+  // Update header indicators
+  document.querySelectorAll('#blotterTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.sort === col) th.classList.add(_blotterSortAsc ? 'sort-asc' : 'sort-desc');
+  });
+  renderBlotterTable();
+}
+
+/* --- Sector display helpers --- */
+const SECTOR_LABELS = { ng:'NG', crude:'CL', power:'PWR', freight:'FRT', ag:'AG', metals:'MTL', ngls:'NGL', lng:'LNG' };
+const SECTOR_COLORS = { ng:'#22d3ee', crude:'#f59e0b', power:'#a78bfa', freight:'#6366f1', ag:'#34d399', metals:'#f472b6', ngls:'#fb923c', lng:'#38bdf8' };
+function getSector(t) { return t.sector || inferSectorFromType(t.type) || ''; }
+function getVolumeUnit(sector) {
+  const m = { ng:'MMBtu', crude:'BBL', power:'MWh', freight:'Lots', ag:'Bu', metals:'oz', ngls:'Gal', lng:'MMBtu' };
+  return m[sector] || '';
+}
+function formatAge(ms) {
+  if (ms < 0) return '—';
+  const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60), d = Math.floor(h/24);
+  if (d > 0) return d + 'd ' + (h%24) + 'h';
+  if (h > 0) return h + 'h ' + (m%60) + 'm';
+  if (m > 0) return m + 'm';
+  return '<1m';
+}
+function _typeLabel(type) {
+  const m = {
+    PHYS_FIXED:'Fixed',PHYS_INDEX:'Index',BASIS_SWAP:'Basis',FIXED_FLOAT:'Swap',SPREAD:'Spread',
+    BALMO:'BalMo',OPTION_NG:'Opt',TAS:'TAS',MULTILEG:'MuLeg',
+    CRUDE_PHYS:'Phys',CRUDE_SWAP:'Swap',CRUDE_DIFF:'Diff',OPTION_CL:'Opt',EFP:'EFP',
+    FREIGHT_FFA:'FFA',FREIGHT_PHYS:'Phys',AG_FUTURES:'Fut',AG_OPTION:'Opt',AG_SPREAD:'Spread',
+    METALS_FUTURES:'Fut',METALS_OPTION:'Opt',METALS_SPREAD:'Spread',
+    NGL_PHYS:'Phys',NGL_SWAP:'Swap',NGL_SPREAD:'Spread',NGL_FRAC:'Frac',
+    LNG_DES:'DES',LNG_FOB:'FOB',LNG_SWAP:'Swap',LNG_SPREAD:'Spread',LNG_BASIS:'Basis'
+  };
+  return m[type] || type;
+}
+
+/* --- Row expand toggle --- */
+function toggleBlotterRow(rowId) {
+  const detail = document.getElementById('bdet_' + rowId);
+  if (detail) detail.classList.toggle('expanded');
+}
+
 function renderBlotterTable() {
   let trades = [...STATE.trades, ...STATE.pendingOrders.map(o => ({...o, _pending: true}))];
-  const search = (document.getElementById('blotterSearch').value || '').toLowerCase();
+
+  // --- Filters ---
+  const search = (document.getElementById('blotterSearch')?.value || '').toLowerCase();
+  const fSector = document.getElementById('blotterFilterSector')?.value || '';
+  const fStatus = document.getElementById('blotterFilterStatus')?.value || '';
+  const fDir = document.getElementById('blotterFilterDir')?.value || '';
+
   if (search) {
     trades = trades.filter(t =>
-      (t.hub||'').toLowerCase().includes(search) ||
-      (t.type||'').toLowerCase().includes(search) ||
-      (t.notes||'').toLowerCase().includes(search) ||
-      (t.counterparty||'').toLowerCase().includes(search)
+      (t.hub||'').toLowerCase().includes(search) || (t.type||'').toLowerCase().includes(search) ||
+      (t.notes||'').toLowerCase().includes(search) || (t.counterparty||'').toLowerCase().includes(search) ||
+      (t.confirmRef||'').toLowerCase().includes(search) || (t.venue||'').toLowerCase().includes(search)
     );
   }
+  if (fSector) trades = trades.filter(t => getSector(t) === fSector);
+  if (fStatus) {
+    if (fStatus === 'PENDING') trades = trades.filter(t => t._pending);
+    else trades = trades.filter(t => !t._pending && t.status === fStatus);
+  }
+  if (fDir) trades = trades.filter(t => t.direction === fDir);
 
-  document.getElementById('blotterCount').textContent = trades.length + ' trades' + (STATE.pendingOrders.length ? ` (${STATE.pendingOrders.length} pending)` : '');
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(trades.length / BLOTTER_PAGE_SIZE));
-  if (blotterPage >= totalPages) blotterPage = totalPages - 1;
-  const start = blotterPage * BLOTTER_PAGE_SIZE;
-  const pageTrades = trades.slice(start, start + BLOTTER_PAGE_SIZE);
-
-  const tbody = document.getElementById('blotterBody');
-  tbody.innerHTML = pageTrades.map(t => {
+  // --- Pre-compute MTM for sort ---
+  const enriched = trades.map(t => {
     const spot = getPrice(t.hub);
     const dir = t.direction === 'BUY' ? 1 : -1;
     const vol = parseFloat(t.volume || 0);
     const entry = parseFloat(t.entryPrice || 0);
     let mtm = 0;
     if (t._pending) mtm = 0;
-    else if (t.status === 'OPEN') {
-      if (t.type === 'BASIS_SWAP') {
-        mtm = (spot - entry) * vol * dir;
-      } else {
-        mtm = (spot - entry) * vol * dir;
-      }
-    }
+    else if (t.status === 'OPEN') mtm = (spot - entry) * vol * dir;
     else mtm = parseFloat(t.realizedPnl || 0);
+    const mg = (typeof calcMargin === 'function') ? calcMargin(t) : 0;
+    return { t, spot, dir, vol, entry, mtm, margin: mg, sector: getSector(t) };
+  });
 
+  // --- Sort ---
+  if (_blotterSortCol) {
+    const asc = _blotterSortAsc ? 1 : -1;
+    enriched.sort((a, b) => {
+      let va, vb;
+      switch (_blotterSortCol) {
+        case 'sector': va = a.sector; vb = b.sector; break;
+        case 'type': va = a.t.type||''; vb = b.t.type||''; break;
+        case 'direction': va = a.t.direction||''; vb = b.t.direction||''; break;
+        case 'hub': va = a.t.hub||''; vb = b.t.hub||''; break;
+        case 'deliveryMonth': va = a.t.deliveryMonth||''; vb = b.t.deliveryMonth||''; break;
+        case 'volume': return (a.vol - b.vol) * asc;
+        case 'entryPrice': return (a.entry - b.entry) * asc;
+        case 'spot': return (a.spot - b.spot) * asc;
+        case 'mtm': return (a.mtm - b.mtm) * asc;
+        case 'margin': return (a.margin - b.margin) * asc;
+        case 'status': va = a.t._pending ? 'PENDING' : a.t.status; vb = b.t._pending ? 'PENDING' : b.t.status; break;
+        default: return 0;
+      }
+      if (va !== undefined) return va < vb ? -asc : va > vb ? asc : 0;
+      return 0;
+    });
+  }
+
+  const countEl = document.getElementById('blotterCount');
+  if (countEl) countEl.textContent = enriched.length + ' trades' + (STATE.pendingOrders.length ? ` (${STATE.pendingOrders.length} pending)` : '');
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(enriched.length / BLOTTER_PAGE_SIZE));
+  if (blotterPage >= totalPages) blotterPage = totalPages - 1;
+  const start = blotterPage * BLOTTER_PAGE_SIZE;
+  const pageItems = enriched.slice(start, start + BLOTTER_PAGE_SIZE);
+
+  const tbody = document.getElementById('blotterBody');
+  tbody.innerHTML = pageItems.map(({ t, spot, dir, vol, entry, mtm, margin, sector }) => {
     const mtmColor = mtm >= 0 ? 'green' : 'red';
     const dirColor = t.direction === 'BUY' ? 'color:var(--green)' : 'color:var(--red)';
+    const isLarge = (t.hub||'').includes('Baltic') || (t.hub||'').includes('Index');
 
-    // Order type badge
+    // Sector badge
+    const sLabel = SECTOR_LABELS[sector] || sector.toUpperCase();
+    const sColor = SECTOR_COLORS[sector] || 'var(--text-muted)';
+    const sectorBadge = sector ? `<span class="sector-badge" style="color:${sColor};border-color:${sColor}">${sLabel}</span>` : '—';
+
+    // Type + order type combined
     const orderType = t.orderType || 'MARKET';
     const tif = t.tif || 'DAY';
-    let orderBadge;
+    let typeCell = `<span style="font-weight:600;font-size:11px">${_typeLabel(t.type)}</span>`;
     if (t._pending) {
-      const triggerPrice = t.limitPrice || t.stopPrice || '—';
-      orderBadge = `<span class="order-badge pending">${orderType}</span><br><span style="font-size:10px;color:var(--text-muted)">@${parseFloat(triggerPrice).toFixed(3)} ${tif}</span>`;
-    } else if (orderType === 'MARKET') {
-      orderBadge = `<span style="font-size:11px;color:var(--text-muted)">MKT</span>`;
+      const trigPrice = t.limitPrice || t.stopPrice || 0;
+      typeCell += `<br><span class="order-badge pending">${orderType}</span> <span style="font-size:10px;color:var(--text-muted)">@${parseFloat(trigPrice).toFixed(2)} ${tif}</span>`;
+    } else if (orderType !== 'MARKET') {
+      typeCell += `<br><span class="order-badge filled">${orderType}</span>`;
     } else {
-      orderBadge = `<span class="order-badge filled">${orderType}</span>`;
+      typeCell += `<br><span style="font-size:10px;color:var(--text-muted)">MKT/${tif}</span>`;
     }
 
-    let statusBadge;
+    // Delivery month
+    const delMo = t.deliveryMonth ? new Date(t.deliveryMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' }) : '—';
+
+    // Volume with unit
+    const unit = getVolumeUnit(sector);
+    const volDisplay = `${vol.toLocaleString()}<span style="font-size:10px;color:var(--text-muted);margin-left:2px">${unit}</span>`;
+
+    // P&L with per-unit
+    let pnlCell;
     if (t._pending) {
-      statusBadge = '<span class="badge" style="background:rgba(139,92,246,0.15);color:#8b5cf6">PENDING</span>';
-    } else if (t.status === 'OPEN') {
-      statusBadge = '<span class="badge" style="background:rgba(34,211,238,0.15);color:var(--accent)">OPEN</span>';
+      pnlCell = '<span style="color:var(--text-muted)">—</span>';
     } else {
-      statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.15);color:var(--text-dim)">CLOSED</span>';
+      const perUnit = vol > 0 ? Math.abs(mtm / vol) : 0;
+      const pnlSign = mtm >= 0 ? '+' : '-';
+      pnlCell = `<span class="${mtmColor}" style="font-weight:600">${pnlSign}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</span>`;
+      if (vol > 0 && t.status === 'OPEN') {
+        pnlCell += `<br><span style="font-size:10px;color:var(--text-muted)">${mtm >= 0 ? '+' : '-'}$${perUnit.toFixed(3)}/${unit || 'u'}</span>`;
+      }
     }
+
+    // Margin
+    const marginStr = margin > 0 ? '$' + margin.toLocaleString(undefined,{maximumFractionDigits:0}) : '—';
+
+    // Venue badge
+    const venue = t.venue || 'OTC';
+    const isOtcVenue = venue === 'OTC';
+    const venueBadge = isOtcVenue
+      ? `<span style="font-size:10px;padding:1px 4px;border-radius:3px;background:rgba(139,92,246,0.12);color:#a78bfa">OTC</span>`
+      : `<span style="font-size:10px;padding:1px 4px;border-radius:3px;background:rgba(34,211,238,0.08);color:var(--text-dim)">${venue}</span>`;
+
+    // Status badge
+    let statusBadge;
+    if (t._pending) statusBadge = '<span class="badge" style="background:rgba(139,92,246,0.15);color:#8b5cf6">PEND</span>';
+    else if (t.status === 'OPEN') statusBadge = '<span class="badge" style="background:rgba(34,211,238,0.15);color:var(--accent)">OPEN</span>';
+    else statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.15);color:var(--text-dim)">CLSD</span>';
+
+    // Age
+    const created = new Date(t.timestamp || t.server_created_at || Date.now());
+    const ageMs = Date.now() - created.getTime();
+    const ageStr = t._pending ? '—' : formatAge(ageMs);
 
     // Row tint
     const rowBg = t._pending ? 'background:rgba(139,92,246,0.03)' : (t.status === 'OPEN' ? (mtm >= 0 ? 'background:rgba(16,185,129,0.03)' : 'background:rgba(239,68,68,0.03)') : '');
 
-    // MTM tooltip
-    let mtmTitle = '';
-    if (!t._pending) {
-      const ep = parseFloat(t.entryPrice || 0);
-      const move = (spot - ep) * dir;
-      if (t.status === 'OPEN') {
-        mtmTitle = `Entry: $${ep.toFixed(4)} | Spot: $${spot.toFixed(4)} | Move: ${move >= 0 ? '+' : ''}$${move.toFixed(4)}/unit | Vol: ${vol.toLocaleString()} | MTM: ${mtm >= 0 ? '+' : ''}$${Math.abs(mtm).toLocaleString(undefined, {maximumFractionDigits:0})}`;
-      } else {
-        mtmTitle = `Entry: $${ep.toFixed(4)} | Close: $${parseFloat(t.closePrice || 0).toFixed(4)} | Realized: ${mtm >= 0 ? '+' : ''}$${Math.abs(mtm).toLocaleString(undefined, {maximumFractionDigits:0})}`;
-      }
-    }
-
-    // Check 1-hour delete window
-    const created = new Date(t.timestamp || t.server_created_at || Date.now());
+    // Actions
     const canDelete = (Date.now() - created.getTime()) < 3600000;
-
-    const dateStr = new Date(t.timestamp || Date.now()).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-    const isLarge = (t.hub||'').includes('Baltic') || (t.hub||'').includes('Index');
-
     let actions = '';
     if (t._pending) {
-      actions += `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="cancelPendingOrder('${t._pendingId}')">Cancel</button>`;
+      actions = `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="event.stopPropagation();cancelPendingOrder('${t._pendingId}')">Cancel</button>`;
     } else {
-      if (t.status === 'OPEN') actions += `<button class="btn btn-ghost btn-sm" onclick="closeTrade(${t.id})">Close</button>`;
-      if (canDelete) actions += `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTrade(${t.id})">Delete</button>`;
-      else if (t.status === 'OPEN') actions += `<span style="font-size:10px;color:var(--text-muted)" title="Admin required after 1hr">Locked</span>`;
-      actions += `<button class="btn btn-ghost btn-sm" onclick="cloneTrade(${t.id})">Clone</button>`;
-      actions += `<button class="btn btn-ghost btn-sm" title="Share to chat" onclick="shareTradeToChat(${t.id})">Share</button>`;
+      if (t.status === 'OPEN') actions += `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="event.stopPropagation();closeTrade(${t.id})">Close</button>`;
+      if (canDelete) actions += `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="event.stopPropagation();deleteTrade(${t.id})">Del</button>`;
+      actions += `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="event.stopPropagation();cloneTrade(${t.id})">Clone</button>`;
+      actions += `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="event.stopPropagation();shareTradeToChat(${t.id})">Share</button>`;
     }
 
-    // Settlement & broker display
-    const settleBadge = t.settlementType === 'PHYSICAL'
-      ? '<span style="font-size:10px;color:#f59e0b">📦 PHYS</span>'
-      : '<span style="font-size:10px;color:var(--text-muted)">⚡ FIN</span>';
-    const brokerLabel = t.broker ? `<span style="font-size:10px;color:var(--text-dim)">${t.broker}</span>` : '<span style="font-size:10px;color:var(--text-muted)">—</span>';
-    const refLabel = t.confirmRef
-      ? `<span class="mono" style="font-size:10px;color:var(--text-dim)" title="${t.confirmRef}">${t.confirmRef}</span>`
-      : '<span style="font-size:10px;color:var(--text-muted)">—</span>';
+    // Expanded detail row content
+    const rowId = t._pending ? t._pendingId : t.id;
+    const dateStr = created.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const refLabel = t.confirmRef || '—';
+    const settleBadge = t.settlementType === 'PHYSICAL' ? 'Physical' : 'Financial';
+    const brokerLabel = t.broker || 'Direct';
+    const cptyLabel = t.counterparty || t.counterpartyTrader || '—';
+    const stopLoss = t.stopLoss ? '$' + parseFloat(t.stopLoss).toFixed(3) : '—';
+    const targetExit = t.targetExit ? '$' + parseFloat(t.targetExit).toFixed(3) : '—';
+    const commission = t.commission ? '$' + parseFloat(t.commission).toFixed(4) + '/unit' : '—';
+    const notesLabel = t.notes || '—';
+    const closeInfo = t.status === 'CLOSED' ? `<div class="bdet-item"><span class="bdet-label">Close Price</span><span>$${parseFloat(t.closePrice||0).toFixed(4)}</span></div><div class="bdet-item"><span class="bdet-label">Closed At</span><span>${t.closedAt ? new Date(t.closedAt).toLocaleString() : '—'}</span></div>` : '';
 
-    return `<tr style="${rowBg}">
-      <td>${refLabel}</td>
-      <td style="font-size:12px;white-space:nowrap">${dateStr}</td>
-      <td style="font-size:11px">${t.type}</td>
-      <td style="${dirColor};font-weight:700">${t.direction}</td>
-      <td>${t.hub}</td>
-      <td class="mono">${parseFloat(t.volume).toLocaleString()}</td>
-      <td class="mono">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>
-      <td class="mono">${isLarge ? spot.toFixed(0) : spot.toFixed(3)}</td>
-      <td>${settleBadge}</td>
-      <td>${brokerLabel}</td>
-      <td class="mono ${mtmColor}" style="font-weight:600;cursor:default" title="${mtmTitle}">${t._pending ? '—' : (mtm>=0?'+':'') + '$' + Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+    return `<tr class="blotter-row" style="${rowBg}" onclick="toggleBlotterRow('${rowId}')">
+      <td>${sectorBadge}</td>
+      <td>${typeCell}</td>
+      <td style="${dirColor};font-weight:700;font-size:12px">${t.direction}</td>
+      <td style="font-weight:500;font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}">${t.hub}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${delMo}</td>
+      <td class="mono" style="font-size:12px">${volDisplay}</td>
+      <td class="mono" style="font-size:12px">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>
+      <td class="mono" style="font-size:12px">${t._pending ? '—' : (isLarge ? spot.toFixed(0) : spot.toFixed(3))}</td>
+      <td>${pnlCell}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${marginStr}</td>
+      <td>${venueBadge}</td>
       <td>${statusBadge}</td>
+      <td style="font-size:11px;color:var(--text-muted);white-space:nowrap">${ageStr}</td>
       <td><div class="actions-cell">${actions}</div></td>
-    </tr>`;
+    </tr>
+    <tr class="blotter-detail" id="bdet_${rowId}"><td colspan="14"><div class="bdet-grid">
+      <div class="bdet-item"><span class="bdet-label">Ref#</span><span class="mono">${refLabel}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Date</span><span>${dateStr}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Full Type</span><span>${t.type}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Settlement</span><span>${settleBadge}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Broker</span><span>${brokerLabel}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Counterparty</span><span>${cptyLabel}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Venue</span><span>${venue}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Margin</span><span>${marginStr}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Commission</span><span>${commission}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Stop Loss</span><span>${stopLoss}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Target Exit</span><span>${targetExit}</span></div>
+      ${closeInfo}
+      <div class="bdet-item bdet-notes"><span class="bdet-label">Notes</span><span>${notesLabel}</span></div>
+    </div></td></tr>`;
   }).join('');
 
-  if (!pageTrades.length) {
-    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:30px">No trades yet. Use the form above to place your first trade.</td></tr>';
+  if (!pageItems.length) {
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:30px">No trades yet. Use the form above to place your first trade.</td></tr>';
   }
 
   // Pagination controls
@@ -198,6 +322,8 @@ function inferSectorFromType(type) {
   if (type.startsWith('FREIGHT')) return 'freight';
   if (type.startsWith('AG')) return 'ag';
   if (type.startsWith('METALS')) return 'metals';
+  if (type.startsWith('NGL')) return 'ngls';
+  if (type.startsWith('LNG')) return 'lng';
   // NG/Power types overlap — default to ng
   return 'ng';
 }

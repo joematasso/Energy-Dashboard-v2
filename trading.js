@@ -18,20 +18,65 @@ document.addEventListener('click', function(e) {
   }
 });
 
-/* --- Volume unit config per sector --- */
+/* --- Volume unit config per sector (defaults) --- */
 const SECTOR_VOLUME = {
-  ng:      { unit:'MMBtu',    placeholder:'10000', step:'1000', tip:'Volume in MMBtu (million British thermal units). Standard lot: 10,000 MMBtu. Larger volume = more margin required.' },
-  crude:   { unit:'BBL',      placeholder:'1000',  step:'100',  tip:'Volume in barrels (BBL). Standard lot: 1,000 BBL. Each contract = 1,000 barrels of crude oil.' },
+  ng:      { unit:'MMBtu',    placeholder:'10000', step:'1000', tip:'Volume in MMBtu (million British thermal units). Standard NYMEX lot: 10,000 MMBtu. Larger volume = more margin required.' },
+  crude:   { unit:'BBL',      placeholder:'1000',  step:'100',  tip:'Volume in barrels (BBL). Standard NYMEX CL contract: 1,000 BBL per lot.' },
   power:   { unit:'MWh',      placeholder:'50',    step:'25',   tip:'Volume in megawatt-hours (MWh). Standard block: 50 MWh. On-peak vs off-peak hours affect total delivery.' },
   freight: { unit:'Lots',     placeholder:'5',     step:'1',    tip:'Number of lots. Each lot represents a standard cargo size for the route (e.g., Capesize = 150k MT).' },
   ag:      { unit:'Bushels',  placeholder:'5000',  step:'1000', tip:'Volume in bushels (corn/wheat/soy) or metric tonnes. Standard CBOT contract: 5,000 bushels.' },
-  metals:  { unit:'Troy oz',  placeholder:'100',   step:'10',   tip:'Volume in troy ounces (gold/silver) or metric tonnes (base metals). Standard gold lot: 100 troy oz.' },
+  metals:  { unit:'Troy oz',  placeholder:'100',   step:'10',   tip:'Volume in troy ounces (gold/silver) or metric tonnes (base metals). Standard COMEX gold lot: 100 troy oz.' },
   ngls:    { unit:'Gallons',  placeholder:'42000', step:'1000', tip:'Volume in gallons or barrels. Standard NGL lot: 42,000 gallons (1,000 BBL). Priced per gallon.' },
   lng:     { unit:'MMBtu',    placeholder:'10000', step:'1000', tip:'Volume in MMBtu. LNG cargo trades may also reference TBtu or cargo lots (~3.4M MMBtu per standard cargo).' },
 };
 
-function updateVolumeField(sector) {
-  const cfg = SECTOR_VOLUME[sector];
+/* --- Trade-type-specific volume overrides (exchange contract specs) --- */
+const TRADE_TYPE_VOLUME = {
+  // NG
+  PHYS_FIXED:   { unit:'MMBtu',    placeholder:'10000', step:'2500',  tip:'Physical fixed price gas. Standard daily volume: 2,500 MMBtu/day. Monthly: 10,000 MMBtu.' },
+  PHYS_INDEX:   { unit:'MMBtu',    placeholder:'10000', step:'2500',  tip:'Physical index gas priced at first-of-month index. Standard: 10,000 MMBtu/month.' },
+  BASIS_SWAP:   { unit:'MMBtu',    placeholder:'10000', step:'2500',  tip:'Basis swap: spread between two pricing points. Volume in MMBtu. Standard: 2,500 MMBtu/day.' },
+  FIXED_FLOAT:  { unit:'MMBtu',    placeholder:'10000', step:'10000', tip:'Fixed/float swap. NYMEX NG contract: 10,000 MMBtu per lot. Enter in multiples of 10,000.' },
+  BALMO:        { unit:'MMBtu',    placeholder:'2500',  step:'2500',  tip:'Balance of month. Volume = remaining days x daily quantity. Typical daily: 2,500 MMBtu.' },
+  OPTION_NG:    { unit:'MMBtu',    placeholder:'10000', step:'10000', tip:'NG option. Each NYMEX contract = 10,000 MMBtu. Enter in multiples of 10,000.' },
+  TAS:          null, // uses sector default
+  SPREAD:       null, // uses sector default
+  MULTILEG:     null,
+  // Crude
+  CRUDE_PHYS:   { unit:'BBL',      placeholder:'1000',  step:'1000',  tip:'Physical crude. NYMEX CL contract = 1,000 BBL. Pipeline nominations typically in 1,000 BBL lots.' },
+  CRUDE_SWAP:   { unit:'BBL',      placeholder:'1000',  step:'1000',  tip:'Crude swap. Standard lot: 1,000 BBL (matches NYMEX CL). ICE Brent also 1,000 BBL.' },
+  CRUDE_DIFF:   { unit:'BBL',      placeholder:'1000',  step:'1000',  tip:'Crude differential (e.g., WTI-Brent). Volume in BBL. Standard: 1,000 BBL per lot.' },
+  OPTION_CL:    { unit:'BBL',      placeholder:'1000',  step:'1000',  tip:'Crude oil option. NYMEX CL option = 1,000 BBL per contract. Enter in multiples of 1,000.' },
+  EFP:          { unit:'BBL',      placeholder:'1000',  step:'1000',  tip:'Exchange for Physical. Swap a futures position for physical delivery. 1,000 BBL per lot.' },
+  // Power
+  // (uses sector defaults, plus specifics below)
+  // Freight
+  FREIGHT_FFA:  { unit:'Days',     placeholder:'30',    step:'1',     tip:'Freight Forward Agreement. Volume = number of days. Settlement based on Baltic route average.' },
+  FREIGHT_PHYS: { unit:'MT',       placeholder:'150000',step:'25000', tip:'Physical freight charter. Volume in metric tonnes. Capesize ~150k MT, Panamax ~75k MT, Supramax ~55k MT.' },
+  // Ag
+  AG_FUTURES:   { unit:'Bushels',  placeholder:'5000',  step:'5000',  tip:'CBOT futures. Corn/Wheat/Soy = 5,000 bushels per contract. Enter in multiples of 5,000.' },
+  AG_OPTION:    { unit:'Bushels',  placeholder:'5000',  step:'5000',  tip:'Ag options. Each CBOT option = 5,000 bushels. Premium quoted in cents/bushel.' },
+  AG_SPREAD:    { unit:'Bushels',  placeholder:'5000',  step:'5000',  tip:'Ag calendar spread. Each leg = 5,000 bushels. Quoted as front-month minus back-month.' },
+  // Metals
+  METALS_FUTURES: { unit:'Troy oz', placeholder:'100',  step:'100',   tip:'COMEX gold = 100 troy oz. Silver = 5,000 troy oz. Copper = 25,000 lbs. Enter per-contract size.' },
+  METALS_OPTION:  { unit:'Troy oz', placeholder:'100',  step:'100',   tip:'COMEX gold option = 100 troy oz per contract. Enter in multiples of 100.' },
+  METALS_SPREAD:  { unit:'Troy oz', placeholder:'100',  step:'100',   tip:'Metals calendar spread. Each leg matches the futures contract size.' },
+  // NGLs
+  NGL_PHYS:     { unit:'Gallons',  placeholder:'42000', step:'42000', tip:'Physical NGL delivery. 1 lot = 42,000 gallons (1,000 BBL). Mont Belvieu is the primary hub.' },
+  NGL_SWAP:     { unit:'Gallons',  placeholder:'42000', step:'42000', tip:'NGL swap. Standard lot: 42,000 gallons (1,000 BBL). Priced in cents/gallon.' },
+  NGL_SPREAD:   { unit:'Gallons',  placeholder:'42000', step:'42000', tip:'NGL calendar spread. Each leg = 42,000 gallons (1,000 BBL).' },
+  NGL_FRAC:     { unit:'BBL',      placeholder:'1000',  step:'1000',  tip:'Frac spread: NGL price vs. natural gas input cost. Volume in BBL of NGL output.' },
+  // LNG
+  LNG_DES:      { unit:'MMBtu',    placeholder:'3400000',step:'100000',tip:'LNG DES (Delivered Ex-Ship) cargo. Standard cargo ~3.4M MMBtu (~65,000 cbm LNG carrier).' },
+  LNG_FOB:      { unit:'MMBtu',    placeholder:'3400000',step:'100000',tip:'LNG FOB (Free on Board) cargo. Standard cargo ~3.4M MMBtu. Buyer arranges shipping.' },
+  LNG_SWAP:     { unit:'MMBtu',    placeholder:'10000', step:'10000', tip:'LNG swap (JKM, TTF, etc.). NYMEX/ICE LNG futures = 10,000 MMBtu per lot.' },
+  LNG_SPREAD:   { unit:'MMBtu',    placeholder:'10000', step:'10000', tip:'LNG calendar spread. Each leg = 10,000 MMBtu.' },
+  LNG_BASIS:    { unit:'MMBtu',    placeholder:'10000', step:'10000', tip:'LNG basis swap (e.g., JKM vs Henry Hub). Volume in MMBtu. Standard: 10,000 per lot.' },
+};
+
+function updateVolumeField(sector, tradeType) {
+  // Trade-type-specific override takes priority, then fall back to sector default
+  const cfg = (tradeType && TRADE_TYPE_VOLUME[tradeType]) || SECTOR_VOLUME[sector];
   const label = document.getElementById('volumeLabel');
   const input = document.getElementById('tradeVolume');
   const tip   = document.getElementById('volumeTip');
@@ -69,6 +114,8 @@ function renderBlotterPage() {
   updateMarginPreview();
   renderBlotterTable();
   renderNetPositions();
+  // Load OTC proposals
+  if (typeof loadOtcProposals === 'function') loadOtcProposals();
   drawPnlChart();
   try { initPnlCrosshair(); } catch(e) {}
   // Show backdate field only when privileged AND user has enabled it in settings
@@ -379,6 +426,9 @@ function onTradeTypeChange() {
     condDiv.style.display = 'block';
     condDiv.querySelectorAll('.cond-basis').forEach(fg => fg.style.display = 'flex');
   }
+  // Update volume field for this specific trade type
+  const sector = document.getElementById('tradeSector').value;
+  updateVolumeField(sector, type);
   updateMarginPreview();
 }
 
@@ -540,9 +590,9 @@ async function submitTrade() {
   }
 
   // Backdate for privileged traders
-  const backdateInput = document.getElementById('tradeBackdate');
-  if (isPrivileged && backdateInput && backdateInput.value) {
-    trade.backdate = backdateInput.value;
+  const backdateInput2 = document.getElementById('tradeBackdate');
+  if (isPrivileged && backdateInput2 && backdateInput2.value) {
+    trade.backdate = backdateInput2.value;
   }
 
   // OTC bilateral routing
@@ -598,27 +648,34 @@ async function submitTrade() {
   // MARKET order → immediate execution
   trade.entryPrice = currentPrice;
 
-  // Try server submission
+  // OTC bilateral → send proposal instead of auto-executing
+  if (isOtcBilateral && STATE.connected && STATE.trader) {
+    try {
+      const url = API_BASE + '/api/trades/otc/' + STATE.trader.trader_name;
+      const body = JSON.stringify({...trade, counterparty: cptyTrader, proposalMessage: ''});
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const d = await r.json();
+      if (!d.success) { toast(d.error || 'OTC proposal rejected', 'error'); return; }
+      const cptyInfo = OTC_COUNTERPARTIES.find(c=>c.trader_name===cptyTrader);
+      toast('OTC proposal sent to ' + (cptyInfo?cptyInfo.display_name:cptyTrader) + '. Waiting for acceptance.', 'success');
+      playSound('trade');
+      resetTradeForm();
+      renderBlotterPage();
+      return;
+    } catch(e) { toast('Failed to send OTC proposal', 'error'); return; }
+  }
+
+  // Exchange/non-OTC → direct submission
   if (STATE.connected && STATE.trader) {
     try {
-      let url, body;
-      if (isOtcBilateral) {
-        url = API_BASE + '/api/trades/otc/' + STATE.trader.trader_name;
-        body = JSON.stringify({...trade, counterparty: cptyTrader});
-      } else {
-        url = API_BASE + '/api/trades/' + STATE.trader.trader_name;
-        body = JSON.stringify(trade);
-      }
+      const url = API_BASE + '/api/trades/' + STATE.trader.trader_name;
+      const body = JSON.stringify(trade);
       const r = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body
       });
       const d = await r.json();
       if (!d.success) { toast(d.error || 'Trade rejected by server', 'error'); return; }
       trade.id = d.trade_id;
-      if (isOtcBilateral) {
-        const cptyInfo = OTC_COUNTERPARTIES.find(c=>c.trader_name===cptyTrader);
-        toast('OTC trade executed with ' + (cptyInfo?cptyInfo.display_name:cptyTrader) + '. Mirror position created.', 'success');
-      }
     } catch { /* fallback to local */ }
   }
 
@@ -639,8 +696,11 @@ function resetTradeForm() {
   document.getElementById('tradeType').value = '';
   document.getElementById('tradeVenue').innerHTML = '<option value="OTC">OTC Bilateral</option>';
   document.getElementById('tradeVolume').value = '';
+  updateVolumeField(''); // Reset volume label/placeholder to default
   document.getElementById('tradeEntry').value = '';
   document.getElementById('tradeCpty').value = '';
+  const cptyHint = document.getElementById('cptyHint');
+  if (cptyHint) cptyHint.textContent = '';
   document.getElementById('tradeNotes').value = '';
   document.getElementById('tradeStop').value = '';
   document.getElementById('tradeTarget').value = '';

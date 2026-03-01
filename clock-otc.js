@@ -241,11 +241,136 @@ try {
   document.getElementById('tradeCpty').addEventListener('change', function() {
     if(this.value) {
       document.getElementById('tradeVenue').value = 'OTC';
-      document.getElementById('cptyHint').textContent = '(OTC bilateral)';
+      document.getElementById('cptyHint').textContent = '(OTC bilateral — proposal sent to counterparty)';
     } else {
       document.getElementById('cptyHint').textContent = '';
     }
   });
 } catch(e) { console.warn('OTC listener init:', e); }
 
+// ---- OTC Proposal Management ----
+let _otcProposals = { received: [], sent: [] };
 
+async function loadOtcProposals() {
+  if (!STATE.trader) return;
+  try {
+    const r = await fetch(API_BASE + '/api/otc/proposals/' + encodeURIComponent(STATE.trader.trader_name));
+    const d = await r.json();
+    if (d.success) {
+      _otcProposals = { received: d.received || [], sent: d.sent || [] };
+      renderOtcProposals();
+    }
+  } catch(e) {}
+}
+
+function renderOtcProposals() {
+  const section = document.getElementById('otcProposalsSection');
+  const body = document.getElementById('otcProposalsBody');
+  const countEl = document.getElementById('otcProposalCount');
+  if (!section || !body) return;
+
+  const total = _otcProposals.received.length + _otcProposals.sent.length;
+  if (total === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  if (countEl) countEl.textContent = '(' + total + ' pending)';
+
+  let html = '';
+
+  // Received proposals (need action)
+  _otcProposals.received.forEach(p => {
+    const td = p.trade_data;
+    const mirrorDir = td.direction === 'BUY' ? 'SELL' : 'BUY';
+    const dirColor = mirrorDir === 'BUY' ? 'var(--green)' : 'var(--red)';
+    const age = formatAge(Date.now() - new Date(p.created_at).getTime());
+    html += `<div class="otc-proposal">
+      <div>
+        <div class="otc-from">${p.from_name}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${age} ago</div>
+      </div>
+      <div class="otc-details">
+        Proposes you <strong style="color:${dirColor}">${mirrorDir}</strong>
+        <strong>${parseFloat(td.volume).toLocaleString()}</strong> ${td.hub}
+        @ <strong>$${parseFloat(td.entryPrice).toFixed(3)}</strong>
+        <span style="color:var(--text-muted)">[${td.type}]</span>
+        ${p.message ? '<br><em style="color:var(--text-muted)">"' + p.message + '"</em>' : ''}
+      </div>
+      <div class="otc-actions">
+        <button class="btn btn-sm" style="background:rgba(16,185,129,0.15);color:var(--green);border-color:rgba(16,185,129,0.3)" onclick="acceptOtcProposal(${p.id})">Accept</button>
+        <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:var(--red);border-color:rgba(239,68,68,0.3)" onclick="rejectOtcProposal(${p.id})">Reject</button>
+      </div>
+    </div>`;
+  });
+
+  // Sent proposals (waiting)
+  _otcProposals.sent.forEach(p => {
+    const td = p.trade_data;
+    const dirColor = td.direction === 'BUY' ? 'var(--green)' : 'var(--red)';
+    html += `<div class="otc-proposal" style="opacity:0.7">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">Sent to</div>
+        <div class="otc-from">${p.to_name}</div>
+      </div>
+      <div class="otc-details">
+        <strong style="color:${dirColor}">${td.direction}</strong>
+        <strong>${parseFloat(td.volume).toLocaleString()}</strong> ${td.hub}
+        @ <strong>$${parseFloat(td.entryPrice).toFixed(3)}</strong>
+        <span style="color:var(--text-muted)">[${td.type}] — awaiting response</span>
+      </div>
+      <div class="otc-actions">
+        <button class="btn btn-sm btn-ghost" style="color:var(--text-muted)" onclick="withdrawOtcProposal(${p.id})">Withdraw</button>
+      </div>
+    </div>`;
+  });
+
+  body.innerHTML = html;
+}
+
+async function acceptOtcProposal(id) {
+  if (!STATE.trader) return;
+  try {
+    const r = await fetch(API_BASE + '/api/otc/proposals/' + STATE.trader.trader_name + '/' + id + '/accept', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast('OTC trade accepted — position added to your book', 'success');
+      playSound('trade');
+      loadOtcProposals();
+      if (typeof syncTradesFromServer === 'function') syncTradesFromServer();
+    } else {
+      toast(d.error || 'Failed to accept', 'error');
+    }
+  } catch(e) { toast('Failed to accept proposal', 'error'); }
+}
+
+async function rejectOtcProposal(id) {
+  if (!STATE.trader) return;
+  try {
+    const r = await fetch(API_BASE + '/api/otc/proposals/' + STATE.trader.trader_name + '/' + id + '/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast('OTC proposal rejected', 'info');
+      loadOtcProposals();
+    }
+  } catch(e) { toast('Failed to reject proposal', 'error'); }
+}
+
+async function withdrawOtcProposal(id) {
+  if (!STATE.trader) return;
+  if (!confirm('Withdraw this OTC proposal?')) return;
+  try {
+    const r = await fetch(API_BASE + '/api/otc/proposals/' + STATE.trader.trader_name + '/' + id + '/withdraw', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast('OTC proposal withdrawn', 'info');
+      loadOtcProposals();
+    }
+  } catch(e) { toast('Failed to withdraw proposal', 'error'); }
+}

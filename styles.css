@@ -118,6 +118,33 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .order-badge.pending{background:rgba(139,92,246,0.15);color:#8b5cf6}
 .order-badge.filled{background:rgba(16,185,129,0.15);color:var(--green)}
 
+/* Sector badge */
+.sector-badge{font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:0.5px;border:1px solid;background:transparent}
+
+/* Blotter table enhancements */
+.blotter-tbl th{font-size:10px;padding:6px 8px;cursor:default}
+.blotter-tbl th.sortable{cursor:pointer;user-select:none;position:relative}
+.blotter-tbl th.sortable:hover{color:var(--accent)}
+.blotter-tbl th.sort-asc::after{content:' \25B2';font-size:8px;color:var(--accent)}
+.blotter-tbl th.sort-desc::after{content:' \25BC';font-size:8px;color:var(--accent)}
+.blotter-tbl td{padding:6px 8px;font-size:12px;vertical-align:top}
+.blotter-row{cursor:pointer;transition:background 0.1s}
+
+/* Expandable detail row */
+.blotter-detail{display:none}
+.blotter-detail.expanded{display:table-row}
+.blotter-detail td{padding:0 8px 10px;background:var(--surface2);border-bottom:2px solid var(--border2)}
+.bdet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 16px;padding:10px 4px;font-size:11px}
+.bdet-item{display:flex;gap:6px;padding:2px 0}
+.bdet-label{font-weight:600;color:var(--accent);min-width:85px;flex-shrink:0}
+.bdet-notes{grid-column:1/-1}
+
+/* OTC proposal card */
+.otc-proposal{background:var(--surface);border:1px solid rgba(139,92,246,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.otc-proposal .otc-from{font-weight:600;color:var(--text);font-size:13px}
+.otc-proposal .otc-details{flex:1;font-size:12px;color:var(--text-dim)}
+.otc-proposal .otc-actions{display:flex;gap:6px}
+
 /* Intraday chart indicator */
 .chart-timeframe{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);margin-left:8px}
 .chart-timeframe .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}

@@ -67,7 +67,8 @@ def get_otc_counterparties(trader):
     } for r in rows]})
 
 @misc_bp.route('/api/trades/otc/<trader>', methods=['POST'])
-def submit_otc_trade(trader):
+def submit_otc_proposal(trader):
+    """Create an OTC trade proposal for the counterparty to accept/reject."""
     db = get_db()
     data = request.get_json()
     me = db.execute("SELECT * FROM traders WHERE trader_name=? AND status='ACTIVE'", (trader,)).fetchone()
@@ -82,45 +83,164 @@ def submit_otc_trade(trader):
     if me['team_id'] and cpty['team_id'] and me['team_id'] == cpty['team_id']:
         return jsonify({'success': False, 'error': 'OTC trades must be with a different team'}), 400
 
-    entry_price = float(data.get('entryPrice', 0))
-    volume = float(data.get('volume', 0))
-    direction = data.get('direction', '')
+    trade_data = {
+        'type': data.get('type', 'SWAP'), 'direction': data.get('direction', ''),
+        'hub': data.get('hub', ''), 'volume': float(data.get('volume', 0)),
+        'entryPrice': float(data.get('entryPrice', 0)),
+        'spotRef': float(data.get('spotRef', 0)),
+        'sector': data.get('sector', ''), 'deliveryMonth': data.get('deliveryMonth', ''),
+        'venue': 'OTC', 'notes': data.get('notes', ''),
+        'settlementType': data.get('settlementType', 'FINANCIAL'),
+        'broker': data.get('broker', ''),
+    }
+    msg = data.get('proposalMessage', '')
+    cur = db.execute("INSERT INTO otc_proposals (from_trader, to_trader, trade_data, message) VALUES (?,?,?,?)",
+                     (trader, cpty_name, json.dumps(trade_data), msg))
+    proposal_id = cur.lastrowid
+    db.commit()
+
+    # Notify counterparty via socket
+    me_name = me['display_name']
+    direction = trade_data['direction']
+    volume = trade_data['volume']
+    hub = trade_data['hub']
+    price = trade_data['entryPrice']
+    socketio.emit('otc_proposal', {
+        'id': proposal_id, 'from_trader': trader, 'from_name': me_name,
+        'to_trader': cpty_name, 'direction': direction, 'volume': volume,
+        'hub': hub, 'price': price, 'type': trade_data['type'],
+    })
+
+    return jsonify({'success': True, 'proposal_id': proposal_id})
+
+
+@misc_bp.route('/api/otc/proposals/<trader>', methods=['GET'])
+def get_otc_proposals(trader):
+    """Get pending OTC proposals for a trader (both sent and received)."""
+    db = get_db()
+    received = db.execute(
+        "SELECT p.*, t.display_name as from_display FROM otc_proposals p "
+        "JOIN traders t ON t.trader_name=p.from_trader "
+        "WHERE p.to_trader=? AND p.status='PENDING' ORDER BY p.created_at DESC", (trader,)
+    ).fetchall()
+    sent = db.execute(
+        "SELECT p.*, t.display_name as to_display FROM otc_proposals p "
+        "JOIN traders t ON t.trader_name=p.to_trader "
+        "WHERE p.from_trader=? AND p.status='PENDING' ORDER BY p.created_at DESC", (trader,)
+    ).fetchall()
+    return jsonify({
+        'success': True,
+        'received': [{'id': r['id'], 'from_trader': r['from_trader'], 'from_name': r['from_display'],
+                       'trade_data': json.loads(r['trade_data']), 'message': r['message'],
+                       'created_at': r['created_at']} for r in received],
+        'sent': [{'id': s['id'], 'to_trader': s['to_trader'], 'to_name': s['to_display'],
+                   'trade_data': json.loads(s['trade_data']), 'message': s['message'],
+                   'created_at': s['created_at']} for s in sent],
+    })
+
+
+@misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/accept', methods=['POST'])
+def accept_otc_proposal(trader, proposal_id):
+    """Accept an OTC proposal — creates both trades."""
+    db = get_db()
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND to_trader=? AND status='PENDING'",
+                      (proposal_id, trader)).fetchone()
+    if not prop:
+        return jsonify({'success': False, 'error': 'Proposal not found or already resolved'}), 404
+
+    td = json.loads(prop['trade_data'])
+    from_trader = prop['from_trader']
+    me = db.execute("SELECT * FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    initiator = db.execute("SELECT * FROM traders WHERE trader_name=?", (from_trader,)).fetchone()
+    if not me or not initiator:
+        return jsonify({'success': False, 'error': 'Trader not found'}), 404
+
+    entry_price = td['entryPrice']
+    volume = td['volume']
+    direction = td['direction']
     mirror_direction = 'SELL' if direction == 'BUY' else 'BUY'
 
-    trade_data = {
-        'type': data.get('type', 'SWAP'), 'direction': direction, 'hub': data.get('hub', ''),
-        'volume': volume, 'entryPrice': entry_price, 'spotRef': float(data.get('spotRef', entry_price)),
-        'venue': 'OTC', 'counterparty': cpty['display_name'], 'counterpartyTrader': cpty_name,
-        'otcMirrorOf': None, 'deliveryMonth': data.get('deliveryMonth', ''),
-        'notes': data.get('notes', ''), 'status': 'OPEN', 'timestamp': datetime.utcnow().isoformat(),
+    # Create initiator's trade
+    init_trade = {
+        'type': td['type'], 'direction': direction, 'hub': td['hub'],
+        'volume': volume, 'entryPrice': entry_price, 'spotRef': td.get('spotRef', entry_price),
+        'venue': 'OTC', 'counterparty': me['display_name'], 'counterpartyTrader': trader,
+        'otcMirrorOf': None, 'deliveryMonth': td.get('deliveryMonth', ''),
+        'sector': td.get('sector', ''), 'notes': td.get('notes', ''),
+        'status': 'OPEN', 'timestamp': datetime.utcnow().isoformat(),
+        'settlementType': td.get('settlementType', 'FINANCIAL'),
+        'broker': td.get('broker', ''),
     }
-    cur = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)", (trader, json.dumps(trade_data)))
-    my_trade_id = cur.lastrowid
+    cur = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
+                     (from_trader, json.dumps(init_trade)))
+    init_id = cur.lastrowid
 
-    mirror_data = dict(trade_data)
-    mirror_data['direction'] = mirror_direction
-    mirror_data['counterparty'] = me['display_name']
-    mirror_data['counterpartyTrader'] = trader
-    mirror_data['otcMirrorOf'] = my_trade_id
-    mirror_data['notes'] = f'OTC mirror — initiated by {me["display_name"]}'
-    cur2 = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)", (cpty_name, json.dumps(mirror_data)))
+    # Create mirror trade for acceptor
+    mirror_trade = dict(init_trade)
+    mirror_trade['direction'] = mirror_direction
+    mirror_trade['counterparty'] = initiator['display_name']
+    mirror_trade['counterpartyTrader'] = from_trader
+    mirror_trade['otcMirrorOf'] = init_id
+    mirror_trade['notes'] = f'OTC — accepted from {initiator["display_name"]}'
+    cur2 = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
+                      (trader, json.dumps(mirror_trade)))
     mirror_id = cur2.lastrowid
 
-    trade_data['otcMirrorOf'] = mirror_id
-    db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(trade_data), my_trade_id))
+    # Link back
+    init_trade['otcMirrorOf'] = mirror_id
+    db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(init_trade), init_id))
+
+    # Mark proposal accepted
+    db.execute("UPDATE otc_proposals SET status='ACCEPTED', resolved_at=? WHERE id=?",
+               (datetime.utcnow().isoformat(), proposal_id))
     db.commit()
 
     # Trade feed
     me_team = db.execute("SELECT name FROM teams WHERE id=?", (me['team_id'],)).fetchone() if me['team_id'] else None
-    feed_summary = f"{me['display_name']} {direction} {volume:,.0f} {data.get('hub','')} OTC w/ {cpty['display_name']} @ ${entry_price:.4f}"
+    feed_summary = f"{initiator['display_name']} {direction} {volume:,.0f} {td['hub']} OTC w/ {me['display_name']} @ ${entry_price:.4f}"
     db.execute("INSERT INTO trade_feed (trader_name, action, summary, team_name) VALUES (?,?,?,?)",
-               (trader, 'OTC_TRADE', feed_summary, me_team['name'] if me_team else ''))
+               (from_trader, 'OTC_TRADE', feed_summary, me_team['name'] if me_team else ''))
     db.commit()
 
-    socketio.emit('trade_submitted', {'trader_name': trader, 'trade_id': my_trade_id, 'otc': True})
-    socketio.emit('trade_submitted', {'trader_name': cpty_name, 'trade_id': mirror_id, 'otc': True})
+    socketio.emit('trade_submitted', {'trader_name': from_trader, 'trade_id': init_id, 'otc': True})
+    socketio.emit('trade_submitted', {'trader_name': trader, 'trade_id': mirror_id, 'otc': True})
+    socketio.emit('otc_proposal_resolved', {'id': proposal_id, 'status': 'ACCEPTED',
+                                             'from_trader': from_trader, 'to_trader': trader})
     socketio.emit('leaderboard_update', {'reason': 'otc_trade'})
-    return jsonify({'success': True, 'trade_id': my_trade_id, 'mirror_id': mirror_id})
+
+    return jsonify({'success': True, 'trade_id': mirror_id, 'mirror_id': init_id})
+
+
+@misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/reject', methods=['POST'])
+def reject_otc_proposal(trader, proposal_id):
+    """Reject an OTC proposal."""
+    db = get_db()
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND to_trader=? AND status='PENDING'",
+                      (proposal_id, trader)).fetchone()
+    if not prop:
+        return jsonify({'success': False, 'error': 'Proposal not found or already resolved'}), 404
+    db.execute("UPDATE otc_proposals SET status='REJECTED', resolved_at=? WHERE id=?",
+               (datetime.utcnow().isoformat(), proposal_id))
+    db.commit()
+    socketio.emit('otc_proposal_resolved', {'id': proposal_id, 'status': 'REJECTED',
+                                             'from_trader': prop['from_trader'], 'to_trader': trader})
+    return jsonify({'success': True})
+
+
+@misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/withdraw', methods=['POST'])
+def withdraw_otc_proposal(trader, proposal_id):
+    """Withdraw a sent OTC proposal."""
+    db = get_db()
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND from_trader=? AND status='PENDING'",
+                      (proposal_id, trader)).fetchone()
+    if not prop:
+        return jsonify({'success': False, 'error': 'Proposal not found'}), 404
+    db.execute("UPDATE otc_proposals SET status='WITHDRAWN', resolved_at=? WHERE id=?",
+               (datetime.utcnow().isoformat(), proposal_id))
+    db.commit()
+    socketio.emit('otc_proposal_resolved', {'id': proposal_id, 'status': 'WITHDRAWN',
+                                             'from_trader': trader, 'to_trader': prop['to_trader']})
+    return jsonify({'success': True})
 
 
 # ---- OTC Trade Close (auto-close mirror) ----
@@ -411,11 +531,15 @@ def handle_disconnect(reason=None):
     with connections_lock:
         active_connections.discard(sid)
         count = len(active_connections)
+    disconnected_trader = None
     with trader_sids_lock:
         to_remove = [k for k, v in trader_sids.items() if v == sid]
         for k in to_remove:
             del trader_sids[k]
+            disconnected_trader = k
     emit('connection_count', {'count': count}, broadcast=True)
+    if disconnected_trader:
+        socketio.emit('presence_change', {'trader': disconnected_trader, 'online': False})
     logger.info(f"Client disconnected: {sid} (total: {count})")
 
 @socketio.on('register_trader')
@@ -428,7 +552,14 @@ def handle_register_trader(data):
         conn.close()
         with trader_sids_lock:
             trader_sids[trader_name] = request.sid
+        socketio.emit('presence_change', {'trader': trader_name, 'online': True})
         logger.info(f"Trader registered on WS: {trader_name}")
+
+@misc_bp.route('/api/traders/online', methods=['GET'])
+def get_online_traders():
+    with trader_sids_lock:
+        online = list(trader_sids.keys())
+    return jsonify({'success': True, 'online': online})
 
 @socketio.on('request_leaderboard')
 def handle_leaderboard_request():

@@ -8,8 +8,35 @@ let CHAT_STATE = {
   showingPicker: false,
   showingAddMembers: false,
   pollTimer: null,
-  lastMsgId: null
+  lastMsgId: null,
+  onlineTraders: new Set()
 };
+
+function updateChatOnlineStatus() {
+  const el = document.getElementById('chatOnlineStatus');
+  if (!el || !CHAT_STATE.activeConvo) { if(el) el.style.display='none'; return; }
+  if (CHAT_STATE.activeConvo.type !== 'dm') { el.style.display='none'; return; }
+  const other = (CHAT_STATE.activeConvo.members||[]).find(m=>m.trader_name!==STATE.trader.trader_name);
+  if (!other) { el.style.display='none'; return; }
+  const isOnline = CHAT_STATE.onlineTraders.has(other.trader_name);
+  el.style.display = '';
+  el.innerHTML = isOnline
+    ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:3px"></span>Online'
+    : '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#64748b;margin-right:3px"></span>Offline';
+  el.style.color = isOnline ? '#10b981' : '#64748b';
+}
+
+function updateConvoListPresence() {
+  document.querySelectorAll('.chat-convo-item[data-trader]').forEach(el => {
+    const traderName = el.dataset.trader;
+    const dot = el.querySelector('.presence-dot');
+    if (dot) {
+      const isOnline = CHAT_STATE.onlineTraders.has(traderName);
+      dot.style.background = isOnline ? '#10b981' : '#64748b';
+      dot.title = isOnline ? 'Online' : 'Offline';
+    }
+  });
+}
 
 function toggleChat() {
   CHAT_STATE.open = !CHAT_STATE.open;
@@ -69,9 +96,11 @@ function renderConvoList() {
     const unread = c.unread > 0;
     let name = c.name || '';
     let avatarContent = '';
+    let otherTrader = '';
     if(c.type === 'dm') {
       const other = c.members.find(m => m.trader_name !== STATE.trader.trader_name);
       name = other ? other.display_name : 'DM';
+      otherTrader = other ? other.trader_name : '';
       avatarContent = other && other.photo_url ? '<img src="'+other.photo_url+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">' : name.charAt(0).toUpperCase();
     } else if(c.type === 'team') {
       name = '🏢 ' + (c.name || 'Team');
@@ -84,8 +113,9 @@ function renderConvoList() {
     }
     const preview = c.last_msg ? (c.last_sender === STATE.trader.trader_name ? 'You: ' : '') + c.last_msg.substring(0,40) : 'No messages yet';
     const time = c.last_msg_time ? new Date(c.last_msg_time+'Z').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-    return `<div class="chat-convo-item ${isActive?'active':''} ${unread?'unread':''}" onclick="openConvo(${c.id})">
-      <div class="convo-avatar">${avatarContent}</div>
+    const presenceDot = otherTrader ? `<span class="presence-dot" style="position:absolute;bottom:0;right:0;width:8px;height:8px;border-radius:50%;border:2px solid var(--surface);background:${CHAT_STATE.onlineTraders.has(otherTrader)?'#10b981':'#64748b'}" title="${CHAT_STATE.onlineTraders.has(otherTrader)?'Online':'Offline'}"></span>` : '';
+    return `<div class="chat-convo-item ${isActive?'active':''} ${unread?'unread':''}" ${otherTrader?'data-trader="'+otherTrader+'"':''} onclick="openConvo(${c.id})">
+      <div class="convo-avatar" style="position:relative">${avatarContent}${presenceDot}</div>
       <div class="convo-info"><div class="convo-name">${name}</div><div class="convo-preview">${preview}</div></div>
       <div class="convo-meta"><span>${time}</span>${unread?`<span class="convo-unread">${c.unread}</span>`:''}</div>
     </div>`;
@@ -166,6 +196,7 @@ async function openConvo(convId) {
   } else {
     headerAvatar.style.display = 'none';
   }
+  updateChatOnlineStatus();
   await loadMessages(convId);
   if(convo.type !== 'system' && convo.type !== 'admin_inbox') document.getElementById('chatInput').focus();
 }
@@ -668,6 +699,8 @@ function chatShowList() {
   document.getElementById('chatVideoBtn').style.display = 'none';
   document.getElementById('chatHeaderAvatar').style.display = 'none';
   document.getElementById('chatTitle').textContent = 'Messages';
+  const statusEl = document.getElementById('chatOnlineStatus');
+  if (statusEl) statusEl.style.display = 'none';
   loadConversations();
 }
 
@@ -976,7 +1009,40 @@ if(typeof io !== 'undefined') {
       });
       sock.on('trade_submitted', function(data) {
         if(data.otc && data.trader_name === (STATE.trader||{}).trader_name) {
-          toast('OTC trade assigned to your book — check blotter','info');
+          toast('OTC trade executed — position added to your book','info');
+          if (typeof syncTradesFromServer === 'function') syncTradesFromServer();
+        }
+      });
+      sock.on('otc_proposal', function(data) {
+        if(data.to_trader === (STATE.trader||{}).trader_name) {
+          playSound('alert');
+          toast('OTC proposal from ' + data.from_name + ': ' + data.direction + ' ' + parseFloat(data.volume).toLocaleString() + ' ' + data.hub + ' @ $' + parseFloat(data.price).toFixed(3), 'info');
+          if (typeof loadOtcProposals === 'function') loadOtcProposals();
+          // Update notification badge
+          const badge = document.querySelector('.notif-badge');
+          if (badge) {
+            const cur = parseInt(badge.dataset.count || '0');
+            badge.dataset.count = cur + 1;
+            badge.textContent = cur + 1;
+          }
+        }
+        if(data.from_trader === (STATE.trader||{}).trader_name) {
+          // Our proposal was sent successfully — no extra action needed
+        }
+      });
+      sock.on('otc_proposal_resolved', function(data) {
+        if(data.from_trader === (STATE.trader||{}).trader_name) {
+          if (data.status === 'ACCEPTED') {
+            toast('Your OTC proposal was accepted!', 'success');
+            playSound('trade');
+            if (typeof syncTradesFromServer === 'function') syncTradesFromServer();
+          } else if (data.status === 'REJECTED') {
+            toast('Your OTC proposal was rejected', 'error');
+          }
+          if (typeof loadOtcProposals === 'function') loadOtcProposals();
+        }
+        if(data.to_trader === (STATE.trader||{}).trader_name) {
+          if (typeof loadOtcProposals === 'function') loadOtcProposals();
         }
       });
       sock.on('admin_broadcast', async function(data) {
@@ -1003,6 +1069,16 @@ if(typeof io !== 'undefined') {
           renderCurrentPage();
         }
       });
+      sock.on('presence_change', function(data) {
+        if (data.online) CHAT_STATE.onlineTraders.add(data.trader);
+        else CHAT_STATE.onlineTraders.delete(data.trader);
+        updateChatOnlineStatus();
+        updateConvoListPresence();
+      });
+      // Load initial online list
+      fetch(API_BASE + '/api/traders/online').then(r=>r.json()).then(d=>{
+        if(d.success) { CHAT_STATE.onlineTraders = new Set(d.online); updateConvoListPresence(); }
+      }).catch(()=>{});
       // Init voice call socket listeners
       initCallSocketListeners();
     }

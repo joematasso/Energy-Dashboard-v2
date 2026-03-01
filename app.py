@@ -249,6 +249,17 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (trader_name) REFERENCES traders(trader_name)
         );
+
+        CREATE TABLE IF NOT EXISTS otc_proposals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_trader TEXT NOT NULL,
+            to_trader TEXT NOT NULL,
+            trade_data TEXT NOT NULL,
+            status TEXT DEFAULT 'PENDING',
+            message TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP
+        );
     """)
 
     # Insert default admin PIN if not exists
@@ -266,7 +277,7 @@ def init_db():
     try:
         cur.execute("SELECT otc_available FROM traders LIMIT 1")
     except sqlite3.OperationalError:
-        cur.execute("ALTER TABLE traders ADD COLUMN otc_available INTEGER DEFAULT 1")
+        cur.execute("ALTER TABLE traders ADD COLUMN otc_available INTEGER DEFAULT 0")
 
     # Migration: add avatar column to conversations
     try:
