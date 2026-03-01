@@ -126,6 +126,9 @@ function renderRiskPage() {
   if (!open.length) { riskOpen.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px">No open positions</td></tr>'; }
   else { riskOpen.innerHTML = open.map(t => { const spot=getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;const mtm=(spot-parseFloat(t.entryPrice))*parseFloat(t.volume)*dir;return `<tr><td>${t.hub}</td><td style="color:${t.direction==='BUY'?'var(--green)':'var(--red)'};font-weight:700">${t.direction}</td><td class="mono">${parseFloat(t.volume).toLocaleString()}</td><td class="mono ${mtm>=0?'green':'red'}">${mtm>=0?'+':'-'}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>`;}).join(''); }
 
+  // Margin & Exposure
+  renderRiskMargin(open, equity);
+
   // Equity curve
   drawEquityCurve();
   try { initEquityCrosshair(); } catch(e) { console.error('Equity crosshair error:', e); }
@@ -202,6 +205,59 @@ function renderRiskHeatmap(openTrades) {
   }
   html += '</div>';
   container.innerHTML = html;
+}
+
+function renderRiskMargin(openTrades, equity) {
+  const usedMargin = openTrades.reduce((s, t) => s + calcMargin(t), 0);
+  const availMargin = equity - usedMargin;
+  const pct = equity > 0 ? Math.min((usedMargin / equity) * 100, 100) : 0;
+
+  const barEl = document.getElementById('riskMarginBar');
+  const pctEl = document.getElementById('riskMarginPct');
+  const usedEl = document.getElementById('riskMarginUsed');
+  const availEl = document.getElementById('riskMarginAvail');
+  if (barEl) {
+    barEl.style.width = pct.toFixed(1) + '%';
+    barEl.style.background = pct > 80 ? 'var(--red)' : pct > 50 ? '#f59e0b' : 'var(--accent)';
+  }
+  if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
+  if (usedEl) usedEl.textContent = '$' + usedMargin.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (availEl) availEl.textContent = '$' + availMargin.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+  // Sector exposure breakdown
+  const sectorMap = {};
+  openTrades.forEach(t => {
+    const type = t.type || '';
+    const spot = getPrice(t.hub);
+    const vol = parseFloat(t.volume);
+    const dir = t.direction === 'BUY' ? 1 : -1;
+    const exposure = Math.abs(spot * vol);
+    let sector = 'NG';
+    if (type.startsWith('CRUDE') || type === 'EFP' || type === 'OPTION_CL') sector = 'Crude';
+    else if (type.startsWith('FREIGHT')) sector = 'Freight';
+    else if (type.startsWith('NGL')) sector = 'NGLs';
+    else if (type.startsWith('LNG')) sector = 'LNG';
+    else if (typeof POWER_HUBS !== 'undefined' && POWER_HUBS.find(h => h.name === t.hub)) sector = 'Power';
+    else if (typeof AG_HUBS !== 'undefined' && AG_HUBS.find(h => h.name === t.hub)) sector = 'Ag';
+    else if (typeof METALS_HUBS !== 'undefined' && METALS_HUBS.find(h => h.name === t.hub)) sector = 'Metals';
+    sectorMap[sector] = (sectorMap[sector] || 0) + exposure;
+  });
+
+  const expEl = document.getElementById('riskSectorExposure');
+  if (!expEl) return;
+  const sectors = Object.entries(sectorMap).sort((a, b) => b[1] - a[1]);
+  const totalExp = sectors.reduce((s, [, v]) => s + v, 0) || 1;
+  const colors = { NG: '#22d3ee', Crude: '#f59e0b', Power: '#a78bfa', Freight: '#fb923c', NGLs: '#34d399', LNG: '#60a5fa', Ag: '#84cc16', Metals: '#e879f9' };
+
+  if (!sectors.length) {
+    expEl.innerHTML = '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No open positions</div>';
+    return;
+  }
+  expEl.innerHTML = sectors.map(([name, exp]) => {
+    const w = ((exp / totalExp) * 100).toFixed(1);
+    const c = colors[name] || 'var(--accent)';
+    return `<div style="display:flex;align-items:center;gap:8px"><span style="width:48px;font-size:11px;font-weight:600;color:var(--text-muted)">${name}</span><div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${w}%;background:${c};border-radius:3px"></div></div><span class="mono" style="font-size:10px;color:var(--text-muted);min-width:55px;text-align:right">$${(exp/1000).toFixed(0)}k</span></div>`;
+  }).join('');
 }
 
 function setEqRange(range, btn) {

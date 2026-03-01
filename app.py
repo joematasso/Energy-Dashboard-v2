@@ -50,7 +50,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'energydesk-v3-secret')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 DATABASE = os.environ.get('DB_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energydesk.db'))
-EIA_API_KEY  = os.environ.get('EIA_API_KEY', '')
+EIA_API_KEY  = os.environ.get('EIA_API_KEY', 'gy5wa7bBT1fQGFkomilxjR1XN8Rs889yG9D0n2HT')
 FRED_API_KEY = os.environ.get('FRED_API_KEY', '')   # optional — register free at fred.stlouisfed.org/docs/api/api_key.html
 
 # Logging
@@ -71,6 +71,10 @@ EIA_CACHE_TTL = 3600  # 1 hour
 # Active connections
 active_connections = set()
 connections_lock = Lock()
+
+# Trader name → socket ID mapping (for call signaling)
+trader_sids = {}
+trader_sids_lock = Lock()
 
 # ---------------------------------------------------------------------------
 # Database Helpers

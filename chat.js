@@ -118,6 +118,7 @@ async function openConvo(convId) {
   document.getElementById('chatNewGroupBtn').style.display = 'none';
   document.getElementById('chatRenameBtn').style.display = convo.type === 'group' ? 'block' : 'none';
   document.getElementById('chatAddMembersBtn').style.display = convo.type === 'group' ? 'block' : 'none';
+  document.getElementById('chatCallBtn').style.display = convo.type === 'dm' ? 'block' : 'none';
   let name = convo.name;
   if(convo.type==='dm') {
     const other = convo.members.find(m=>m.trader_name!==STATE.trader.trader_name);
@@ -579,6 +580,7 @@ function chatShowList() {
   document.getElementById('chatNewGroupBtn').style.display = 'block';
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
+  document.getElementById('chatCallBtn').style.display = 'none';
   document.getElementById('chatHeaderAvatar').style.display = 'none';
   document.getElementById('chatTitle').textContent = 'Messages';
   loadConversations();
@@ -716,6 +718,7 @@ async function chatNewConvo() {
   document.getElementById('chatBackBtn').style.display = 'none';
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
+  document.getElementById('chatCallBtn').style.display = 'none';
   CHAT_STATE.activeConvo = null;
   CHAT_STATE.showingPicker = true;
   let traders = [];
@@ -752,6 +755,7 @@ function chatNewGroup() {
   document.getElementById('chatBackBtn').style.display = 'none';
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
+  document.getElementById('chatCallBtn').style.display = 'none';
   CHAT_STATE.activeConvo = null;
   CHAT_STATE.showingPicker = true;
   const list = document.getElementById('chatConvoList');
@@ -820,10 +824,18 @@ async function pollChat() {
 }
 
 // Listen for real-time messages via socketio
+var socket = null; // global for call system
 if(typeof io !== 'undefined') {
   try {
     const sock = io ? io() : null;
+    socket = sock;
     if(sock) {
+      // Register trader name → sid mapping on connect (for call routing)
+      sock.on('connect', function() {
+        if (STATE.trader && STATE.trader.trader_name) {
+          sock.emit('register_trader', { trader_name: STATE.trader.trader_name });
+        }
+      });
       sock.on('new_message', function(data) {
         // Ignore own messages
         if(data.sender === (STATE.trader||{}).trader_name) {
@@ -904,6 +916,8 @@ if(typeof io !== 'undefined') {
           renderCurrentPage();
         }
       });
+      // Init voice call socket listeners
+      initCallSocketListeners();
     }
   } catch(e) {}
 }
@@ -939,6 +953,10 @@ function initChat() {
     document.getElementById('chatTab').style.display = 'none';
     var hcb = document.getElementById('headerChatBtn'); if(hcb) hcb.style.display = STATE.trader ? 'flex' : 'none';
   } catch(e) {}
+  // Register trader on socket for call routing
+  if(STATE.trader && socket && socket.connected) {
+    socket.emit('register_trader', { trader_name: STATE.trader.trader_name });
+  }
   // Load conversations immediately so badge shows
   if(STATE.trader) {
     fetch(API_BASE+'/api/chat/conversations/'+encodeURIComponent(STATE.trader.trader_name))
@@ -957,4 +975,277 @@ function initChat() {
   }, 15000);
 }
 
+
+/* =====================================================================
+   VOICE CALL SYSTEM (WebRTC)
+   ===================================================================== */
+const CALL_STATE = {
+  active: false,
+  peer: null,         // RTCPeerConnection
+  localStream: null,
+  remoteTarget: null,  // trader name of the other party
+  isCaller: false,
+  muted: false,
+  timerInterval: null,
+  startTime: null,
+  incomingOffer: null,
+  incomingCaller: null
+};
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+];
+
+function getCallTargetName() {
+  // Get the other person in the active DM conversation
+  const convo = CHAT_STATE.conversations.find(c => c.id === CHAT_STATE.activeConvo);
+  if (!convo || !convo.members) return null;
+  const me = STATE.trader ? STATE.trader.trader_name : '';
+  const others = convo.members.filter(m => m !== me);
+  return others.length === 1 ? others[0] : null;
+}
+
+async function startVoiceCall() {
+  if (CALL_STATE.active) { toast('Already in a call', 'error'); return; }
+  const target = getCallTargetName();
+  if (!target) { toast('Voice calls only work in DM conversations', 'error'); return; }
+
+  try {
+    CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch(e) {
+    toast('Microphone access denied', 'error');
+    return;
+  }
+
+  CALL_STATE.active = true;
+  CALL_STATE.isCaller = true;
+  CALL_STATE.remoteTarget = target;
+  CALL_STATE.muted = false;
+
+  showCallOverlay('Calling...', target);
+
+  // Create peer connection
+  CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
+
+  CALL_STATE.peer.onicecandidate = (e) => {
+    if (e.candidate && typeof socket !== 'undefined') {
+      socket.emit('call_ice', { target, candidate: e.candidate, from: STATE.trader.trader_name });
+    }
+  };
+
+  CALL_STATE.peer.ontrack = (e) => {
+    const audio = new Audio();
+    audio.srcObject = e.streams[0];
+    audio.play().catch(() => {});
+  };
+
+  CALL_STATE.peer.onconnectionstatechange = () => {
+    if (CALL_STATE.peer && (CALL_STATE.peer.connectionState === 'disconnected' || CALL_STATE.peer.connectionState === 'failed')) {
+      endVoiceCall();
+    }
+  };
+
+  const offer = await CALL_STATE.peer.createOffer();
+  await CALL_STATE.peer.setLocalDescription(offer);
+
+  if (typeof socket !== 'undefined') {
+    socket.emit('call_initiate', {
+      caller: STATE.trader.trader_name,
+      callee: target,
+      offer: CALL_STATE.peer.localDescription
+    });
+  }
+}
+
+async function acceptVoiceCall() {
+  if (!CALL_STATE.incomingOffer || !CALL_STATE.incomingCaller) return;
+
+  try {
+    CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch(e) {
+    toast('Microphone access denied', 'error');
+    rejectVoiceCall();
+    return;
+  }
+
+  CALL_STATE.active = true;
+  CALL_STATE.isCaller = false;
+  CALL_STATE.remoteTarget = CALL_STATE.incomingCaller;
+  CALL_STATE.muted = false;
+
+  // Hide incoming notification
+  document.getElementById('callIncoming').style.display = 'none';
+
+  showCallOverlay('Connecting...', CALL_STATE.remoteTarget);
+
+  // Create peer connection
+  CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  CALL_STATE.localStream.getTracks().forEach(t => CALL_STATE.peer.addTrack(t, CALL_STATE.localStream));
+
+  CALL_STATE.peer.onicecandidate = (e) => {
+    if (e.candidate && typeof socket !== 'undefined') {
+      socket.emit('call_ice', { target: CALL_STATE.remoteTarget, candidate: e.candidate, from: STATE.trader.trader_name });
+    }
+  };
+
+  CALL_STATE.peer.ontrack = (e) => {
+    const audio = new Audio();
+    audio.srcObject = e.streams[0];
+    audio.play().catch(() => {});
+    // Call connected
+    document.getElementById('callStatus').textContent = 'Connected';
+    startCallTimer();
+  };
+
+  CALL_STATE.peer.onconnectionstatechange = () => {
+    if (CALL_STATE.peer && (CALL_STATE.peer.connectionState === 'disconnected' || CALL_STATE.peer.connectionState === 'failed')) {
+      endVoiceCall();
+    }
+  };
+
+  await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(CALL_STATE.incomingOffer));
+  const answer = await CALL_STATE.peer.createAnswer();
+  await CALL_STATE.peer.setLocalDescription(answer);
+
+  if (typeof socket !== 'undefined') {
+    socket.emit('call_answer', {
+      caller: CALL_STATE.incomingCaller,
+      callee: STATE.trader.trader_name,
+      answer: CALL_STATE.peer.localDescription
+    });
+  }
+
+  CALL_STATE.incomingOffer = null;
+  CALL_STATE.incomingCaller = null;
+}
+
+function rejectVoiceCall() {
+  document.getElementById('callIncoming').style.display = 'none';
+  if (typeof socket !== 'undefined' && CALL_STATE.incomingCaller) {
+    socket.emit('call_reject', { caller: CALL_STATE.incomingCaller, callee: STATE.trader ? STATE.trader.trader_name : '' });
+  }
+  CALL_STATE.incomingOffer = null;
+  CALL_STATE.incomingCaller = null;
+}
+
+function endVoiceCall() {
+  if (CALL_STATE.peer) {
+    CALL_STATE.peer.close();
+    CALL_STATE.peer = null;
+  }
+  if (CALL_STATE.localStream) {
+    CALL_STATE.localStream.getTracks().forEach(t => t.stop());
+    CALL_STATE.localStream = null;
+  }
+  if (CALL_STATE.timerInterval) {
+    clearInterval(CALL_STATE.timerInterval);
+    CALL_STATE.timerInterval = null;
+  }
+  if (typeof socket !== 'undefined' && CALL_STATE.remoteTarget) {
+    socket.emit('call_end', { target: CALL_STATE.remoteTarget, from: STATE.trader ? STATE.trader.trader_name : '' });
+  }
+
+  CALL_STATE.active = false;
+  CALL_STATE.remoteTarget = null;
+  CALL_STATE.muted = false;
+  CALL_STATE.startTime = null;
+
+  document.getElementById('callOverlay').style.display = 'none';
+}
+
+function toggleCallMute() {
+  CALL_STATE.muted = !CALL_STATE.muted;
+  if (CALL_STATE.localStream) {
+    CALL_STATE.localStream.getAudioTracks().forEach(t => { t.enabled = !CALL_STATE.muted; });
+  }
+  const btn = document.getElementById('callMuteBtn');
+  if (btn) btn.classList.toggle('active', CALL_STATE.muted);
+}
+
+function showCallOverlay(status, name) {
+  document.getElementById('callStatus').textContent = status;
+  document.getElementById('callName').textContent = name;
+  document.getElementById('callTimer').style.display = 'none';
+  document.getElementById('callOverlay').style.display = 'flex';
+  const muteBtn = document.getElementById('callMuteBtn');
+  if (muteBtn) muteBtn.classList.remove('active');
+}
+
+function startCallTimer() {
+  CALL_STATE.startTime = Date.now();
+  const timerEl = document.getElementById('callTimer');
+  timerEl.style.display = 'block';
+  CALL_STATE.timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - CALL_STATE.startTime) / 1000);
+    const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    timerEl.textContent = m + ':' + s;
+  }, 1000);
+}
+
+// Socket listeners for call events
+function initCallSocketListeners() {
+  if (typeof socket === 'undefined') return;
+
+  socket.on('call_incoming', (data) => {
+    if (CALL_STATE.active) {
+      // Already in a call, auto-reject
+      socket.emit('call_reject', { caller: data.caller, callee: STATE.trader ? STATE.trader.trader_name : '' });
+      return;
+    }
+    CALL_STATE.incomingCaller = data.caller;
+    CALL_STATE.incomingOffer = data.offer;
+    document.getElementById('callIncomingName').textContent = data.caller;
+    document.getElementById('callIncoming').style.display = 'block';
+    // Auto-dismiss after 30s
+    setTimeout(() => {
+      if (CALL_STATE.incomingCaller === data.caller) rejectVoiceCall();
+    }, 30000);
+  });
+
+  socket.on('call_answered', async (data) => {
+    if (!CALL_STATE.peer) return;
+    await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+    document.getElementById('callStatus').textContent = 'Connected';
+    startCallTimer();
+  });
+
+  socket.on('call_ice', async (data) => {
+    if (!CALL_STATE.peer) return;
+    try {
+      await CALL_STATE.peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch(e) { /* ignore */ }
+  });
+
+  socket.on('call_ended', () => {
+    if (CALL_STATE.active) {
+      toast('Call ended', 'info');
+      endVoiceCallLocal();
+    }
+  });
+
+  socket.on('call_rejected', (data) => {
+    toast((data.callee || 'User') + ' declined the call', 'info');
+    endVoiceCallLocal();
+  });
+
+  socket.on('call_error', (data) => {
+    toast(data.error || 'Call failed', 'error');
+    endVoiceCallLocal();
+  });
+}
+
+function endVoiceCallLocal() {
+  // Cleanup without sending signal back
+  if (CALL_STATE.peer) { CALL_STATE.peer.close(); CALL_STATE.peer = null; }
+  if (CALL_STATE.localStream) { CALL_STATE.localStream.getTracks().forEach(t => t.stop()); CALL_STATE.localStream = null; }
+  if (CALL_STATE.timerInterval) { clearInterval(CALL_STATE.timerInterval); CALL_STATE.timerInterval = null; }
+  CALL_STATE.active = false;
+  CALL_STATE.remoteTarget = null;
+  CALL_STATE.muted = false;
+  CALL_STATE.startTime = null;
+  document.getElementById('callOverlay').style.display = 'none';
+}
 

@@ -95,27 +95,28 @@ const HUB_POSITIONS = {
 
 // Pipeline routes (Mercator projected from real lat/lon)
 const PIPELINES = [
-  // === NG PIPELINES ===
-  { name:'Transco', points:'241,212 249,208 261,201 272,194 281,187 289,180 294,176', color:'#22d3ee', sector:'ng' },
-  { name:'Tennessee Gas', points:'241,212 250,206 262,199 275,189 286,180 297,173 303,170', color:'#ef4444', sector:'ng' },
-  { name:'Kern River', points:'194,172 186,179 178,186 172,191 169,195', color:'#0ea5e9', sector:'ng' },
-  { name:'Rockies Express', points:'194,172 206,173 219,174 233,174 244,173 257,172', color:'#10b981', sector:'ng' },
-  { name:'Alliance', points:'185,123 194,139 206,148 222,160 239,167 257,172', color:'#06b6d4', sector:'ng' },
+  // === NG PIPELINES (routes derived from GeoJSON feature data) ===
+  { name:'Transco', points:'212,210 227,220 229,216 236,212 243,211 248,213 255,211 284,185 292,178 295,177 298,176', color:'#22d3ee', sector:'ng' },
+  { name:'Tennessee Gas', points:'241,212 250,206 257,194 262,191 267,194 272,189 280,191 297,173 303,170', color:'#ef4444', sector:'ng' },
+  { name:'Kern River', points:'191,171 186,179 180,188 176,194 169,196 164,195', color:'#0ea5e9', sector:'ng' },
+  { name:'Rockies Express', points:'197,178 201,172 206,175 216,175 227,177 236,180 245,181 277,178', color:'#10b981', sector:'ng' },
+  { name:'Alliance', points:'157,105 161,110 164,111 165,113 170,118 173,120 180,121 190,126 231,155 257,172', color:'#06b6d4', sector:'ng' },
   { name:'Texas Eastern', points:'241,212 247,208 258,201 269,193 278,186 286,178', color:'#e11d48', sector:'ng' },
   { name:'Northwest', points:'194,172 186,167 175,160 167,152 160,143', color:'#f97316', sector:'ng' },
   { name:'El Paso', points:'212,208 203,204 192,203 181,201 172,199', color:'#a78bfa', sector:'ng' },
   { name:'Algonquin Lateral', points:'294,176 299,173 303,170', color:'#ec4899', sector:'ng' },
   { name:'Dawn-Chicago', points:'274,168 267,169 257,172', color:'#84cc16', sector:'ng' },
-  // === CRUDE PIPELINES ===
-  { name:'Keystone', points:'185,123 200,137 212,148 228,160 232,175 232,186 231,193 232,203 238,213', color:'#22d3ee', sector:'crude' },
-  { name:'DAPL', points:'212,148 219,154 229,164 236,171 242,175 246,179', color:'#84cc16', sector:'crude' },
-  { name:'Seaway', points:'231,193 233,201 236,208 238,213', color:'#f59e0b', sector:'crude' },
+  // === CRUDE PIPELINES (routes derived from GeoJSON feature data) ===
+  { name:'Keystone', points:'185,123 200,137 212,148 229,183 229,190 231,193 238,213', color:'#22d3ee', sector:'crude' },
+  { name:'DAPL', points:'207,143 212,146 218,144 224,146 232,148 235,149', color:'#84cc16', sector:'crude' },
+  { name:'Seaway', points:'230,195 231,200 232,208 233,213 234,216', color:'#f59e0b', sector:'crude' },
   { name:'Permian Express', points:'216,206 222,208 229,209 235,211 238,213', color:'#a78bfa', sector:'crude' },
-  { name:'Alberta Clipper', points:'185,123 206,139 228,148 244,156 256,162', color:'#ec4899', sector:'crude' },
-  { name:'Capline', points:'249,213 250,206 251,198 253,189 254,179', color:'#f97316', sector:'crude' },
+  { name:'Alberta Clipper', points:'185,123 206,139 228,148 244,152 254,167 257,172', color:'#ec4899', sector:'crude' },
+  { name:'Capline', points:'248,213 249,207 250,199 251,198 253,185', color:'#f97316', sector:'crude' },
+  { name:'Colonial', points:'235,214 251,213 260,192 268,193 279,192 287,188 289,181 292,179 296,176', color:'#e11d48', sector:'crude' },
   { name:'Longhorn', points:'216,206 229,211', color:'#10b981', sector:'crude' },
   { name:'TAPS', points:'88,24 86,63', color:'#ef4444', sector:'crude' },
-  { name:'Trans Mountain', points:'158,142 167,141 175,137 181,133 185,123', color:'#06b6d4', sector:'crude' },
+  { name:'Trans Mountain', points:'153,141 157,142 160,138 162,133 165,130 168,124 181,122', color:'#06b6d4', sector:'crude' },
   // === INTERNATIONAL CRUDE PIPELINES ===
   { name:'Druzhba', points:'660,126 630,128 599,129 575,128 555,126', color:'#6366f1', sector:'crude' },
   { name:'BTC', points:'659,179 651,175 644,173 632,180 618,189', color:'#fbbf24', sector:'crude' },
@@ -143,7 +144,7 @@ const PIPE_LEGENDS = {
     { name:'Keystone', color:'#22d3ee' }, { name:'DAPL', color:'#84cc16' },
     { name:'Seaway', color:'#f59e0b' }, { name:'Permian Express', color:'#a78bfa' },
     { name:'Alberta Clipper', color:'#ec4899' }, { name:'Capline', color:'#f97316' },
-    { name:'Trans Mountain', color:'#06b6d4' }, { name:'Druzhba', color:'#6366f1' },
+    { name:'Colonial', color:'#e11d48' }, { name:'Trans Mountain', color:'#06b6d4' }, { name:'Druzhba', color:'#6366f1' },
     { name:'BTC', color:'#fbbf24' }, { name:'ESPO', color:'#f43f5e' },
     { name:'East-West', color:'#d97706' }, { name:'SUMED', color:'#14b8a6' }
   ],
@@ -195,6 +196,7 @@ const PIPELINE_INFO = {
   'East-West':         { operator:'Saudi Aramco (Petroline)', length:'746 mi', capacity:'5.0 MMbbl/d', route:'Abqaiq to Yanbu, Saudi Arabia (Red Sea bypass)', diameter:'48-56 in' },
   'ESPO':              { operator:'Transneft', length:'2,694 mi', capacity:'1.6 MMbbl/d', route:'Taishet, Siberia to Kozmino, Pacific (+ China spur)', diameter:'48 in' },
   'Forties':           { operator:'INEOS', length:'140 mi', capacity:'600 Kbbl/d', route:'North Sea platforms to Grangemouth, Scotland', diameter:'32 in' },
+  'Colonial':          { operator:'Colonial Pipeline Co', length:'5,500 mi', capacity:'2.5 MMbbl/d', route:'Houston, TX to Linden, NJ (largest refined products pipeline)', diameter:'36-40 in' },
   'SUMED':             { operator:'Arab Petroleum Pipelines Co', length:'200 mi', capacity:'2.5 MMbbl/d', route:'Ain Sukhna (Red Sea) to Sidi Kerir (Mediterranean), Egypt', diameter:'42 in (twin)' },
   'US Gulf → Asia':    { operator:'Various (Cheniere, Freeport, etc.)', length:'~11,000 nmi', capacity:'~12 Bcf/d US export', route:'Sabine Pass / Cameron / Freeport → Panama Canal → Japan/Korea/China', diameter:'LNG Carrier (160-180K m³)' },
   'US Gulf → Europe':  { operator:'Various', length:'~4,500 nmi', capacity:'~12 Bcf/d US export', route:'Sabine Pass / Cameron → NW Europe (Gate, Grain, Zeebrugge)', diameter:'LNG Carrier (160-180K m³)' },
@@ -437,9 +439,9 @@ function mapZoomAt(sector, dir, e) {
   let newH = z.vh * factor;
   let newZoom = z.baseVw / newW;
 
-  // Clamp zoom 0.5x – 4x (prevent extreme values that cause rendering bugs)
+  // Clamp zoom 0.5x – 8x
   if (newZoom < 0.5) { mapZoomReset(sector); return; }
-  if (newZoom > 4) return; // already at max, ignore
+  if (newZoom > 8) return; // already at max, ignore
 
   // Zoom toward mouse position
   if (e) {

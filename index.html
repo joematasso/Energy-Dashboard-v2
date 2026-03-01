@@ -938,7 +938,7 @@
 
   <!-- ===== RISK ANALYTICS ===== -->
   <div class="page" id="page-risk">
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-bottom:16px">
       <!-- VaR Card -->
       <div class="card">
         <div class="card-header" style="display:flex;align-items:center">Value at Risk<button class="info-btn" onclick="toggleInfo('varInfo',event)">i</button></div>
@@ -967,6 +967,22 @@
           </div>
         </div>
       </div>
+      <!-- Margin & Exposure Card -->
+      <div class="card">
+        <div class="card-header" style="display:flex;align-items:center">Margin & Exposure</div>
+        <div class="card-body">
+          <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:4px"><span>Margin Used</span><span id="riskMarginPct">0%</span></div>
+            <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden"><div id="riskMarginBar" style="height:100%;width:0%;background:var(--accent);border-radius:4px;transition:width 0.3s"></div></div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px">
+              <span class="mono" style="color:var(--text-muted)">Used: <span id="riskMarginUsed">$0</span></span>
+              <span class="mono" style="color:var(--text-muted)">Available: <span id="riskMarginAvail">$0</span></span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600">Sector Exposure</div>
+          <div id="riskSectorExposure" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+      </div>
       <!-- Scenario Analysis -->
       <div class="card">
         <div class="card-header" style="display:flex;align-items:center">Scenario Analysis<button class="info-btn" onclick="toggleInfo('scenInfo',event)">i</button></div>
@@ -978,8 +994,8 @@
         </div></div>
       </div>
     </div>
-    <!-- Open Positions + Heatmap — FULL WIDTH outside the auto-fill grid -->
-    <div class="risk-positions-grid" style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px">
+    <!-- Open Positions + Heatmap -->
+    <div class="risk-positions-grid" style="display:grid;grid-template-columns:1fr 1.5fr;gap:16px;margin-bottom:16px">
       <div class="card">
         <div class="card-header">Open Positions</div>
         <div class="card-body"><div class="table-wrap">
@@ -1291,6 +1307,7 @@
       <button class="chat-new-btn" id="chatNewGroupBtn" onclick="chatNewGroup()" style="font-size:11px;color:var(--text-muted)">+ Group</button>
       <button class="chat-new-btn" id="chatRenameBtn" onclick="chatRenameConvo()" style="display:none;font-size:11px;color:var(--text-muted)">✏ Rename</button>
       <button class="chat-new-btn" id="chatAddMembersBtn" onclick="chatAddMembers()" style="display:none;font-size:11px;color:var(--text-muted)">👥 Add</button>
+      <button class="chat-new-btn" id="chatCallBtn" onclick="startVoiceCall()" style="display:none;font-size:13px;color:var(--green)" title="Voice Call"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
       <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px" onclick="toggleChat()">✕</button>
     </div>
   </div>
@@ -1321,6 +1338,31 @@
         <textarea id="chatInput" rows="1" placeholder="Message… (@ to mention · Shift+↵ for newline)" maxlength="2000" onkeydown="chatInputKeydown(event)" oninput="chatInputChanged()"></textarea>
         <button class="chat-send-btn" onclick="chatSend()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- VOICE CALL OVERLAY -->
+<div id="callOverlay" class="call-overlay" style="display:none">
+  <div class="call-card">
+    <div class="call-status" id="callStatus">Calling...</div>
+    <div class="call-name" id="callName"></div>
+    <div class="call-timer" id="callTimer" style="display:none">00:00</div>
+    <div class="call-controls">
+      <button class="call-btn call-mute" id="callMuteBtn" onclick="toggleCallMute()" title="Mute"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+      <button class="call-btn call-end" onclick="endVoiceCall()" title="End Call"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- INCOMING CALL NOTIFICATION -->
+<div id="callIncoming" class="call-incoming" style="display:none">
+  <div class="call-incoming-card">
+    <div style="font-size:12px;color:var(--text-muted)">Incoming Voice Call</div>
+    <div class="call-incoming-name" id="callIncomingName"></div>
+    <div class="call-incoming-btns">
+      <button class="call-btn call-accept" onclick="acceptVoiceCall()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Accept</button>
+      <button class="call-btn call-reject-btn" onclick="rejectVoiceCall()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Decline</button>
     </div>
   </div>
 </div>

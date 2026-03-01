@@ -13,7 +13,8 @@ from flask import Blueprint, request, jsonify
 from flask_socketio import emit
 
 from app import (get_db, get_db_standalone, logger, socketio,
-                 active_connections, connections_lock)
+                 active_connections, connections_lock,
+                 trader_sids, trader_sids_lock)
 
 misc_bp = Blueprint('misc', __name__)
 
@@ -410,6 +411,10 @@ def handle_disconnect(reason=None):
     with connections_lock:
         active_connections.discard(sid)
         count = len(active_connections)
+    with trader_sids_lock:
+        to_remove = [k for k, v in trader_sids.items() if v == sid]
+        for k in to_remove:
+            del trader_sids[k]
     emit('connection_count', {'count': count}, broadcast=True)
     logger.info(f"Client disconnected: {sid} (total: {count})")
 
@@ -421,11 +426,73 @@ def handle_register_trader(data):
         conn.execute("UPDATE traders SET last_seen=CURRENT_TIMESTAMP WHERE trader_name=?", (trader_name,))
         conn.commit()
         conn.close()
+        with trader_sids_lock:
+            trader_sids[trader_name] = request.sid
         logger.info(f"Trader registered on WS: {trader_name}")
 
 @socketio.on('request_leaderboard')
 def handle_leaderboard_request():
     emit('leaderboard_update', {'reason': 'requested'})
+
+
+# ---------------------------------------------------------------------------
+# Voice Call Signaling (WebRTC)
+# ---------------------------------------------------------------------------
+@socketio.on('call_initiate')
+def handle_call_initiate(data):
+    """Caller sends: { caller, callee, offer (SDP) }"""
+    callee = data.get('callee', '')
+    with trader_sids_lock:
+        callee_sid = trader_sids.get(callee)
+    if callee_sid:
+        emit('call_incoming', {
+            'caller': data.get('caller', ''),
+            'offer': data.get('offer')
+        }, to=callee_sid)
+    else:
+        emit('call_error', {'error': f'{callee} is not online'})
+
+@socketio.on('call_answer')
+def handle_call_answer(data):
+    """Callee sends: { caller, callee, answer (SDP) }"""
+    caller = data.get('caller', '')
+    with trader_sids_lock:
+        caller_sid = trader_sids.get(caller)
+    if caller_sid:
+        emit('call_answered', {
+            'callee': data.get('callee', ''),
+            'answer': data.get('answer')
+        }, to=caller_sid)
+
+@socketio.on('call_ice')
+def handle_call_ice(data):
+    """Relay ICE candidates: { target, candidate }"""
+    target = data.get('target', '')
+    with trader_sids_lock:
+        target_sid = trader_sids.get(target)
+    if target_sid:
+        emit('call_ice', {
+            'candidate': data.get('candidate'),
+            'from': data.get('from', '')
+        }, to=target_sid)
+
+@socketio.on('call_end')
+def handle_call_end(data):
+    """End call: { target }"""
+    target = data.get('target', '')
+    with trader_sids_lock:
+        target_sid = trader_sids.get(target)
+    if target_sid:
+        emit('call_ended', {'from': data.get('from', '')}, to=target_sid)
+
+@socketio.on('call_reject')
+def handle_call_reject(data):
+    """Reject incoming call: { caller }"""
+    caller = data.get('caller', '')
+    with trader_sids_lock:
+        caller_sid = trader_sids.get(caller)
+    if caller_sid:
+        emit('call_rejected', {'callee': data.get('callee', '')}, to=caller_sid)
 
 
 # ---------------------------------------------------------------------------

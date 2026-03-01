@@ -860,3 +860,24 @@ input:focus,select:focus{border-color:var(--accent)}
   .bench-grid{grid-template-columns:1fr!important;gap:6px}
   .bench-card .hub-price{font-size:16px}
 }
+
+/* Voice Call UI */
+.call-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.call-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 40px;text-align:center;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.call-status{font-size:13px;color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase}
+.call-name{font-size:22px;font-weight:700;color:var(--text);margin-bottom:16px}
+.call-timer{font-size:16px;color:var(--accent);font-family:var(--font-mono);margin-bottom:16px}
+.call-controls{display:flex;gap:16px;justify-content:center}
+.call-btn{width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform 0.15s,opacity 0.15s}
+.call-btn:hover{transform:scale(1.1)}
+.call-mute{background:var(--surface2);color:var(--text)}
+.call-mute.active{background:var(--red);color:#fff}
+.call-end{background:var(--red);color:#fff}
+.call-accept{background:var(--green);color:#fff;width:auto;border-radius:24px;padding:0 20px;gap:8px;font-size:13px;font-weight:600}
+.call-reject-btn{background:var(--red);color:#fff;width:auto;border-radius:24px;padding:0 20px;gap:8px;font-size:13px;font-weight:600}
+.call-incoming{position:fixed;top:20px;right:20px;z-index:9998;animation:slideInCall 0.3s ease}
+.call-incoming-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.4);min-width:240px}
+.call-incoming-name{font-size:18px;font-weight:700;color:var(--text);margin:6px 0 12px}
+.call-incoming-btns{display:flex;gap:8px}
+@keyframes slideInCall{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes callPulse{0%,100%{opacity:1}50%{opacity:0.5}}
