@@ -886,30 +886,45 @@ input:focus,select:focus{border-color:var(--accent)}
 
 /* Call UI (Audio + Video) */
 .call-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
-.call-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 40px;text-align:center;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
-.call-overlay.video-mode .call-card{min-width:520px;max-width:90vw;padding:20px 24px}
+.call-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 40px;text-align:center;min-width:280px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.call-overlay.video-mode .call-card{min-width:min(520px,95vw);max-width:90vw;padding:20px 24px}
 .call-avatar-area{display:flex;justify-content:center;margin-bottom:16px}
-.call-avatar-circle{width:80px;height:80px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;animation:callPulse 2s ease-in-out infinite}
+.call-profile-photo{animation:callPulse 2s ease-in-out infinite}
+.call-profile-photo img{display:block}
 .call-video-area{position:relative;width:100%;aspect-ratio:16/9;max-height:60vh;background:#000;border-radius:10px;overflow:hidden;margin-bottom:16px}
 .call-remote-video{width:100%;height:100%;object-fit:cover;background:#111}
 .call-local-video{position:absolute;bottom:12px;right:12px;width:140px;height:105px;object-fit:cover;border-radius:8px;border:2px solid var(--border);background:#111;z-index:2;transition:opacity 0.2s}
+.call-local-video.mirrored{transform:scaleX(-1)}
+.call-flip-btn{position:absolute;bottom:12px;left:12px;z-index:3;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s}
+.call-flip-btn:hover{background:rgba(0,0,0,0.7)}
 .call-status{font-size:13px;color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase}
 .call-name{font-size:22px;font-weight:700;color:var(--text);margin-bottom:16px}
 .call-timer{font-size:16px;color:var(--accent);font-family:var(--font-mono);margin-bottom:16px}
-.call-controls{display:flex;gap:16px;justify-content:center}
+.call-controls{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .call-btn{width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform 0.15s,opacity 0.15s}
 .call-btn:hover{transform:scale(1.1)}
 .call-mute{background:var(--surface2);color:var(--text)}
 .call-mute.active{background:var(--red);color:#fff}
 .call-video-toggle{background:var(--surface2);color:var(--text)}
 .call-video-toggle.active{background:var(--red);color:#fff}
+.call-flip-inline{background:var(--surface2);color:var(--text)}
 .call-end{background:var(--red);color:#fff}
 .call-accept{background:var(--green);color:#fff;width:auto;border-radius:24px;padding:0 20px;gap:8px;font-size:13px;font-weight:600}
 .call-reject-btn{background:var(--red);color:#fff;width:auto;border-radius:24px;padding:0 20px;gap:8px;font-size:13px;font-weight:600}
 .call-incoming{position:fixed;top:20px;right:20px;z-index:9998;animation:slideInCall 0.3s ease}
 .call-incoming-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.4);min-width:240px}
-.call-incoming-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
-.call-incoming-name{font-size:18px;font-weight:700;color:var(--text);margin:6px 0 12px}
+.call-incoming-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.call-incoming-photo{flex-shrink:0}
+.call-incoming-photo img{display:block}
+.call-incoming-name{font-size:16px;font-weight:700;color:var(--text);margin:2px 0 0}
 .call-incoming-btns{display:flex;gap:8px}
 @keyframes slideInCall{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes callPulse{0%,100%{opacity:1}50%{opacity:0.5}}
+@media(max-width:600px){
+  .call-overlay.video-mode .call-card{min-width:unset;width:100%;padding:12px;border-radius:0;border:none}
+  .call-local-video{width:100px;height:75px;bottom:8px;right:8px}
+  .call-card{padding:24px 20px}
+  .call-controls{gap:10px}
+  .call-btn{width:46px;height:46px}
+  .call-name{font-size:18px}
+}

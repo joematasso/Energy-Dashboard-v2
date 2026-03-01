@@ -1068,25 +1068,28 @@ function initChat() {
    ===================================================================== */
 const CALL_STATE = {
   active: false,
-  peer: null,           // RTCPeerConnection
+  peer: null,
   localStream: null,
   remoteStream: null,
-  remoteTarget: null,   // trader name of the other party
+  remoteTarget: null,
+  remotePhoto: null,
   isCaller: false,
   muted: false,
   videoOff: false,
-  callType: 'audio',    // 'audio' or 'video'
+  facingMode: 'user',
+  hasMultipleCameras: false,
+  callType: 'audio',
   timerInterval: null,
   startTime: null,
-  ringTimeout: null,    // caller-side unanswered timeout
-  disconnectTimeout: null, // delay before ending on 'disconnected'
-  iceRestarted: false,  // track if we already tried ICE restart
-  pendingCandidates: [], // buffer ICE candidates before peer is ready
+  ringTimeout: null,
+  disconnectTimeout: null,
+  iceRestarted: false,
+  pendingCandidates: [],
   incomingOffer: null,
   incomingCaller: null,
   incomingCallType: 'audio',
-  incomingDismissTimeout: null, // 30s auto-dismiss timer
-  remoteAudio: null     // stored ref for cleanup (audio-only calls)
+  incomingDismissTimeout: null,
+  remoteAudio: null
 };
 
 const ICE_SERVERS = [
@@ -1097,35 +1100,83 @@ const ICE_SERVERS = [
   { urls: 'stun:stun4.l.google.com:19302' }
 ];
 
-function getCallTargetName() {
+// Detect multiple cameras for flip button
+async function _detectCameras() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    CALL_STATE.hasMultipleCameras = devices.filter(d => d.kind === 'videoinput').length > 1;
+  } catch(e) { CALL_STATE.hasMultipleCameras = false; }
+}
+
+// Get profile info of the other person in the active DM
+function _getCallTargetInfo() {
   const convo = CHAT_STATE.activeConvo;
   if (!convo || convo.type !== 'dm' || !convo.members) return null;
   const me = STATE.trader ? STATE.trader.trader_name : '';
-  const others = convo.members.filter(m => (m.trader_name || m) !== me);
-  return others.length === 1 ? (others[0].trader_name || others[0]) : null;
+  const other = convo.members.find(m => (m.trader_name || m) !== me);
+  if (!other) return null;
+  return { name: other.trader_name || other, displayName: other.display_name || other.trader_name || other, photo: other.photo_url || null };
+}
+
+// Find a trader's photo from cached conversations
+function _findTraderPhoto(traderName) {
+  for (const c of (CHAT_STATE.conversations || [])) {
+    if (!c.members) continue;
+    const m = c.members.find(x => (x.trader_name || x) === traderName);
+    if (m && m.photo_url) return m.photo_url;
+  }
+  return null;
+}
+
+// Build profile photo HTML (used in overlay and incoming notification)
+function _profilePhotoHtml(photoUrl, name, size) {
+  if (photoUrl) return '<img src="' + photoUrl + '" alt="" style="width:' + size + 'px;height:' + size + 'px;object-fit:cover;border-radius:50%">';
+  const initial = (name || '?').charAt(0).toUpperCase();
+  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:' + Math.round(size * 0.4) + 'px;font-weight:700;color:#fff">' + initial + '</div>';
+}
+
+function getCallTargetName() {
+  const info = _getCallTargetInfo();
+  return info ? info.name : null;
 }
 
 async function startCall(type) {
   if (CALL_STATE.active) { toast('Already in a call', 'error'); return; }
-  const target = getCallTargetName();
-  if (!target) { toast('Calls only work in DM conversations', 'error'); return; }
+  const info = _getCallTargetInfo();
+  if (!info) { toast('Calls only work in DM conversations', 'error'); return; }
 
-  const constraints = { audio: true, video: type === 'video' };
+  // Request media — if video fails, offer audio-only fallback
+  const constraints = { audio: true, video: type === 'video' ? { facingMode: CALL_STATE.facingMode } : false };
   try {
     CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
-    toast(type === 'video' ? 'Camera/microphone access denied' : 'Microphone access denied', 'error');
-    return;
+    if (type === 'video') {
+      // Camera denied — try audio-only fallback
+      try {
+        CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        type = 'audio';
+        toast('Camera unavailable — audio only', 'info');
+      } catch(e2) {
+        toast('Microphone access denied', 'error');
+        return;
+      }
+    } else {
+      toast('Microphone access denied', 'error');
+      return;
+    }
   }
+
+  if (type === 'video') await _detectCameras();
 
   CALL_STATE.active = true;
   CALL_STATE.isCaller = true;
-  CALL_STATE.remoteTarget = target;
+  CALL_STATE.remoteTarget = info.name;
+  CALL_STATE.remotePhoto = info.photo;
   CALL_STATE.muted = false;
   CALL_STATE.videoOff = false;
   CALL_STATE.callType = type;
 
-  showCallOverlay('Calling...', target, type);
+  showCallOverlay('Calling...', info.displayName, type, info.photo);
 
   // Auto-cancel if no answer in 45s
   CALL_STATE.ringTimeout = setTimeout(() => {
@@ -1236,29 +1287,45 @@ function startVideoCall() { startCall('video'); }
 async function acceptCall() {
   if (!CALL_STATE.incomingOffer || !CALL_STATE.incomingCaller) return;
 
-  const type = CALL_STATE.incomingCallType || 'audio';
-  const constraints = { audio: true, video: type === 'video' };
+  let type = CALL_STATE.incomingCallType || 'audio';
+  const constraints = { audio: true, video: type === 'video' ? { facingMode: CALL_STATE.facingMode } : false };
   try {
     CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
-    toast(type === 'video' ? 'Camera/microphone access denied' : 'Microphone access denied', 'error');
-    rejectCall();
-    return;
+    if (type === 'video') {
+      // Camera denied — fall back to audio-only instead of rejecting
+      try {
+        CALL_STATE.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        type = 'audio';
+        toast('Camera unavailable — joining with audio only', 'info');
+      } catch(e2) {
+        toast('Microphone access denied', 'error');
+        rejectCall();
+        return;
+      }
+    } else {
+      toast('Microphone access denied', 'error');
+      rejectCall();
+      return;
+    }
   }
 
+  if (type === 'video') await _detectCameras();
+
+  const callerPhoto = _findTraderPhoto(CALL_STATE.incomingCaller);
   CALL_STATE.active = true;
   CALL_STATE.isCaller = false;
   CALL_STATE.remoteTarget = CALL_STATE.incomingCaller;
+  CALL_STATE.remotePhoto = callerPhoto;
   CALL_STATE.muted = false;
   CALL_STATE.videoOff = false;
   CALL_STATE.callType = type;
-  CALL_STATE.pendingCandidates = CALL_STATE.pendingCandidates || []; // keep buffered candidates
+  CALL_STATE.pendingCandidates = CALL_STATE.pendingCandidates || [];
 
-  // Clear the 30s auto-dismiss timer
   if (CALL_STATE.incomingDismissTimeout) { clearTimeout(CALL_STATE.incomingDismissTimeout); CALL_STATE.incomingDismissTimeout = null; }
 
   document.getElementById('callIncoming').style.display = 'none';
-  showCallOverlay('Connecting...', CALL_STATE.remoteTarget, type);
+  showCallOverlay('Connecting...', CALL_STATE.incomingCaller, type, callerPhoto);
 
   try {
     CALL_STATE.peer = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 5 });
@@ -1389,9 +1456,11 @@ function endCallLocal() {
 
   CALL_STATE.active = false;
   CALL_STATE.remoteTarget = null;
+  CALL_STATE.remotePhoto = null;
   CALL_STATE.isCaller = false;
   CALL_STATE.muted = false;
   CALL_STATE.videoOff = false;
+  CALL_STATE.facingMode = 'user';
   CALL_STATE.startTime = null;
   CALL_STATE.callType = 'audio';
   CALL_STATE.iceRestarted = false;
@@ -1400,11 +1469,12 @@ function endCallLocal() {
   CALL_STATE.incomingCaller = null;
   CALL_STATE.incomingCallType = 'audio';
 
-  // Clear video elements — pause before clearing srcObject
+  // Clear video elements
   const lv = document.getElementById('callLocalVideo');
   const rv = document.getElementById('callRemoteVideo');
-  if (lv) { lv.pause(); lv.srcObject = null; }
+  if (lv) { lv.pause(); lv.srcObject = null; lv.classList.remove('mirrored'); }
   if (rv) { rv.pause(); rv.srcObject = null; }
+  _showFlipButtons(false);
 
   document.getElementById('callOverlay').style.display = 'none';
   document.getElementById('callIncoming').style.display = 'none';
@@ -1431,27 +1501,82 @@ function toggleCallVideo() {
   if (localVid) localVid.style.opacity = CALL_STATE.videoOff ? '0.3' : '1';
 }
 
-function showCallOverlay(status, name, type) {
+async function flipCamera() {
+  if (CALL_STATE.callType !== 'video' || !CALL_STATE.localStream || !CALL_STATE.peer) return;
+
+  // Toggle facing mode
+  CALL_STATE.facingMode = CALL_STATE.facingMode === 'user' ? 'environment' : 'user';
+
+  // Stop old video tracks
+  CALL_STATE.localStream.getVideoTracks().forEach(t => t.stop());
+
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: CALL_STATE.facingMode }
+    });
+    const newTrack = newStream.getVideoTracks()[0];
+    if (!newTrack) return;
+
+    // Replace the track on the local stream
+    const oldTrack = CALL_STATE.localStream.getVideoTracks()[0];
+    if (oldTrack) CALL_STATE.localStream.removeTrack(oldTrack);
+    CALL_STATE.localStream.addTrack(newTrack);
+
+    // Replace the track on the peer connection sender
+    const sender = CALL_STATE.peer.getSenders().find(s => s.track && s.track.kind === 'video');
+    if (sender) await sender.replaceTrack(newTrack);
+
+    // Update local preview + mirror mode
+    const localVid = document.getElementById('callLocalVideo');
+    if (localVid) {
+      localVid.srcObject = CALL_STATE.localStream;
+      localVid.classList.toggle('mirrored', CALL_STATE.facingMode === 'user');
+    }
+  } catch(e) {
+    toast('Could not switch camera', 'error');
+    // Revert facing mode
+    CALL_STATE.facingMode = CALL_STATE.facingMode === 'user' ? 'environment' : 'user';
+  }
+}
+
+function _showFlipButtons(show) {
+  const flipBtn = document.getElementById('callFlipBtn');
+  const flipInline = document.getElementById('callFlipInlineBtn');
+  const visible = show && CALL_STATE.hasMultipleCameras;
+  if (flipBtn) flipBtn.style.display = visible ? 'flex' : 'none';
+  if (flipInline) flipInline.style.display = visible ? 'flex' : 'none';
+}
+
+function showCallOverlay(status, name, type, photo) {
   document.getElementById('callStatus').textContent = status;
   document.getElementById('callName').textContent = name;
   document.getElementById('callTimer').style.display = 'none';
+
+  // Set profile photo
+  const profileEl = document.getElementById('callProfilePhoto');
+  if (profileEl) profileEl.innerHTML = _profilePhotoHtml(photo, name, 96);
 
   const overlay = document.getElementById('callOverlay');
   const videoArea = document.getElementById('callVideoArea');
   const avatarArea = document.getElementById('callAvatarArea');
   const videoToggle = document.getElementById('callVideoToggleBtn');
 
-  // Show/hide video area
   if (type === 'video') {
     overlay.classList.add('video-mode');
     if (videoArea) videoArea.style.display = 'flex';
     if (avatarArea) avatarArea.style.display = 'none';
     if (videoToggle) videoToggle.style.display = 'flex';
+    _showFlipButtons(true);
+    // Mirror local selfie by default (front camera)
+    const localVid = document.getElementById('callLocalVideo');
+    if (localVid) localVid.classList.toggle('mirrored', CALL_STATE.facingMode === 'user');
   } else {
     overlay.classList.remove('video-mode');
     if (videoArea) videoArea.style.display = 'none';
     if (avatarArea) avatarArea.style.display = 'flex';
     if (videoToggle) videoToggle.style.display = 'none';
+    _showFlipButtons(false);
   }
 
   overlay.style.display = 'flex';
@@ -1484,14 +1609,13 @@ function initCallSocketListeners() {
     CALL_STATE.incomingCaller = data.caller;
     CALL_STATE.incomingOffer = data.offer;
     CALL_STATE.incomingCallType = data.callType || 'audio';
-    CALL_STATE.pendingCandidates = []; // clear stale candidates from any previous call
+    CALL_STATE.pendingCandidates = [];
 
     const isVideo = CALL_STATE.incomingCallType === 'video';
+    const callerPhoto = _findTraderPhoto(data.caller);
     document.getElementById('callIncomingLabel').textContent = isVideo ? 'Incoming Video Call' : 'Incoming Voice Call';
     document.getElementById('callIncomingName').textContent = data.caller;
-    document.getElementById('callIncomingIcon').innerHTML = isVideo
-      ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>'
-      : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+    document.getElementById('callIncomingPhoto').innerHTML = _profilePhotoHtml(callerPhoto, data.caller, 44);
     document.getElementById('callIncoming').style.display = 'block';
 
     // Auto-dismiss after 30s — store timeout so it can be cleared on accept
