@@ -158,6 +158,22 @@ def trader_heartbeat(trader):
     db.commit()
     return jsonify({'success': True})
 
+@public_bp.route('/api/traders/profile/<trader>', methods=['GET'])
+def get_trader_profile(trader):
+    """Return current trader flags (privileged, status, etc.) for client sync."""
+    db = get_db()
+    row = db.execute("SELECT * FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    if not row:
+        return jsonify({'success': False}), 404
+    return jsonify({
+        'success': True,
+        'privileged': bool(row['privileged']) if 'privileged' in row.keys() else False,
+        'status': row['status'],
+        'starting_balance': row['starting_balance'],
+        'display_name': row['display_name'],
+        'firm': row['firm']
+    })
+
 
 @public_bp.route('/api/traders/display-name/<trader>', methods=['POST'])
 def update_display_name(trader):

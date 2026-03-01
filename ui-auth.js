@@ -141,6 +141,25 @@ function initAfterLogin() {
 
 async function syncTradesFromServer() {
   if (!STATE.trader) return;
+  // Sync trader profile flags (privileged, balance, etc.)
+  try {
+    const pr = await fetch(API_BASE + '/api/traders/profile/' + encodeURIComponent(STATE.trader.trader_name));
+    const pd = await pr.json();
+    if (pd.success) {
+      const changed = STATE.trader.privileged !== pd.privileged;
+      STATE.trader.privileged = pd.privileged;
+      STATE.trader.starting_balance = pd.starting_balance;
+      STATE.trader.display_name = pd.display_name;
+      STATE.trader.firm = pd.firm;
+      localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));
+      // Update advanced settings visibility if privilege changed
+      if (changed) {
+        const advSection = document.getElementById('settingsDateOverride');
+        if (advSection) advSection.style.display = STATE.trader.privileged ? '' : 'none';
+      }
+    }
+  } catch(e) {}
+  // Sync trades
   try {
     const r = await fetch(API_BASE + '/api/trades/' + encodeURIComponent(STATE.trader.trader_name));
     const d = await r.json();
@@ -151,7 +170,6 @@ async function syncTradesFromServer() {
     }
   } catch(e) {
     console.warn('Could not sync trades from server, using local cache:', e);
-    // Fall back to trader-scoped localStorage
     STATE.trades = JSON.parse(localStorage.getItem(traderStorageKey('trades')) || '[]');
   }
 }
