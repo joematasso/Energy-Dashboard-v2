@@ -59,7 +59,8 @@ const NG_HUBS = [
   { name:'Opal', base:2.67, vol:5.0, color:'#14b8a6' },
   { name:'Tetco M3', base:3.30, vol:9.0, color:'#e11d48' },
   { name:'Kern River', base:2.80, vol:5.0, color:'#0ea5e9' },
-  { name:'AECO', base:1.95, vol:7.0, color:'#d946ef', currency:'CAD/GJ' }
+  { name:'AECO', base:1.95, vol:7.0, color:'#d946ef', currency:'CAD/GJ' },
+  { name:'MichCon', base:2.80, vol:4.5, color:'#fb923c' }
 ];
 
 const CRUDE_HUBS = [
@@ -77,7 +78,10 @@ const CRUDE_HUBS = [
   { name:'Bonny Light', base:83.40, vol:2.0, color:'#14b8a6' },
   { name:'Tapis', base:84.10, vol:1.8, color:'#fb7185' },
   { name:'Basra Medium', base:76.80, vol:2.1, color:'#d97706' },
-  { name:'Daqing', base:77.50, vol:1.9, color:'#f43f5e' }
+  { name:'Daqing', base:77.50, vol:1.9, color:'#f43f5e' },
+  { name:'RBOB Gasoline', base:2.45, vol:3.5, color:'#22c55e', unit:'$/gal' },
+  { name:'ULSD Diesel', base:2.62, vol:3.2, color:'#3b82f6', unit:'$/gal' },
+  { name:'Jet Fuel', base:2.58, vol:3.0, color:'#a855f7', unit:'$/gal' }
 ];
 
 const POWER_HUBS = [

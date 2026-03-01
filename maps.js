@@ -67,6 +67,7 @@ const HUB_POSITIONS = {
   'Tetco M3':       { x:286, y:178 },
   'Kern River':     { x:169, y:195 },
   'AECO':           { x:183, y:135 },
+  'MichCon':        { x:271, y:170 },
   // Crude hubs
   'WTI Cushing':    { x:231, y:193 },
   'Brent Dated':    { x:504, y:85 },
@@ -84,6 +85,10 @@ const HUB_POSITIONS = {
   'Tapis':          { x:815, y:287 },
   'Basra Medium':   { x:651, y:213 },
   'Daqing':         { x:879, y:148 },
+  // Refined products (NY Harbor delivery)
+  'RBOB Gasoline':  { x:300, y:178 },
+  'ULSD Diesel':    { x:302, y:181 },
+  'Jet Fuel':       { x:298, y:183 },
   // LNG hubs
   'JKM (Platts)':   { x:900, y:197 },
   'TTF (ICE)':      { x:528, y:126 },

@@ -82,6 +82,24 @@ function drawChart(canvasId, hubName, range) {
   const lastY = padT + (1 - (data[data.length-1] - min) / (max - min)) * cH;
   ctx.beginPath(); ctx.arc(lastX, lastY, 4, 0, Math.PI * 2); ctx.fillStyle = hub.color; ctx.fill();
 
+  // Percent change badge (top-right)
+  const firstPrice = data[0], lastPrice = data[data.length - 1];
+  const pctChg = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
+  const absChg = lastPrice - firstPrice;
+  const pctColor = pctChg >= 0 ? '#10b981' : '#ef4444';
+  const pctSign = pctChg >= 0 ? '+' : '';
+  const isLargeVal = hubName.includes('Baltic') || hubName.includes('Index') || (hub && hub.base > 100);
+  const chgStr = isLargeVal
+    ? `${pctSign}${absChg.toFixed(0)} (${pctSign}${pctChg.toFixed(2)}%)`
+    : `${pctSign}${absChg.toFixed(2)} (${pctSign}${pctChg.toFixed(2)}%)`;
+  ctx.font = 'bold 12px IBM Plex Mono';
+  const chgW = ctx.measureText(chgStr).width + 14;
+  ctx.fillStyle = pctColor + '18';
+  ctx.fillRect(W - padR - chgW - 4, padT + 2, chgW + 4, 22);
+  ctx.fillStyle = pctColor;
+  ctx.textAlign = 'right';
+  ctx.fillText(chgStr, W - padR - 6, padT + 17);
+
   // X-axis time labels
   ctx.fillStyle = textColor;
   ctx.font = '10px IBM Plex Mono';
