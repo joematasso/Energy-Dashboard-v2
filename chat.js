@@ -999,11 +999,11 @@ const ICE_SERVERS = [
 
 function getCallTargetName() {
   // Get the other person in the active DM conversation
-  const convo = CHAT_STATE.conversations.find(c => c.id === CHAT_STATE.activeConvo);
-  if (!convo || !convo.members) return null;
+  const convo = CHAT_STATE.activeConvo;
+  if (!convo || convo.type !== 'dm' || !convo.members) return null;
   const me = STATE.trader ? STATE.trader.trader_name : '';
-  const others = convo.members.filter(m => m !== me);
-  return others.length === 1 ? others[0] : null;
+  const others = convo.members.filter(m => (m.trader_name || m) !== me);
+  return others.length === 1 ? (others[0].trader_name || others[0]) : null;
 }
 
 async function startVoiceCall() {

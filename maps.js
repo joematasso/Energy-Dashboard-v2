@@ -238,9 +238,11 @@ function renderPipelineMap(sector) {
   const sectorTitle = titles[sector] || sector;
   const isLNG = sector === 'lng';
 
-  // Compute scale factor: at zoom > 1, shrink elements so they stay constant screen size
+  // Compute scale factor: normalize for viewBox width so elements look consistent across maps
+  // NG has baseVw=350 (reference), crude/LNG have baseVw=1000, so elements need ~2.86x larger coords
   const z = MAP_ZOOM[sector];
-  const s = 1 / z.zoom; // inverse scale factor
+  const baseScale = z.baseVw / 350; // 1.0 for NG, ~2.86 for crude/LNG
+  const s = baseScale / z.zoom;
 
   let svg = `<svg viewBox="${z.vx} ${z.vy} ${z.vw} ${z.vh}" width="100%" style="max-width:900px;min-width:320px" xmlns="http://www.w3.org/2000/svg" data-sector="${sector}">`;
   svg += `<rect x="-1000" y="-600" width="3000" height="1800" fill="${waterFill}"/>`;
@@ -414,7 +416,7 @@ function mapScaleElements(sector) {
   const wrap = document.getElementById(sector + 'MapWrap');
   const svgEl = wrap && wrap.querySelector('svg');
   if (!svgEl) return;
-  const s = 1 / z.zoom;
+  const s = (z.baseVw / 350) / z.zoom;
   svgEl.querySelectorAll('[data-base-size]').forEach(el => {
     el.style.fontSize = (parseFloat(el.dataset.baseSize) * s) + 'px';
   });
@@ -514,7 +516,7 @@ function mapHubClick(event, sector, hubName) {
   const wrap = document.getElementById(sector + 'MapWrap');
   if (wrap) {
     const z = MAP_ZOOM[sector];
-    const s = 1 / z.zoom;
+    const s = (z.baseVw / 350) / z.zoom;
     wrap.querySelectorAll('.hub-dot').forEach(el => {
       const isThis = el.getAttribute('data-hub') === hubName;
       el.setAttribute('r', (isThis ? 5 : 3.5) * s);
