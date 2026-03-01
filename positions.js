@@ -68,7 +68,18 @@ function getBasisPrice(t) {
   return p1 - p2;
 }
 
+function getMultilegPrice(t) {
+  if (!t.legs || !t.legs.length) return getPrice(t.hub);
+  // Net price = sum of each leg's signed price (BUY = +, SELL = -)
+  // Normalized per-unit relative to trade direction
+  let net = 0;
+  t.legs.forEach(function(leg) { net += (leg.direction === 'BUY' ? 1 : -1) * getPrice(leg.hub); });
+  // If trade direction is SELL, the trade P&L inverts, so return raw net
+  return net;
+}
+
 function getTradeSpot(t) {
+  if (t.type === 'MULTILEG' && t.legs && t.legs.length) return getMultilegPrice(t);
   if (SPREAD_TYPES.has(t.type)) return getSpreadPrice(t);
   if (BASIS_TYPES.has(t.type)) return getBasisPrice(t);
   return getPrice(t.hub);
@@ -180,6 +191,9 @@ function renderBlotterTable() {
       const nm = new Date(t.nearMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' });
       const fm = new Date(t.farMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' });
       delMo = nm + ' / ' + fm;
+    } else if (t.type === 'MULTILEG' && t.legs && t.legs.length) {
+      const months = t.legs.filter(function(l){return l.deliveryMonth;}).map(function(l){ return new Date(l.deliveryMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' }); });
+      delMo = months.length ? months.join(', ') : '—';
     } else {
       delMo = t.deliveryMonth ? new Date(t.deliveryMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' }) : '—';
     }
@@ -260,13 +274,19 @@ function renderBlotterTable() {
         + '<div class="bdet-item"><span class="bdet-label">Leg 2 Hub</span><span>' + t.basisHub + ' ($' + _p2.toFixed(4) + ')</span></div>'
         + '<div class="bdet-item"><span class="bdet-label">Differential</span><span>$' + (_p1-_p2).toFixed(4) + '</span></div>';
     }
+    if (t.type === 'MULTILEG' && t.legs && t.legs.length) {
+      legInfo = t.legs.map(function(leg, i) {
+        var lp = getPrice(leg.hub);
+        return '<div class="bdet-item"><span class="bdet-label">Leg ' + (i+1) + '</span><span>' + leg.direction + ' ' + leg.hub + ' ' + (leg.deliveryMonth || '') + ' ($' + lp.toFixed(4) + ')</span></div>';
+      }).join('');
+    }
     const closeInfo = t.status === 'CLOSED' ? `<div class="bdet-item"><span class="bdet-label">Close Price</span><span>$${parseFloat(t.closePrice||0).toFixed(4)}</span></div><div class="bdet-item"><span class="bdet-label">Closed At</span><span>${t.closedAt ? new Date(t.closedAt).toLocaleString() : '—'}</span></div>` : '';
 
     return `<tr class="blotter-row" style="${rowBg}" onclick="toggleBlotterRow('${rowId}')">
       <td>${sectorBadge}</td>
       <td>${typeCell}</td>
       <td style="${dirColor};font-weight:700;font-size:12px">${t.direction}</td>
-      <td style="font-weight:500;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}${t.basisHub ? ' vs ' + t.basisHub : ''}">${t.hub}${BASIS_TYPES.has(t.type) && t.basisHub ? '<br><span style="font-size:10px;color:var(--text-muted)">vs ' + t.basisHub + '</span>' : ''}</td>
+      <td style="font-weight:500;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}${t.basisHub ? ' vs ' + t.basisHub : ''}">${t.hub}${BASIS_TYPES.has(t.type) && t.basisHub ? '<br><span style="font-size:10px;color:var(--text-muted)">vs ' + t.basisHub + '</span>' : ''}${t.type === 'MULTILEG' && t.legs && t.legs.length ? '<br><span style="font-size:10px;color:var(--text-muted)">' + t.legs.length + ' legs</span>' : ''}</td>
       <td style="font-size:11px;color:var(--text-dim)">${delMo}</td>
       <td class="mono" style="font-size:12px">${volDisplay}</td>
       <td class="mono" style="font-size:12px">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>
@@ -313,7 +333,7 @@ function renderBlotterTable() {
 function closeTrade(id) {
   const t = STATE.trades.find(x => x.id === id);
   if (!t || t.status !== 'OPEN') return;
-  const isMultiLeg = SPREAD_TYPES.has(t.type) || BASIS_TYPES.has(t.type);
+  const isMultiLeg = SPREAD_TYPES.has(t.type) || BASIS_TYPES.has(t.type) || (t.type === 'MULTILEG' && t.legs && t.legs.length);
   const cp = isMultiLeg ? getTradeSpot(t) : getPrice(t.hub);
   if (!cp && cp !== 0) return toast('No market price available for ' + t.hub, 'error');
   if (!isMultiLeg && cp <= 0) return toast('No market price available for ' + t.hub, 'error');

@@ -167,6 +167,10 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .otc-counter-form .form-row>div{flex:1}
 .otc-counter-form label{font-size:10px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:2px}
 
+/* Multi-leg builder */
+.multileg-row select,.multileg-row input{font-family:inherit}
+.multileg-row:hover{border-color:var(--accent)!important}
+
 /* Intraday chart indicator */
 .chart-timeframe{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);margin-left:8px}
 .chart-timeframe .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}

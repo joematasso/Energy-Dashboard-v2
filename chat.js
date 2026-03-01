@@ -12,6 +12,17 @@ let CHAT_STATE = {
   onlineTraders: new Set()
 };
 
+function _lastSeenLabel(lastSeen) {
+  if (!lastSeen) return 'Offline';
+  const ms = Date.now() - new Date(lastSeen + (lastSeen.endsWith('Z') ? '' : 'Z')).getTime();
+  if (ms < 0 || ms > 365 * 86400000) return 'Offline';
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d > 0) return 'Last seen ' + d + 'd ago';
+  if (h > 0) return 'Last seen ' + h + 'h ago';
+  if (m > 1) return 'Last seen ' + m + 'm ago';
+  return 'Last seen just now';
+}
+
 function updateChatOnlineStatus() {
   const el = document.getElementById('chatOnlineStatus');
   if (!el || !CHAT_STATE.activeConvo) { if(el) el.style.display='none'; return; }
@@ -20,20 +31,38 @@ function updateChatOnlineStatus() {
   if (!other) { el.style.display='none'; return; }
   const isOnline = CHAT_STATE.onlineTraders.has(other.trader_name);
   el.style.display = '';
-  el.innerHTML = isOnline
-    ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:3px"></span>Online'
-    : '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#64748b;margin-right:3px"></span>Offline';
-  el.style.color = isOnline ? '#10b981' : '#64748b';
+  if (isOnline) {
+    el.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:3px"></span>Online';
+    el.style.color = '#10b981';
+  } else {
+    const label = _lastSeenLabel(other.last_seen);
+    el.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#64748b;margin-right:3px"></span>' + label;
+    el.style.color = '#64748b';
+  }
 }
 
 function updateConvoListPresence() {
   document.querySelectorAll('.chat-convo-item[data-trader]').forEach(el => {
     const traderName = el.dataset.trader;
     const dot = el.querySelector('.presence-dot');
+    const isOnline = CHAT_STATE.onlineTraders.has(traderName);
     if (dot) {
-      const isOnline = CHAT_STATE.onlineTraders.has(traderName);
       dot.style.background = isOnline ? '#10b981' : '#64748b';
-      dot.title = isOnline ? 'Online' : 'Offline';
+      // Find last_seen from conversation members
+      const convo = CHAT_STATE.conversations.find(c => c.type === 'dm' && c.members && c.members.some(m => m.trader_name === traderName));
+      const member = convo ? convo.members.find(m => m.trader_name === traderName) : null;
+      dot.title = isOnline ? 'Online' : (member ? _lastSeenLabel(member.last_seen) : 'Offline');
+    }
+    // Update or remove last-seen text
+    const lsEl = el.querySelector('.convo-lastseen');
+    if (isOnline && lsEl) lsEl.remove();
+    else if (!isOnline && !lsEl) {
+      const convo = CHAT_STATE.conversations.find(c => c.type === 'dm' && c.members && c.members.some(m => m.trader_name === traderName));
+      const member = convo ? convo.members.find(m => m.trader_name === traderName) : null;
+      if (member && member.last_seen) {
+        const info = el.querySelector('.convo-info');
+        if (info) { const d = document.createElement('div'); d.className = 'convo-lastseen'; d.style.cssText = 'font-size:10px;color:#64748b;margin-top:1px'; d.textContent = _lastSeenLabel(member.last_seen); info.appendChild(d); }
+      }
     }
   });
 }
@@ -114,10 +143,12 @@ function renderConvoList() {
     const preview = c.last_msg ? (c.last_sender === STATE.trader.trader_name ? 'You: ' : '') + c.last_msg.substring(0,40) : 'No messages yet';
     const time = c.last_msg_time ? new Date(c.last_msg_time+'Z').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
     const isOnline = otherTrader && CHAT_STATE.onlineTraders.has(otherTrader);
-    const presenceDot = otherTrader ? `<span class="presence-dot" style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface);background:${isOnline?'#10b981':'#64748b'};z-index:1" title="${isOnline?'Online':'Offline'}"></span>` : '';
+    const otherMember = c.type === 'dm' ? c.members.find(m => m.trader_name !== STATE.trader.trader_name) : null;
+    const presenceDot = otherTrader ? `<span class="presence-dot" style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface);background:${isOnline?'#10b981':'#64748b'};z-index:1" title="${isOnline?'Online': (otherMember ? _lastSeenLabel(otherMember.last_seen) : 'Offline')}"></span>` : '';
+    const lastSeenText = (otherTrader && !isOnline && otherMember) ? `<div class="convo-lastseen" style="font-size:10px;color:#64748b;margin-top:1px">${_lastSeenLabel(otherMember.last_seen)}</div>` : '';
     return `<div class="chat-convo-item ${isActive?'active':''} ${unread?'unread':''}" ${otherTrader?'data-trader="'+otherTrader+'"':''} onclick="openConvo(${c.id})">
       <div class="convo-avatar">${avatarContent}${presenceDot}</div>
-      <div class="convo-info"><div class="convo-name">${name}</div><div class="convo-preview">${preview}</div></div>
+      <div class="convo-info"><div class="convo-name">${name}</div><div class="convo-preview">${preview}</div>${lastSeenText}</div>
       <div class="convo-meta"><span>${time}</span>${unread?`<span class="convo-unread">${c.unread}</span>`:''}</div>
     </div>`;
   }).join('');

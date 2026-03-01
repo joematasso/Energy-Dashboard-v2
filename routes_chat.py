@@ -147,7 +147,7 @@ def get_conversations(trader):
     convos = []
     for r in rows:
         members = db.execute("""
-            SELECT t.trader_name, t.display_name, t.photo_url, tm.name as team_name, tm.color as team_color
+            SELECT t.trader_name, t.display_name, t.photo_url, t.last_seen, tm.name as team_name, tm.color as team_color
             FROM conversation_members cm JOIN traders t ON cm.trader_name=t.trader_name
             LEFT JOIN teams tm ON t.team_id=tm.id WHERE cm.conversation_id=?
         """, (r['id'],)).fetchall()
@@ -158,6 +158,7 @@ def get_conversations(trader):
             'last_msg_time': r['last_msg_time'],
             'members': [{'trader_name': m['trader_name'], 'display_name': m['display_name'],
                          'photo_url': m['photo_url'] or '',
+                         'last_seen': m['last_seen'] or '',
                          'team_name': m['team_name'] or '', 'team_color': m['team_color'] or '#888'} for m in members]
         })
     return jsonify({'success': True, 'conversations': convos})

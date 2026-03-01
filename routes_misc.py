@@ -630,6 +630,13 @@ def handle_disconnect(reason=None):
             disconnected_trader = k
     emit('connection_count', {'count': count}, broadcast=True)
     if disconnected_trader:
+        try:
+            conn = get_db_standalone()
+            conn.execute("UPDATE traders SET last_seen=CURRENT_TIMESTAMP WHERE trader_name=?", (disconnected_trader,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
         socketio.emit('presence_change', {'trader': disconnected_trader, 'online': False})
     logger.info(f"Client disconnected: {sid} (total: {count})")
 

@@ -412,6 +412,8 @@ function onTradeTypeChange() {
   const condDiv = document.getElementById('conditionalFields');
   condDiv.style.display = 'none';
   condDiv.querySelectorAll('.form-group').forEach(fg => fg.style.display = 'none');
+  condDiv.querySelectorAll('.cond-multileg').forEach(fg => fg.style.display = 'none');
+  if (type !== 'MULTILEG') { const mr = document.getElementById('multilegRows'); if (mr) mr.innerHTML = ''; _multilegCount = 0; }
 
   const isSpreadType = ['SPREAD','CRUDE_DIFF','AG_SPREAD','METALS_SPREAD','NGL_SPREAD','LNG_SPREAD'].includes(type);
   const isBasisType = ['BASIS_SWAP','LNG_BASIS'].includes(type);
@@ -428,10 +430,60 @@ function onTradeTypeChange() {
     condDiv.style.display = 'block';
     condDiv.querySelectorAll('.cond-basis').forEach(fg => fg.style.display = 'flex');
   }
+  if (type === 'MULTILEG') {
+    condDiv.style.display = 'block';
+    condDiv.querySelectorAll('.cond-multileg').forEach(fg => fg.style.display = 'block');
+    if (!document.querySelectorAll('#multilegRows .multileg-row').length) { addMultileg(); addMultileg(); }
+  }
   // Update volume field for this specific trade type
   const sector = document.getElementById('tradeSector').value;
   updateVolumeField(sector, type);
   updateMarginPreview();
+}
+
+/* --- Multi-Leg builder --- */
+let _multilegCount = 0;
+function addMultileg() {
+  _multilegCount++;
+  const container = document.getElementById('multilegRows');
+  if (!container) return;
+  const sector = document.getElementById('tradeSector') ? document.getElementById('tradeSector').value : 'ng';
+  const SECTOR_HUB_MAP = { ng: NG_HUBS, crude: CRUDE_HUBS, power: POWER_HUBS, freight: FREIGHT_HUBS, ag: AG_HUBS, metals: METALS_HUBS, ngls: NGL_HUBS, lng: LNG_HUBS };
+  const hubs = SECTOR_HUB_MAP[sector] || NG_HUBS;
+  const idx = _multilegCount;
+  const row = document.createElement('div');
+  row.className = 'multileg-row';
+  row.dataset.idx = idx;
+  row.style.cssText = 'display:grid;grid-template-columns:auto 1fr 80px 1fr auto;gap:6px;align-items:center;margin-bottom:6px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px';
+  row.innerHTML = `<span style="font-size:11px;font-weight:700;color:var(--text-muted);min-width:32px">Leg ${container.children.length + 1}</span>`
+    + `<select class="ml-hub" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-size:12px">${hubs.map(h => '<option value="' + h.name + '">' + h.name + '</option>').join('')}</select>`
+    + `<select class="ml-dir" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-size:12px"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>`
+    + `<input type="month" class="ml-month" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-size:12px">`
+    + `<button type="button" onclick="removeMultileg(this)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px" title="Remove leg">&times;</button>`;
+  container.appendChild(row);
+  renumberMultilegs();
+}
+function removeMultileg(btn) {
+  const row = btn.closest('.multileg-row');
+  if (row) row.remove();
+  renumberMultilegs();
+}
+function renumberMultilegs() {
+  document.querySelectorAll('#multilegRows .multileg-row').forEach((row, i) => {
+    const label = row.querySelector('span');
+    if (label) label.textContent = 'Leg ' + (i + 1);
+  });
+}
+function getMultilegs() {
+  const legs = [];
+  document.querySelectorAll('#multilegRows .multileg-row').forEach(row => {
+    legs.push({
+      hub: row.querySelector('.ml-hub').value,
+      direction: row.querySelector('.ml-dir').value,
+      deliveryMonth: row.querySelector('.ml-month').value
+    });
+  });
+  return legs;
 }
 
 function setDirection(dir) {
@@ -615,6 +667,11 @@ async function submitTrade() {
   if (['BASIS_SWAP','LNG_BASIS'].includes(type)) {
     trade.basisHub = document.getElementById('tradeBasisHub').value;
   }
+  if (type === 'MULTILEG') {
+    const legs = getMultilegs();
+    if (legs.length < 2) return toast('Multi-leg trade requires at least 2 legs', 'error');
+    trade.legs = legs;
+  }
 
   // NON-MARKET orders → queue as pending
   if (orderType !== 'MARKET') {
@@ -713,6 +770,12 @@ function resetTradeForm() {
   document.getElementById('tradeFormHint').textContent = '';
   const bdInput = document.getElementById('tradeBackdate');
   if (bdInput) bdInput.value = '';
+  // Clear multileg builder
+  const mlRows = document.getElementById('multilegRows');
+  if (mlRows) mlRows.innerHTML = '';
+  _multilegCount = 0;
+  const mlBuilder = document.getElementById('multilegBuilder');
+  if (mlBuilder) mlBuilder.style.display = 'none';
   onOrderTypeChange();
   tradeDirection = '';
   setDirection('');

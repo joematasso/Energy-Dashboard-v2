@@ -811,6 +811,14 @@
             <div class="form-group cond-basis" style="display:none"><label>Leg 2 — Basis Hub <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Secondary pricing point. Basis swap P&L = change in differential between the primary hub (Leg 1) and this hub (Leg 2).</span></span></label><select id="tradeBasisHub"></select></div>
             <div class="form-group cond-diff" style="display:none"><label>Spread Value <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The differential value at entry (e.g., WTI-Brent spread in $/BBL).</span></span></label><input type="number" id="tradeDiffSpread" step="0.01"></div>
           </div>
+          <!-- Multi-Leg builder -->
+          <div id="multilegBuilder" class="cond-multileg" style="display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <label style="font-size:12px;font-weight:600;color:var(--text)">Trade Legs</label>
+              <button type="button" class="btn btn-sm" onclick="addMultileg()" style="font-size:11px;padding:3px 10px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer">+ Add Leg</button>
+            </div>
+            <div id="multilegRows"></div>
+          </div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px">
