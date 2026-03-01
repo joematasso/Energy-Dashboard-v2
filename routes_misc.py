@@ -462,7 +462,8 @@ def handle_call_answer(data):
     if caller_sid:
         emit('call_answered', {
             'callee': data.get('callee', ''),
-            'answer': data.get('answer')
+            'answer': data.get('answer'),
+            'callType': data.get('callType', 'audio')
         }, to=caller_sid)
 
 @socketio.on('call_ice')

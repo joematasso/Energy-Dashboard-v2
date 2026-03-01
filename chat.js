@@ -1198,7 +1198,7 @@ async function startCall(type) {
 
     CALL_STATE.peer.onicecandidate = (e) => {
       if (e.candidate && typeof socket !== 'undefined') {
-        socket.emit('call_ice', { target, candidate: e.candidate, from: STATE.trader.trader_name });
+        socket.emit('call_ice', { target: CALL_STATE.remoteTarget, candidate: e.candidate, from: STATE.trader.trader_name });
       }
     };
 
@@ -1270,7 +1270,7 @@ async function startCall(type) {
     if (typeof socket !== 'undefined') {
       socket.emit('call_initiate', {
         caller: STATE.trader.trader_name,
-        callee: target,
+        callee: CALL_STATE.remoteTarget,
         offer: CALL_STATE.peer.localDescription,
         callType: type
       });
@@ -1396,7 +1396,8 @@ async function acceptCall() {
       socket.emit('call_answer', {
         caller: CALL_STATE.incomingCaller,
         callee: STATE.trader.trader_name,
-        answer: CALL_STATE.peer.localDescription
+        answer: CALL_STATE.peer.localDescription,
+        callType: type
       });
     }
   } catch(e) {
@@ -1535,8 +1536,21 @@ async function flipCamera() {
     }
   } catch(e) {
     toast('Could not switch camera', 'error');
-    // Revert facing mode
+    // Revert facing mode and re-acquire the original camera
     CALL_STATE.facingMode = CALL_STATE.facingMode === 'user' ? 'environment' : 'user';
+    try {
+      const fallback = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: CALL_STATE.facingMode } });
+      const fbTrack = fallback.getVideoTracks()[0];
+      if (fbTrack) {
+        CALL_STATE.localStream.addTrack(fbTrack);
+        const sender = CALL_STATE.peer && CALL_STATE.peer.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(fbTrack);
+        const localVid = document.getElementById('callLocalVideo');
+        if (localVid) localVid.srcObject = CALL_STATE.localStream;
+      }
+    } catch(e2) {
+      console.log('[Call] Could not recover camera:', e2.message);
+    }
   }
 }
 
@@ -1588,6 +1602,7 @@ function showCallOverlay(status, name, type, photo) {
 function startCallTimer() {
   CALL_STATE.startTime = Date.now();
   const timerEl = document.getElementById('callTimer');
+  if (!timerEl) return;
   timerEl.style.display = 'block';
   CALL_STATE.timerInterval = setInterval(() => {
     const elapsed = Math.floor((Date.now() - CALL_STATE.startTime) / 1000);
@@ -1651,6 +1666,12 @@ function initCallSocketListeners() {
   socket.on('call_answered', async (data) => {
     if (!CALL_STATE.peer) return;
     try {
+      // If callee downgraded from video to audio, update our UI
+      if (data.callType === 'audio' && CALL_STATE.callType === 'video') {
+        CALL_STATE.callType = 'audio';
+        showCallOverlay('Connecting...', CALL_STATE.remoteTarget, 'audio', CALL_STATE.remotePhoto);
+        toast('Other party joined with audio only', 'info');
+      }
       await CALL_STATE.peer.setRemoteDescription(new RTCSessionDescription(data.answer));
       // Flush any buffered ICE candidates now that remote description is set
       while (CALL_STATE.pendingCandidates.length > 0) {
@@ -1677,8 +1698,8 @@ function initCallSocketListeners() {
     } catch(e) { console.log('[Call] ICE candidate error:', e.message); }
   });
 
-  socket.on('call_ended', () => {
-    if (CALL_STATE.active) {
+  socket.on('call_ended', (data) => {
+    if (CALL_STATE.active && (!data.from || data.from === CALL_STATE.remoteTarget)) {
       toast('Call ended', 'info');
       endCallLocal();
     }
