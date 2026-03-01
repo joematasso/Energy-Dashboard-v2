@@ -169,6 +169,7 @@ function tickPrices() {
     });
   }
   tickForwardCurves();
+  if (typeof checkPriceAlerts === 'function') checkPriceAlerts();
   renderCurrentPage();
 }
 

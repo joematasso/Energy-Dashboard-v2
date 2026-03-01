@@ -92,7 +92,36 @@ function renderRiskPage() {
   const avgLoss = losses>0 ? grossLosses/losses : 0;
   const sharpe = pnlList.length>1 ? (function(){ const mean=pnlList.reduce((a,b)=>a+b,0)/pnlList.length; const std=Math.sqrt(pnlList.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(pnlList.length-1)); return std>0?((mean/std)*Math.sqrt(252)).toFixed(2):'—'; })() : '—';
 
+  // Sortino ratio (only penalizes downside deviation)
+  const sortino = pnlList.length>1 ? (function(){
+    const mean=pnlList.reduce((a,b)=>a+b,0)/pnlList.length;
+    const downDev=pnlList.filter(v=>v<0);
+    if(!downDev.length) return mean>0?'999':'—';
+    const dStd=Math.sqrt(downDev.reduce((s,v)=>s+v*v,0)/downDev.length);
+    return dStd>0?((mean/dStd)*Math.sqrt(252)).toFixed(2):'—';
+  })() : '—';
+
+  // Max drawdown from equity curve
+  let maxDD=0, peak=balance, equityCurveArr=[balance];
+  let runBal=balance;
+  STATE.trades.filter(t=>t.status==='CLOSED').reverse().forEach(t=>{
+    runBal+=parseFloat(t.realizedPnl||0); equityCurveArr.push(runBal);
+    if(runBal>peak)peak=runBal;
+    const dd=((peak-runBal)/peak)*100;
+    if(dd>maxDD)maxDD=dd;
+  });
+
+  // Calmar ratio (annualized return / max drawdown)
+  const totalReturn = equity - balance;
+  const calmar = maxDD > 0 ? ((totalReturn / balance * 100) / maxDD).toFixed(2) : '—';
+
   document.getElementById('riskSharpe').textContent = sharpe;
+  const sortinoEl = document.getElementById('riskSortino');
+  if (sortinoEl) sortinoEl.textContent = sortino;
+  const maxDDEl = document.getElementById('riskMaxDD');
+  if (maxDDEl) { maxDDEl.textContent = maxDD > 0 ? maxDD.toFixed(2) + '%' : '—'; maxDDEl.style.color = maxDD > 10 ? 'var(--red)' : ''; }
+  const calmarEl = document.getElementById('riskCalmar');
+  if (calmarEl) calmarEl.textContent = calmar;
   document.getElementById('riskWinRate').textContent = wr;
   document.getElementById('riskPF').textContent = pf;
   document.getElementById('riskAvgWL').textContent = avgWin>0||avgLoss>0 ? '$'+avgWin.toFixed(0)+' / $'+avgLoss.toFixed(0) : '—';
@@ -112,12 +141,17 @@ function renderRiskPage() {
       let pctMove = 0;
       if (type.startsWith('CRUDE')||type==='EFP'||type==='OPTION_CL') pctMove = sc.crude;
       else if (type.startsWith('FREIGHT')) pctMove = sc.freight;
-      else if (POWER_HUBS.find(h=>h.name===t.hub)) pctMove = sc.power;
+      else if (type.startsWith('AG')) pctMove = sc.ag||0;
+      else if (type.startsWith('METALS')) pctMove = sc.metals||0;
+      else if (type.startsWith('NGL')) pctMove = sc.ngls||0;
+      else if (type.startsWith('LNG')) pctMove = sc.lng||0;
+      else if (typeof POWER_HUBS!=='undefined'&&POWER_HUBS.find(h=>h.name===t.hub)) pctMove = sc.power;
       else pctMove = sc.ng;
       impact += entry * (pctMove/100) * vol * dir;
     });
+    const impPct = equity > 0 ? (impact / equity * 100).toFixed(2) : '0.00';
     const impColor = impact>=0?'green':'red';
-    return `<tr><td style="font-weight:600">${sc.name}</td><td class="mono">${sc.ng>=0?'+':''}${sc.ng}%</td><td class="mono">${sc.power>=0?'+':''}${sc.power}%</td><td class="mono">${sc.crude>=0?'+':''}${sc.crude}%</td><td class="mono">${sc.freight>=0?'+':''}${sc.freight}%</td><td class="mono ${impColor}" style="font-weight:700">${impact>=0?'+':'-'}$${Math.abs(impact).toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>`;
+    return `<tr><td style="font-weight:600;white-space:nowrap">${sc.name}</td><td class="mono">${sc.ng>=0?'+':''}${sc.ng}%</td><td class="mono">${sc.crude>=0?'+':''}${sc.crude}%</td><td class="mono">${sc.power>=0?'+':''}${sc.power}%</td><td class="mono ${impColor}" style="font-weight:700">${impact>=0?'+':'-'}$${Math.abs(impact).toLocaleString(undefined,{maximumFractionDigits:0})}<br><span style="font-size:10px;font-weight:400">${impact>=0?'+':''}${impPct}%</span></td></tr>`;
   }).join('');
 
   // Open positions
@@ -129,12 +163,27 @@ function renderRiskPage() {
   // Margin & Exposure
   renderRiskMargin(open, equity);
 
+  // Concentration risk
+  renderConcentrationRisk(open, equity);
+
+  // Correlation matrix
+  renderCorrelationMatrix();
+
+  // Greeks (for options positions)
+  renderGreeksSummary(open);
+
+  // Drawdown chart
+  drawDrawdownChart(equityCurveArr);
+
   // Equity curve
   drawEquityCurve();
   try { initEquityCrosshair(); } catch(e) { console.error('Equity crosshair error:', e); }
 
   // Position Heatmap
   renderRiskHeatmap(open);
+
+  // Check price alerts
+  if (typeof checkPriceAlerts === 'function') checkPriceAlerts();
 }
 
 function renderRiskHeatmap(openTrades) {
@@ -493,5 +542,202 @@ function initEquityCrosshair() {
   canvas.addEventListener('mouseleave', () => {
     if (canvas._eqMeta) drawEquityCurve();
   });
+}
+
+/* =====================================================================
+   CONCENTRATION RISK
+   ===================================================================== */
+function renderConcentrationRisk(openTrades, equity) {
+  const el = document.getElementById('riskConcentration');
+  if (!el) return;
+  if (!openTrades.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:20px">No open positions</div>'; return; }
+
+  // Group by hub
+  const hubMap = {};
+  openTrades.forEach(t => {
+    const spot = getPrice(t.hub); const vol = parseFloat(t.volume);
+    const exp = Math.abs(spot * vol);
+    hubMap[t.hub] = (hubMap[t.hub] || 0) + exp;
+  });
+  const entries = Object.entries(hubMap).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, v]) => s + v, 0) || 1;
+
+  // Concentration warnings
+  const topPct = (entries[0][1] / total) * 100;
+  const warning = topPct > 50 ? '<div style="color:var(--red);font-size:11px;font-weight:600;margin-bottom:8px">Warning: ' + entries[0][0] + ' is ' + topPct.toFixed(0) + '% of exposure</div>' : '';
+
+  // HHI (Herfindahl-Hirschman Index) for concentration measurement
+  const hhi = entries.reduce((s, [, v]) => s + Math.pow(v / total * 100, 2), 0);
+  const hhiLabel = hhi > 2500 ? 'Concentrated' : hhi > 1500 ? 'Moderate' : 'Diversified';
+  const hhiColor = hhi > 2500 ? 'var(--red)' : hhi > 1500 ? '#f59e0b' : 'var(--green)';
+
+  el.innerHTML = warning
+    + '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px"><span style="color:var(--text-muted)">HHI: <strong style="color:' + hhiColor + '">' + hhi.toFixed(0) + '</strong></span><span style="color:' + hhiColor + ';font-weight:600">' + hhiLabel + '</span></div>'
+    + '<div style="display:flex;height:14px;border-radius:4px;overflow:hidden;margin-bottom:8px">'
+    + entries.map(([hub, exp], i) => {
+        const pct = (exp / total * 100);
+        const colors = ['#22d3ee','#f59e0b','#a78bfa','#10b981','#ef4444','#fb923c','#e879f9','#84cc16'];
+        return '<div style="width:' + pct + '%;background:' + colors[i % colors.length] + ';min-width:2px" title="' + hub + ': ' + pct.toFixed(1) + '%"></div>';
+      }).join('')
+    + '</div>'
+    + entries.slice(0, 8).map(([hub, exp], i) => {
+        const pct = (exp / total * 100).toFixed(1);
+        const colors = ['#22d3ee','#f59e0b','#a78bfa','#10b981','#ef4444','#fb923c','#e879f9','#84cc16'];
+        return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:2px"><span style="width:8px;height:8px;border-radius:2px;background:' + colors[i % colors.length] + ';flex-shrink:0"></span><span style="flex:1;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + hub + '</span><span class="mono" style="color:var(--text-muted)">' + pct + '%</span></div>';
+      }).join('');
+}
+
+/* =====================================================================
+   CORRELATION MATRIX
+   ===================================================================== */
+function renderCorrelationMatrix() {
+  const el = document.getElementById('riskCorrelation');
+  if (!el) return;
+
+  // Get sectors that have price history
+  const sectors = ['NG', 'Crude', 'Power', 'Ag', 'Metals', 'LNG'];
+  const sectorHubs = { NG: 'Henry Hub', Crude: 'WTI Cushing', Power: 'PJM West', Ag: 'Corn CBOT', Metals: 'Gold COMEX', LNG: 'JKM' };
+  const histories = {};
+  sectors.forEach(s => {
+    const hub = sectorHubs[s];
+    const hist = (typeof getChartHistory === 'function') ? getChartHistory(hub) : (typeof priceHistory !== 'undefined' ? priceHistory[hub] : null);
+    if (hist && hist.length > 10) histories[s] = hist.slice(-50);
+  });
+
+  const activeSectors = Object.keys(histories);
+  if (activeSectors.length < 2) { el.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:20px">Need price data for 2+ sectors</div>'; return; }
+
+  // Calculate returns
+  const returns = {};
+  activeSectors.forEach(s => {
+    const h = histories[s];
+    returns[s] = h.slice(1).map((v, i) => (v - h[i]) / h[i]);
+  });
+
+  // Correlation function
+  function corr(a, b) {
+    const n = Math.min(a.length, b.length);
+    if (n < 5) return 0;
+    const ax = a.slice(0, n), bx = b.slice(0, n);
+    const ma = ax.reduce((s, v) => s + v, 0) / n, mb = bx.reduce((s, v) => s + v, 0) / n;
+    let num = 0, da = 0, db = 0;
+    for (let i = 0; i < n; i++) { num += (ax[i] - ma) * (bx[i] - mb); da += (ax[i] - ma) ** 2; db += (bx[i] - mb) ** 2; }
+    const den = Math.sqrt(da * db);
+    return den > 0 ? num / den : 0;
+  }
+
+  // Build matrix
+  let html = '<table style="width:100%;font-size:10px;border-collapse:collapse"><tr><th></th>';
+  activeSectors.forEach(s => { html += '<th style="padding:3px;color:var(--text-muted);font-weight:600">' + s + '</th>'; });
+  html += '</tr>';
+  activeSectors.forEach((s1, i) => {
+    html += '<tr><td style="font-weight:600;color:var(--text-muted);padding:3px">' + s1 + '</td>';
+    activeSectors.forEach((s2, j) => {
+      const c = i === j ? 1 : corr(returns[s1], returns[s2]);
+      const abs = Math.abs(c);
+      const bg = c > 0 ? 'rgba(16,185,129,' + (abs * 0.4) + ')' : 'rgba(239,68,68,' + (abs * 0.4) + ')';
+      const color = abs > 0.5 ? '#fff' : 'var(--text-dim)';
+      html += '<td style="padding:3px;text-align:center;background:' + bg + ';color:' + color + ';font-family:var(--font-mono);border-radius:2px">' + c.toFixed(2) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+/* =====================================================================
+   GREEKS SUMMARY (Options positions)
+   ===================================================================== */
+function renderGreeksSummary(openTrades) {
+  const el = document.getElementById('riskGreeks');
+  if (!el) return;
+
+  const opts = openTrades.filter(t => ['OPTION_NG','OPTION_CL'].includes(t.type));
+  if (!opts.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:12px">No options positions</div>'; return; }
+
+  let totalDelta = 0, totalGamma = 0, totalTheta = 0, totalVega = 0;
+  opts.forEach(t => {
+    const vol = parseFloat(t.volume || 0);
+    const dir = t.direction === 'BUY' ? 1 : -1;
+    const spot = getPrice(t.hub);
+    const strike = parseFloat(t.strike || spot);
+    const isCall = t.callPut !== 'PUT';
+    // Simplified Greeks estimation
+    const moneyness = spot / strike;
+    const d = isCall ? Math.max(0.1, Math.min(0.9, 0.5 + (moneyness - 1) * 2)) : Math.max(0.1, Math.min(0.9, 0.5 - (moneyness - 1) * 2));
+    const delta = d * dir * vol / 10000;
+    const gamma = 0.02 * vol / 10000;
+    const theta = -0.01 * spot * vol / 10000 * dir;
+    const vega = 0.15 * spot * vol / 10000;
+    totalDelta += delta; totalGamma += gamma; totalTheta += theta; totalVega += vega;
+  });
+
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+    + '<div><div style="font-size:10px;color:var(--text-muted)">Delta</div><div class="mono" style="font-size:14px;font-weight:700;color:' + (totalDelta >= 0 ? 'var(--green)' : 'var(--red)') + '">' + totalDelta.toFixed(2) + '</div></div>'
+    + '<div><div style="font-size:10px;color:var(--text-muted)">Gamma</div><div class="mono" style="font-size:14px;font-weight:700">' + totalGamma.toFixed(4) + '</div></div>'
+    + '<div><div style="font-size:10px;color:var(--text-muted)">Theta</div><div class="mono" style="font-size:14px;font-weight:700;color:var(--red)">' + totalTheta.toFixed(2) + '/d</div></div>'
+    + '<div><div style="font-size:10px;color:var(--text-muted)">Vega</div><div class="mono" style="font-size:14px;font-weight:700">' + totalVega.toFixed(2) + '</div></div>'
+    + '</div>';
+}
+
+/* =====================================================================
+   DRAWDOWN CHART
+   ===================================================================== */
+function drawDrawdownChart(equityArr) {
+  const canvas = document.getElementById('drawdownChart');
+  if (!canvas || !canvas.parentElement || !equityArr || equityArr.length < 2) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  if (!rect.width) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = rect.width, H = 120;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  ctx.fillStyle = isLight ? '#fff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+  ctx.fillRect(0, 0, W, H);
+
+  // Calculate drawdown series
+  const dd = [];
+  let peak = equityArr[0];
+  equityArr.forEach(v => {
+    if (v > peak) peak = v;
+    dd.push(((peak - v) / peak) * 100);
+  });
+
+  const maxDD = Math.max(...dd, 1);
+  const padL = 55, padR = 20, padT = 10, padB = 20;
+  const cW = W - padL - padR, cH = H - padT - padB;
+
+  // Fill area
+  ctx.beginPath();
+  dd.forEach((v, i) => {
+    const x = padL + (i / (dd.length - 1)) * cW;
+    const y = padT + (v / maxDD) * cH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(padL + cW, padT); ctx.lineTo(padL, padT); ctx.closePath();
+  ctx.fillStyle = 'rgba(239,68,68,0.15)'; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  dd.forEach((v, i) => {
+    const x = padL + (i / (dd.length - 1)) * cW;
+    const y = padT + (v / maxDD) * cH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Y labels
+  ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
+  ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+  ctx.fillText('0%', padL - 6, padT + 4);
+  ctx.fillText('-' + maxDD.toFixed(1) + '%', padL - 6, padT + cH + 4);
+
+  // Label
+  ctx.fillStyle = '#ef4444'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+  ctx.fillText('Drawdown', padL + 4, padT + 12);
 }
 

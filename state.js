@@ -184,11 +184,14 @@ const MAP_STATE = { ng: false, crude: false, lng: false };
 let lbTab = 'individual';
 let mobDir = '';
 const SCENARIOS = [
-  { name:'Winter Freeze', ng:40, power:60, crude:5, freight:10 },
-  { name:'OPEC Cut', ng:0, power:0, crude:20, freight:15 },
-  { name:'Demand Destruction', ng:-25, power:-25, crude:-25, freight:-30 },
-  { name:'Storage Surprise Bull', ng:15, power:10, crude:0, freight:5 },
-  { name:'Summer Heat Wave', ng:20, power:45, crude:0, freight:0 }
+  { name:'Winter Freeze', ng:40, power:60, crude:5, freight:10, ag:0, metals:2, ngls:15, lng:35 },
+  { name:'OPEC Cut', ng:0, power:0, crude:20, freight:15, ag:0, metals:0, ngls:10, lng:5 },
+  { name:'Demand Destruction', ng:-25, power:-25, crude:-25, freight:-30, ag:-15, metals:-10, ngls:-20, lng:-20 },
+  { name:'Storage Surprise Bull', ng:15, power:10, crude:0, freight:5, ag:0, metals:0, ngls:8, lng:10 },
+  { name:'Summer Heat Wave', ng:20, power:45, crude:0, freight:0, ag:-10, metals:0, ngls:5, lng:15 },
+  { name:'Geopolitical Crisis', ng:30, power:20, crude:35, freight:25, ag:10, metals:15, ngls:20, lng:40 },
+  { name:'Rate Hike Shock', ng:-10, power:-5, crude:-15, freight:-10, ag:-10, metals:-20, ngls:-8, lng:-10 },
+  { name:'Crop Failure', ng:5, power:10, crude:0, freight:5, ag:50, metals:5, ngls:0, lng:5 }
 ];
 const SIM_PEERS = [
   {name:'J. Martinez',realName:'Juan Martinez',firm:'Basis Capital',team:{name:'Alpha',color:'#22d3ee'},ret:6.2,winRate:58,pf:1.80,trades:42},

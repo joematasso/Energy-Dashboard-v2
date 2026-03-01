@@ -1083,8 +1083,11 @@
         <div class="card-body">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div><div style="font-size:11px;color:var(--text-muted)">Sharpe Ratio</div><div class="mono" style="font-size:18px;font-weight:700" id="riskSharpe">—</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted)">Sortino Ratio</div><div class="mono" style="font-size:18px;font-weight:700" id="riskSortino">—</div></div>
             <div><div style="font-size:11px;color:var(--text-muted)">Win Rate</div><div class="mono" style="font-size:18px;font-weight:700" id="riskWinRate">—</div></div>
             <div><div style="font-size:11px;color:var(--text-muted)">Profit Factor</div><div class="mono" style="font-size:18px;font-weight:700" id="riskPF">—</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted)">Max Drawdown</div><div class="mono red" style="font-size:18px;font-weight:700" id="riskMaxDD">—</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted)">Calmar Ratio</div><div class="mono" style="font-size:18px;font-weight:700" id="riskCalmar">—</div></div>
             <div><div style="font-size:11px;color:var(--text-muted)">Avg Win / Avg Loss</div><div class="mono" style="font-size:18px;font-weight:700" id="riskAvgWL">—</div></div>
             <div><div style="font-size:11px;color:var(--text-muted)">Best Trade</div><div class="mono green" style="font-size:18px;font-weight:700" id="riskBest">—</div></div>
             <div><div style="font-size:11px;color:var(--text-muted)">Worst Trade</div><div class="mono red" style="font-size:18px;font-weight:700" id="riskWorst">—</div></div>
@@ -1113,10 +1116,25 @@
         <div class="card-header" style="display:flex;align-items:center">Scenario Analysis<button class="info-btn" onclick="toggleInfo('scenInfo',event)">i</button></div>
         <div class="card-body"><div class="table-wrap">
           <table id="scenarioTable">
-            <thead><tr><th>Scenario</th><th>NG</th><th>Power</th><th>Crude</th><th>Freight</th><th>Portfolio Impact</th></tr></thead>
+            <thead><tr><th>Scenario</th><th>NG</th><th>Crude</th><th>Power</th><th>Impact</th></tr></thead>
             <tbody id="scenarioBody"></tbody>
           </table>
         </div></div>
+      </div>
+    </div>
+    <!-- Concentration + Correlation + Greeks -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">Concentration Risk</div>
+        <div class="card-body"><div id="riskConcentration"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">Sector Correlation Matrix</div>
+        <div class="card-body"><div id="riskCorrelation"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">Portfolio Greeks</div>
+        <div class="card-body"><div id="riskGreeks"></div></div>
       </div>
     </div>
     <!-- Open Positions + Heatmap -->
@@ -1144,6 +1162,10 @@
       </div>
     </div>
     <div class="chart-container"><div class="chart-canvas-wrap"><canvas id="equityChart"></canvas></div></div>
+    <div style="margin-top:12px">
+      <div class="section-header" style="margin-bottom:8px">Drawdown</div>
+      <div class="chart-container"><div class="chart-canvas-wrap"><canvas id="drawdownChart"></canvas></div></div>
+    </div>
   </div>
 
   <!-- Info Popovers (outside cards to escape overflow:hidden) -->

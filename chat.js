@@ -446,6 +446,8 @@ function showReactPicker(event, msgId) {
 
   actionsDiv.after(picker);
   actionsDiv.classList.add('picker-open');
+  const chatMsg = btn.closest('.chat-msg');
+  if (chatMsg) chatMsg.classList.add('picker-active');
   setTimeout(() => { const s = picker.querySelector('.emoji-search'); if (s) s.focus(); }, 50);
   setTimeout(() => {
     document.addEventListener('click', function _close(ev) {
@@ -534,6 +536,7 @@ function closePickers() {
   document.querySelectorAll('.emoji-picker').forEach(p => p.remove());
   document.querySelectorAll('.react-picker-inline').forEach(p => p.remove());
   document.querySelectorAll('.msg-actions-inline.picker-open').forEach(a => a.classList.remove('picker-open'));
+  document.querySelectorAll('.chat-msg.picker-active').forEach(m => m.classList.remove('picker-active'));
   _emojiPickerMsgId = null;
 }
 
@@ -1053,6 +1056,11 @@ if(typeof io !== 'undefined') {
         if (STATE.trader && STATE.trader.trader_name) {
           sock.emit('register_trader', { trader_name: STATE.trader.trader_name });
         }
+      });
+      sock.on('session_revoked', function() {
+        localStorage.removeItem('ng_trader');
+        STATE.trader = null;
+        location.reload();
       });
       sock.on('new_message', function(data) {
         // Ignore own messages

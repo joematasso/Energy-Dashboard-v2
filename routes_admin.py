@@ -120,9 +120,19 @@ def admin_delete_trader(tid):
         db.execute("DELETE FROM trades WHERE trader_name=?", (trader['trader_name'],))
         db.execute("DELETE FROM performance_snapshots WHERE trader_name=?", (trader['trader_name'],))
     # Soft-delete: mark as DELETED so active sessions get silently revoked
-    # on next heartbeat or profile sync (within 60s)
     db.execute("UPDATE traders SET status='DELETED' WHERE id=?", (tid,))
     db.commit()
+    # Immediately kick via WebSocket if online
+    if trader:
+        try:
+            from routes_misc import trader_sids, trader_sids_lock
+            from app import socketio
+            with trader_sids_lock:
+                sid = trader_sids.get(trader['trader_name'])
+            if sid:
+                socketio.emit('session_revoked', {}, room=sid)
+        except Exception:
+            pass
     return jsonify({'success': True})
 
 @admin_bp.route('/api/admin/traders/balance/<int:tid>', methods=['POST'])
