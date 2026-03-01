@@ -685,6 +685,7 @@ input:focus,select:focus{border-color:var(--accent)}
    ================================================================= */
 .chat-messages{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
 .chat-msg{display:flex;align-items:flex-end;gap:8px;max-width:86%;animation:msgFadeIn 0.18s ease-out}
+.chat-messages.no-anim .chat-msg{animation:none}
 @keyframes msgFadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 .chat-msg.me{align-self:flex-end;flex-direction:row-reverse}
 .chat-msg.other{align-self:flex-start}
@@ -698,8 +699,8 @@ input:focus,select:focus{border-color:var(--accent)}
 .chat-msg-content{display:flex;flex-direction:column;min-width:0;max-width:100%}
 .msg-sender{font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:3px;display:flex;align-items:center;gap:5px;padding-left:4px}
 /* Bubbles */
-.msg-bubble{padding:10px 14px;font-size:14px;line-height:1.5;word-break:break-word}
-.chat-msg.me .msg-bubble{background:var(--accent);color:#fff;border-radius:18px 18px 4px 18px}
+.msg-bubble{padding:10px 14px;font-size:14px;line-height:1.5;word-break:break-word;width:fit-content;max-width:100%}
+.chat-msg.me .msg-bubble{background:var(--accent);color:#fff;border-radius:18px 18px 4px 18px;margin-left:auto}
 .chat-msg.other .msg-bubble{background:var(--surface2);color:var(--text);border-radius:18px 18px 18px 4px}
 .chat-msg.me.grouped .msg-bubble{border-radius:18px 4px 4px 18px}
 .chat-msg.other.grouped .msg-bubble{border-radius:4px 18px 18px 4px}

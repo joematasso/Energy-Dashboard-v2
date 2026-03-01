@@ -156,11 +156,11 @@ async function openConvo(convId) {
   if(convo.type !== 'system' && convo.type !== 'admin_inbox') document.getElementById('chatInput').focus();
 }
 
-async function loadMessages(convId) {
+async function loadMessages(convId, isPolling) {
   try {
     const r = await fetch(API_BASE+'/api/chat/messages/'+convId+'?trader='+encodeURIComponent(STATE.trader.trader_name));
     const d = await r.json();
-    if(d.success) renderMessages(d.messages);
+    if(d.success) renderMessages(d.messages, isPolling);
     // Mark as read
     fetch(API_BASE+'/api/chat/mark-read/'+convId+'/'+encodeURIComponent(STATE.trader.trader_name),{method:'POST'}).catch(()=>{});
     const c = CHAT_STATE.conversations.find(c=>c.id===convId);
@@ -169,9 +169,12 @@ async function loadMessages(convId) {
   } catch(e) {}
 }
 
-function renderMessages(msgs) {
+function renderMessages(msgs, isPolling) {
   const container = document.getElementById('chatMessages');
   if (!container) return;
+
+  // Remember scroll position — only auto-scroll if already near bottom
+  const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
 
   let html = '';
   let lastDate = null;
@@ -219,7 +222,7 @@ function renderMessages(msgs) {
 
     const teamDot = m.team_color ? `<span style="width:6px;height:6px;border-radius:50%;background:${m.team_color};display:inline-block;flex-shrink:0"></span>` : '';
     const renderedText = m.text ? formatMentions(escapeHtml(m.text)) : '';
-    const imageHtml = m.image ? `<img src="${m.image}" class="chat-img-msg" onclick="window.open(this.src,'_blank')" alt="image">` : '';
+    const imageHtml = m.image ? `<img src="${m.image}" class="chat-img-msg" onclick="showImageLightbox(this.src)" alt="image">` : '';
 
     // Avatar column (other messages only)
     let avatarHtml = '';
@@ -249,8 +252,11 @@ function renderMessages(msgs) {
     </div>`;
   });
 
+  if (isPolling) container.classList.add('no-anim');
   container.innerHTML = html;
-  container.scrollTop = container.scrollHeight;
+  if (isPolling) container.classList.remove('no-anim');
+  // Only auto-scroll if user was already at bottom (not scrolled up reading history)
+  if (wasNearBottom || !isPolling) container.scrollTop = container.scrollHeight;
   if (CHAT_STATE.activeConvo) loadPinnedBar(CHAT_STATE.activeConvo.id);
 }
 
@@ -310,7 +316,6 @@ async function toggleReaction(msgId, emoji) {
 /* --- Delete Messages --- */
 async function deleteMessage(msgId) {
   if (!STATE.trader || !CHAT_STATE.activeConvo) return;
-  if (!confirm('Delete this message?')) return;
   try {
     const r = await fetch(API_BASE + '/api/chat/messages/' + msgId + '/delete', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -499,6 +504,17 @@ function chatImageSelected(input) {
   };
   reader.readAsDataURL(file);
   input.value = '';
+}
+
+function showImageLightbox(src) {
+  const existing = document.getElementById('chatImgLightbox');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'chatImgLightbox';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  overlay.innerHTML = '<img src="' + src + '" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5)">';
+  overlay.onclick = function() { overlay.remove(); };
+  document.body.appendChild(overlay);
 }
 
 function clearChatImage() {
@@ -747,7 +763,7 @@ async function createGroup() {
 async function pollChat() {
   if(!STATE.trader||!CHAT_STATE.open) return;
   if(CHAT_STATE.activeConvo) {
-    await loadMessages(CHAT_STATE.activeConvo.id);
+    await loadMessages(CHAT_STATE.activeConvo.id, true);
   }
   // Refresh unread counts (but don't overwrite picker)
   try {
