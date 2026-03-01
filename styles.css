@@ -543,9 +543,9 @@ input:focus,select:focus{border-color:var(--accent)}
 .map-zoom-level{font-size:11px;color:var(--text-muted);display:flex;align-items:center;padding:0 4px;font-family:var(--font-mono)}
 .pipeline-map-wrap svg .land{fill:var(--surface2);stroke:var(--border);stroke-width:1}
 .pipeline-map-wrap svg .water{fill:var(--bg)}
-.pipeline-map-wrap svg .pipe{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;opacity:0.5}
+.pipeline-map-wrap svg .pipe{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;opacity:0.5;cursor:pointer}
 .pipeline-map-wrap svg .pipe:hover{opacity:1;stroke-width:3.5}
-.pipeline-map-wrap svg .pipe-label{font-size:7px;font-family:var(--font-sans);fill:var(--text-muted);pointer-events:none}
+.pipeline-map-wrap svg .pipe-label{font-size:7px;font-family:var(--font-sans);pointer-events:none;font-weight:700;text-shadow:0 0 3px rgba(0,0,0,0.8)}
 .pipeline-map-wrap svg .hub-dot{cursor:pointer;transition:r 0.15s ease}
 .pipeline-map-wrap svg .hub-dot:hover{r:7}
 .pipeline-map-wrap svg .hub-label{font-size:7.5px;font-family:var(--font-mono);fill:var(--text-dim);pointer-events:none}

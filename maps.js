@@ -166,11 +166,14 @@ function renderPipelineMap(sector) {
 
   // Pipelines
   sectorPipes.forEach(pipe => {
+    // Visible styled line
     svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}" vector-effect="non-scaling-stroke"/>`;
+    // Wider invisible hit area for easier clicking
+    svg += `<polyline class="pipe-hit" points="${pipe.points}" stroke="transparent" stroke-width="12" fill="none" vector-effect="non-scaling-stroke" style="cursor:pointer" onclick="mapPipeClick(event,'${sector}','${pipe.name}')"/>`;
     const pts = pipe.points.split(' ').map(p => p.split(',').map(Number));
     const mid = pts[Math.floor(pts.length / 2)];
     if (mid) {
-      svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0.7" data-base-size="7">${pipe.name}</text>`;
+      svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0" data-base-size="7" data-pipe="${pipe.name}">${pipe.name}</text>`;
     }
   });
 
@@ -211,6 +214,8 @@ function renderPipelineMap(sector) {
 
   // Attach wheel zoom + drag pan
   initMapZoom(sector);
+  // Restore element scaling if currently zoomed in/out
+  if (z.zoom !== 1) mapScaleElements(sector);
 }
 
 function initMapZoom(sector) {
@@ -369,9 +374,28 @@ function mapZoomReset(sector) {
   if (lbl) lbl.textContent = '100%';
 }
 
+function mapPipeClick(event, sector, pipeName) {
+  event.stopPropagation();
+  const wrap = document.getElementById(sector + 'MapWrap');
+  if (!wrap) return;
+  const svgEl = wrap.querySelector('svg');
+  if (!svgEl) return;
+  // Toggle: hide all pipe labels, then show the clicked one
+  svgEl.querySelectorAll('.pipe-label').forEach(el => {
+    el.setAttribute('opacity', el.dataset.pipe === pipeName ? (el.getAttribute('opacity') === '1' ? '0' : '1') : '0');
+  });
+  // Highlight the clicked pipe, dim others
+  svgEl.querySelectorAll('.pipe').forEach(el => {
+    if (el.dataset.name === pipeName) {
+      el.style.opacity = '1';
+    } else {
+      el.style.opacity = '';
+    }
+  });
+}
+
 function mapHubClick(sector, hubName) {
   setSelectedHub(sector, hubName);
-  // Re-render the map to update selected state
   if (MAP_STATE[sector]) renderPipelineMap(sector);
 }
 
