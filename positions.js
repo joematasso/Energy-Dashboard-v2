@@ -41,6 +41,39 @@ function _typeLabel(type) {
   return m[type] || type;
 }
 
+/* --- Multi-leg spread/basis pricing --- */
+const SPREAD_TYPES = new Set(['SPREAD','CRUDE_DIFF','AG_SPREAD','METALS_SPREAD','NGL_SPREAD','LNG_SPREAD']);
+const BASIS_TYPES = new Set(['BASIS_SWAP','LNG_BASIS']);
+
+function getSpreadPrice(t) {
+  // Calendar spread: price = near month forward - far month forward
+  if (!t.nearMonth || !t.farMonth) return getPrice(t.hub);
+  const fwd = STATE.forwardCurves[t.hub];
+  if (!fwd || !fwd.length) return getPrice(t.hub);
+  const now = new Date();
+  const nearDate = new Date(t.nearMonth + '-01');
+  const farDate = new Date(t.farMonth + '-01');
+  const nearIdx = Math.max(0, Math.min(11, (nearDate.getFullYear() - now.getFullYear()) * 12 + nearDate.getMonth() - now.getMonth()));
+  const farIdx = Math.max(0, Math.min(11, (farDate.getFullYear() - now.getFullYear()) * 12 + farDate.getMonth() - now.getMonth()));
+  const nearPrice = fwd[nearIdx] ? fwd[nearIdx].price : getPrice(t.hub);
+  const farPrice = fwd[farIdx] ? fwd[farIdx].price : getPrice(t.hub);
+  return nearPrice - farPrice;
+}
+
+function getBasisPrice(t) {
+  // Basis swap: price = primary hub price - basis hub price (differential)
+  if (!t.basisHub) return getPrice(t.hub);
+  const p1 = getPrice(t.hub);
+  const p2 = getPrice(t.basisHub);
+  return p1 - p2;
+}
+
+function getTradeSpot(t) {
+  if (SPREAD_TYPES.has(t.type)) return getSpreadPrice(t);
+  if (BASIS_TYPES.has(t.type)) return getBasisPrice(t);
+  return getPrice(t.hub);
+}
+
 /* --- Row expand toggle --- */
 function toggleBlotterRow(rowId) {
   const detail = document.getElementById('bdet_' + rowId);
@@ -72,7 +105,7 @@ function renderBlotterTable() {
 
   // --- Pre-compute MTM for sort ---
   const enriched = trades.map(t => {
-    const spot = getPrice(t.hub);
+    const spot = getTradeSpot(t);
     const dir = t.direction === 'BUY' ? 1 : -1;
     const vol = parseFloat(t.volume || 0);
     const entry = parseFloat(t.entryPrice || 0);
@@ -141,8 +174,15 @@ function renderBlotterTable() {
       typeCell += `<br><span style="font-size:10px;color:var(--text-muted)">MKT/${tif}</span>`;
     }
 
-    // Delivery month
-    const delMo = t.deliveryMonth ? new Date(t.deliveryMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' }) : '—';
+    // Delivery month (show spread legs for calendar spreads)
+    let delMo;
+    if (SPREAD_TYPES.has(t.type) && t.nearMonth && t.farMonth) {
+      const nm = new Date(t.nearMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' });
+      const fm = new Date(t.farMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' });
+      delMo = nm + ' / ' + fm;
+    } else {
+      delMo = t.deliveryMonth ? new Date(t.deliveryMonth + '-01').toLocaleDateString('en-US', { month:'short', year:'2-digit' }) : '—';
+    }
 
     // Volume with unit
     const unit = getVolumeUnit(sector);
@@ -208,13 +248,25 @@ function renderBlotterTable() {
     const targetExit = t.targetExit ? '$' + parseFloat(t.targetExit).toFixed(3) : '—';
     const commission = t.commission ? '$' + parseFloat(t.commission).toFixed(4) + '/unit' : '—';
     const notesLabel = t.notes || '—';
+    // Multi-leg detail info
+    let legInfo = '';
+    if (SPREAD_TYPES.has(t.type) && (t.nearMonth || t.farMonth)) {
+      legInfo = '<div class="bdet-item"><span class="bdet-label">Leg 1 (Near)</span><span>' + (t.nearMonth||'—') + '</span></div>'
+        + '<div class="bdet-item"><span class="bdet-label">Leg 2 (Far)</span><span>' + (t.farMonth||'—') + '</span></div>';
+    }
+    if (BASIS_TYPES.has(t.type) && t.basisHub) {
+      var _p1 = getPrice(t.hub), _p2 = getPrice(t.basisHub);
+      legInfo = '<div class="bdet-item"><span class="bdet-label">Leg 1 Hub</span><span>' + t.hub + ' ($' + _p1.toFixed(4) + ')</span></div>'
+        + '<div class="bdet-item"><span class="bdet-label">Leg 2 Hub</span><span>' + t.basisHub + ' ($' + _p2.toFixed(4) + ')</span></div>'
+        + '<div class="bdet-item"><span class="bdet-label">Differential</span><span>$' + (_p1-_p2).toFixed(4) + '</span></div>';
+    }
     const closeInfo = t.status === 'CLOSED' ? `<div class="bdet-item"><span class="bdet-label">Close Price</span><span>$${parseFloat(t.closePrice||0).toFixed(4)}</span></div><div class="bdet-item"><span class="bdet-label">Closed At</span><span>${t.closedAt ? new Date(t.closedAt).toLocaleString() : '—'}</span></div>` : '';
 
     return `<tr class="blotter-row" style="${rowBg}" onclick="toggleBlotterRow('${rowId}')">
       <td>${sectorBadge}</td>
       <td>${typeCell}</td>
       <td style="${dirColor};font-weight:700;font-size:12px">${t.direction}</td>
-      <td style="font-weight:500;font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}">${t.hub}</td>
+      <td style="font-weight:500;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}${t.basisHub ? ' vs ' + t.basisHub : ''}">${t.hub}${BASIS_TYPES.has(t.type) && t.basisHub ? '<br><span style="font-size:10px;color:var(--text-muted)">vs ' + t.basisHub + '</span>' : ''}</td>
       <td style="font-size:11px;color:var(--text-dim)">${delMo}</td>
       <td class="mono" style="font-size:12px">${volDisplay}</td>
       <td class="mono" style="font-size:12px">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>
@@ -239,6 +291,7 @@ function renderBlotterTable() {
       <div class="bdet-item"><span class="bdet-label">Stop Loss</span><span>${stopLoss}</span></div>
       <div class="bdet-item"><span class="bdet-label">Target Exit</span><span>${targetExit}</span></div>
       ${closeInfo}
+      ${legInfo}
       <div class="bdet-item bdet-notes"><span class="bdet-label">Notes</span><span>${notesLabel}</span></div>
     </div></td></tr>`;
   }).join('');
@@ -260,24 +313,19 @@ function renderBlotterTable() {
 function closeTrade(id) {
   const t = STATE.trades.find(x => x.id === id);
   if (!t || t.status !== 'OPEN') return;
-  const cp = getPrice(t.hub);
+  const isMultiLeg = SPREAD_TYPES.has(t.type) || BASIS_TYPES.has(t.type);
+  const cp = isMultiLeg ? getTradeSpot(t) : getPrice(t.hub);
   if (!cp && cp !== 0) return toast('No market price available for ' + t.hub, 'error');
-  const isBasis = t.type === 'BASIS_SWAP';
-  if (!isBasis && cp <= 0) return toast('No market price available for ' + t.hub, 'error');
+  if (!isMultiLeg && cp <= 0) return toast('No market price available for ' + t.hub, 'error');
   const isOtc = t.venue === 'OTC' && (t.counterpartyTrader || t.otcMirrorOf);
+  const priceLabel = isMultiLeg ? 'spread $' + cp.toFixed(4) : 'market price $' + cp.toFixed(4);
   const confirmMsg = isOtc
-    ? 'Close OTC trade at market price $' + cp.toFixed(4) + '? (Mirror position will also close)'
-    : 'Close at market price $' + cp.toFixed(4) + '?';
+    ? 'Close OTC trade at ' + priceLabel + '? (Mirror position will also close)'
+    : 'Close at ' + priceLabel + '?';
   if (!confirm(confirmMsg)) return;
 
   const dir = t.direction === 'BUY' ? 1 : -1;
-  let pnl;
-  if (isBasis) {
-    // Basis P&L = change in differential × volume
-    pnl = (cp - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
-  } else {
-    pnl = (cp - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
-  }
+  const pnl = (cp - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
   t.status = 'CLOSED';
   t.closePrice = cp;
   t.realizedPnl = pnl;

@@ -203,9 +203,9 @@ function populateHubDropdown() {
 
   sel.innerHTML = hubs.map(h => `<option value="${h.name}" ${h.name===curVal?'selected':''}>${h.name}</option>`).join('');
 
-  // Also populate basis hub dropdown
+  // Also populate basis hub dropdown (same sector as primary hub)
   const basisSel = document.getElementById('tradeBasisHub');
-  if (basisSel) basisSel.innerHTML = NG_HUBS.map(h => `<option value="${h.name}">${h.name}</option>`).join('');
+  if (basisSel) basisSel.innerHTML = hubs.map(h => `<option value="${h.name}">${h.name}</option>`).join('');
 
   // Update spot reference
   const hub = sel.value;
@@ -413,7 +413,9 @@ function onTradeTypeChange() {
   condDiv.style.display = 'none';
   condDiv.querySelectorAll('.form-group').forEach(fg => fg.style.display = 'none');
 
-  if (['SPREAD','CRUDE_DIFF'].includes(type)) {
+  const isSpreadType = ['SPREAD','CRUDE_DIFF','AG_SPREAD','METALS_SPREAD','NGL_SPREAD','LNG_SPREAD'].includes(type);
+  const isBasisType = ['BASIS_SWAP','LNG_BASIS'].includes(type);
+  if (isSpreadType) {
     condDiv.style.display = 'block';
     condDiv.querySelectorAll('.cond-spread').forEach(fg => fg.style.display = 'flex');
     if (type === 'CRUDE_DIFF') condDiv.querySelectorAll('.cond-diff').forEach(fg => fg.style.display = 'flex');
@@ -422,7 +424,7 @@ function onTradeTypeChange() {
     condDiv.style.display = 'block';
     condDiv.querySelectorAll('.cond-option').forEach(fg => fg.style.display = 'flex');
   }
-  if (type === 'BASIS_SWAP') {
+  if (isBasisType) {
     condDiv.style.display = 'block';
     condDiv.querySelectorAll('.cond-basis').forEach(fg => fg.style.display = 'flex');
   }
@@ -456,11 +458,11 @@ function calcMargin(t) {
   const vol = parseFloat(t.volume || 0);
   const type = t.type || '';
   const isCrude = type.startsWith('CRUDE') || type === 'EFP' || type === 'OPTION_CL';
-  const isSpread = ['SPREAD', 'MULTILEG', 'CRUDE_DIFF'].includes(type);
+  const isSpread = ['SPREAD','MULTILEG','CRUDE_DIFF','AG_SPREAD','METALS_SPREAD','NGL_SPREAD','LNG_SPREAD'].includes(type);
   const spreadDiscount = isSpread ? 0.4 : 1.0; // 60% margin reduction for spreads
   let margin;
   if (isCrude) margin = (vol / 1000) * 5000;
-  else if (type === 'BASIS_SWAP') margin = (vol / 10000) * 800;
+  else if (type === 'BASIS_SWAP' || type === 'LNG_BASIS') margin = (vol / 10000) * 800;
   else if (type === 'OPTION_NG') margin = (vol / 10000) * 1500 * 0.5;
   else if (type === 'OPTION_CL') margin = (vol / 1000) * 5000 * 0.5;
   else if (type.startsWith('FREIGHT')) margin = (vol / 1000) * 2000;
@@ -599,8 +601,8 @@ async function submitTrade() {
   const cptyTrader = document.getElementById('tradeCpty').value;
   const isOtcBilateral = cptyTrader && cptyTrader.length > 0;
 
-  // Conditional fields
-  if (['SPREAD','CRUDE_DIFF'].includes(type)) {
+  // Conditional fields — spread legs
+  if (['SPREAD','CRUDE_DIFF','AG_SPREAD','METALS_SPREAD','NGL_SPREAD','LNG_SPREAD'].includes(type)) {
     trade.nearMonth = document.getElementById('tradeNearMonth').value;
     trade.farMonth = document.getElementById('tradeFarMonth').value;
   }
@@ -610,7 +612,7 @@ async function submitTrade() {
     trade.callPut = document.getElementById('tradeCallPut').value;
     trade.premium = document.getElementById('tradePremium').value;
   }
-  if (type === 'BASIS_SWAP') {
+  if (['BASIS_SWAP','LNG_BASIS'].includes(type)) {
     trade.basisHub = document.getElementById('tradeBasisHub').value;
   }
 

@@ -94,8 +94,15 @@ def submit_otc_proposal(trader):
         'broker': data.get('broker', ''),
     }
     msg = data.get('proposalMessage', '')
-    cur = db.execute("INSERT INTO otc_proposals (from_trader, to_trader, trade_data, message) VALUES (?,?,?,?)",
-                     (trader, cpty_name, json.dumps(trade_data), msg))
+    initial_rev = json.dumps([{
+        'by': trader, 'action': 'INITIAL',
+        'trade_data': trade_data, 'message': msg,
+        'at': datetime.utcnow().isoformat()
+    }])
+    cur = db.execute(
+        "INSERT INTO otc_proposals (from_trader, to_trader, trade_data, message, turn, revision_history, revision_count) "
+        "VALUES (?,?,?,?,?,?,0)",
+        (trader, cpty_name, json.dumps(trade_data), msg, cpty_name, initial_rev))
     proposal_id = cur.lastrowid
     db.commit()
 
@@ -116,37 +123,63 @@ def submit_otc_proposal(trader):
 
 @misc_bp.route('/api/otc/proposals/<trader>', methods=['GET'])
 def get_otc_proposals(trader):
-    """Get pending OTC proposals for a trader (both sent and received)."""
+    """Get OTC proposals for a trader (both sent and received). ?include_resolved=true for history."""
     db = get_db()
+    include_resolved = request.args.get('include_resolved', 'false') == 'true'
+
+    if include_resolved:
+        # Return all proposals involving this trader
+        status_filter = "p.status IN ('PENDING','ACCEPTED','REJECTED','WITHDRAWN')"
+    else:
+        status_filter = "p.status='PENDING'"
+
     received = db.execute(
-        "SELECT p.*, t.display_name as from_display FROM otc_proposals p "
-        "JOIN traders t ON t.trader_name=p.from_trader "
-        "WHERE p.to_trader=? AND p.status='PENDING' ORDER BY p.created_at DESC", (trader,)
+        f"SELECT p.*, t.display_name as from_display FROM otc_proposals p "
+        f"JOIN traders t ON t.trader_name=p.from_trader "
+        f"WHERE p.to_trader=? AND {status_filter} ORDER BY p.created_at DESC", (trader,)
     ).fetchall()
     sent = db.execute(
-        "SELECT p.*, t.display_name as to_display FROM otc_proposals p "
-        "JOIN traders t ON t.trader_name=p.to_trader "
-        "WHERE p.from_trader=? AND p.status='PENDING' ORDER BY p.created_at DESC", (trader,)
+        f"SELECT p.*, t.display_name as to_display FROM otc_proposals p "
+        f"JOIN traders t ON t.trader_name=p.to_trader "
+        f"WHERE p.from_trader=? AND {status_filter} ORDER BY p.created_at DESC", (trader,)
     ).fetchall()
-    return jsonify({
-        'success': True,
-        'received': [{'id': r['id'], 'from_trader': r['from_trader'], 'from_name': r['from_display'],
-                       'trade_data': json.loads(r['trade_data']), 'message': r['message'],
-                       'created_at': r['created_at']} for r in received],
-        'sent': [{'id': s['id'], 'to_trader': s['to_trader'], 'to_name': s['to_display'],
-                   'trade_data': json.loads(s['trade_data']), 'message': s['message'],
-                   'created_at': s['created_at']} for s in sent],
-    })
+
+    def _row(r, name_key):
+        row = {
+            'id': r['id'], 'from_trader': r['from_trader'], 'to_trader': r['to_trader'],
+            'trade_data': json.loads(r['trade_data']), 'message': r['message'],
+            'status': r['status'], 'created_at': r['created_at'],
+            'resolved_at': r['resolved_at'] or '',
+            'turn': r['turn'] if 'turn' in r.keys() else '',
+            'revision_count': r['revision_count'] if 'revision_count' in r.keys() else 0,
+            'revision_history': json.loads(r['revision_history'] or '[]') if 'revision_history' in r.keys() else [],
+        }
+        row[name_key] = r[name_key.replace('trader', 'display').replace('from_', 'from_').replace('to_', 'to_')]
+        return row
+
+    received_out = []
+    for r in received:
+        o = _row(r, 'from_name')
+        o['from_name'] = r['from_display']
+        received_out.append(o)
+
+    sent_out = []
+    for s in sent:
+        o = _row(s, 'to_name')
+        o['to_name'] = s['to_display']
+        sent_out.append(o)
+
+    return jsonify({'success': True, 'received': received_out, 'sent': sent_out})
 
 
 @misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/accept', methods=['POST'])
 def accept_otc_proposal(trader, proposal_id):
-    """Accept an OTC proposal — creates both trades."""
+    """Accept an OTC proposal — creates both trades. Either party can accept when it's their turn."""
     db = get_db()
-    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND to_trader=? AND status='PENDING'",
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND turn=? AND status='PENDING'",
                       (proposal_id, trader)).fetchone()
     if not prop:
-        return jsonify({'success': False, 'error': 'Proposal not found or already resolved'}), 404
+        return jsonify({'success': False, 'error': 'Proposal not found, not your turn, or already resolved'}), 404
 
     td = json.loads(prop['trade_data'])
     from_trader = prop['from_trader']
@@ -190,9 +223,11 @@ def accept_otc_proposal(trader, proposal_id):
     init_trade['otcMirrorOf'] = mirror_id
     db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(init_trade), init_id))
 
-    # Mark proposal accepted
-    db.execute("UPDATE otc_proposals SET status='ACCEPTED', resolved_at=? WHERE id=?",
-               (datetime.utcnow().isoformat(), proposal_id))
+    # Mark proposal accepted + append to revision history
+    revs = json.loads(prop['revision_history'] or '[]') if 'revision_history' in prop.keys() else []
+    revs.append({'by': trader, 'action': 'ACCEPTED', 'trade_data': td, 'message': '', 'at': datetime.utcnow().isoformat()})
+    db.execute("UPDATE otc_proposals SET status='ACCEPTED', resolved_at=?, revision_history=? WHERE id=?",
+               (datetime.utcnow().isoformat(), json.dumps(revs), proposal_id))
     db.commit()
 
     # Trade feed
@@ -213,34 +248,90 @@ def accept_otc_proposal(trader, proposal_id):
 
 @misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/reject', methods=['POST'])
 def reject_otc_proposal(trader, proposal_id):
-    """Reject an OTC proposal."""
+    """Reject an OTC proposal. Either party can reject when it's their turn."""
     db = get_db()
-    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND to_trader=? AND status='PENDING'",
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND turn=? AND status='PENDING'",
                       (proposal_id, trader)).fetchone()
     if not prop:
-        return jsonify({'success': False, 'error': 'Proposal not found or already resolved'}), 404
-    db.execute("UPDATE otc_proposals SET status='REJECTED', resolved_at=? WHERE id=?",
-               (datetime.utcnow().isoformat(), proposal_id))
+        return jsonify({'success': False, 'error': 'Proposal not found, not your turn, or already resolved'}), 404
+    revs = json.loads(prop['revision_history'] or '[]') if 'revision_history' in prop.keys() else []
+    revs.append({'by': trader, 'action': 'REJECTED', 'trade_data': json.loads(prop['trade_data']), 'message': '', 'at': datetime.utcnow().isoformat()})
+    db.execute("UPDATE otc_proposals SET status='REJECTED', resolved_at=?, revision_history=? WHERE id=?",
+               (datetime.utcnow().isoformat(), json.dumps(revs), proposal_id))
     db.commit()
     socketio.emit('otc_proposal_resolved', {'id': proposal_id, 'status': 'REJECTED',
-                                             'from_trader': prop['from_trader'], 'to_trader': trader})
+                                             'from_trader': prop['from_trader'], 'to_trader': prop['to_trader']})
     return jsonify({'success': True})
 
 
 @misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/withdraw', methods=['POST'])
 def withdraw_otc_proposal(trader, proposal_id):
-    """Withdraw a sent OTC proposal."""
+    """Withdraw an OTC proposal. Either party can withdraw."""
     db = get_db()
-    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND from_trader=? AND status='PENDING'",
-                      (proposal_id, trader)).fetchone()
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND (from_trader=? OR to_trader=?) AND status='PENDING'",
+                      (proposal_id, trader, trader)).fetchone()
     if not prop:
         return jsonify({'success': False, 'error': 'Proposal not found'}), 404
-    db.execute("UPDATE otc_proposals SET status='WITHDRAWN', resolved_at=? WHERE id=?",
-               (datetime.utcnow().isoformat(), proposal_id))
+    revs = json.loads(prop['revision_history'] or '[]') if 'revision_history' in prop.keys() else []
+    revs.append({'by': trader, 'action': 'WITHDRAWN', 'trade_data': json.loads(prop['trade_data']), 'message': '', 'at': datetime.utcnow().isoformat()})
+    db.execute("UPDATE otc_proposals SET status='WITHDRAWN', resolved_at=?, revision_history=? WHERE id=?",
+               (datetime.utcnow().isoformat(), json.dumps(revs), proposal_id))
     db.commit()
     socketio.emit('otc_proposal_resolved', {'id': proposal_id, 'status': 'WITHDRAWN',
-                                             'from_trader': trader, 'to_trader': prop['to_trader']})
+                                             'from_trader': prop['from_trader'], 'to_trader': prop['to_trader']})
     return jsonify({'success': True})
+
+
+@misc_bp.route('/api/otc/proposals/<trader>/<int:proposal_id>/counter', methods=['POST'])
+def counter_otc_proposal(trader, proposal_id):
+    """Counter an OTC proposal with revised terms."""
+    db = get_db()
+    prop = db.execute("SELECT * FROM otc_proposals WHERE id=? AND status='PENDING' AND turn=?",
+                      (proposal_id, trader)).fetchone()
+    if not prop:
+        return jsonify({'success': False, 'error': 'Proposal not found or not your turn'}), 404
+
+    data = request.get_json()
+    td = json.loads(prop['trade_data'])
+    old_td = dict(td)
+
+    # Apply edits from counter
+    if 'price' in data and data['price']:
+        td['entryPrice'] = float(data['price'])
+    if 'volume' in data and data['volume']:
+        td['volume'] = float(data['volume'])
+    if 'deliveryMonth' in data and data['deliveryMonth']:
+        td['deliveryMonth'] = data['deliveryMonth']
+
+    # Build revision entry
+    revs = json.loads(prop['revision_history'] or '[]')
+    revs.append({
+        'by': trader, 'action': 'COUNTER',
+        'trade_data': td, 'old_data': old_td,
+        'message': data.get('message', ''),
+        'at': datetime.utcnow().isoformat()
+    })
+
+    # Flip turn to the other party
+    other = prop['from_trader'] if prop['from_trader'] != trader else prop['to_trader']
+    new_count = (prop['revision_count'] or 0) + 1
+
+    db.execute(
+        "UPDATE otc_proposals SET trade_data=?, revision_history=?, turn=?, revision_count=?, message=? WHERE id=?",
+        (json.dumps(td), json.dumps(revs), other, new_count, data.get('message', ''), proposal_id))
+    db.commit()
+
+    # Get display names
+    me = db.execute("SELECT display_name FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    me_name = me['display_name'] if me else trader
+
+    socketio.emit('otc_counter', {
+        'id': proposal_id, 'by': trader, 'by_name': me_name,
+        'to': other, 'trade_data': td, 'revision_count': new_count,
+        'message': data.get('message', '')
+    })
+
+    return jsonify({'success': True, 'revision_count': new_count})
 
 
 # ---- OTC Trade Close (auto-close mirror) ----

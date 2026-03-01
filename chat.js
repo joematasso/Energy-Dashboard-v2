@@ -1045,6 +1045,14 @@ if(typeof io !== 'undefined') {
           if (typeof loadOtcProposals === 'function') loadOtcProposals();
         }
       });
+      sock.on('otc_counter', function(data) {
+        if(data.to === (STATE.trader||{}).trader_name) {
+          playSound('alert');
+          const td = data.trade_data || {};
+          toast(data.by_name + ' countered: ' + (td.direction||'') + ' ' + parseFloat(td.volume||0).toLocaleString() + ' ' + (td.hub||'') + ' @ $' + parseFloat(td.entryPrice||0).toFixed(3), 'info');
+          if (typeof loadOtcProposals === 'function') loadOtcProposals();
+        }
+      });
       sock.on('admin_broadcast', async function(data) {
         const isUrgent = data.priority === 'urgent';
 

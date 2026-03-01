@@ -297,6 +297,20 @@ def init_db():
     except sqlite3.OperationalError:
         cur.execute("ALTER TABLE traders ADD COLUMN privileged INTEGER DEFAULT 0")
 
+    # Migration: add negotiation columns to otc_proposals
+    try:
+        cur.execute("SELECT revision_history FROM otc_proposals LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE otc_proposals ADD COLUMN revision_history TEXT DEFAULT '[]'")
+    try:
+        cur.execute("SELECT turn FROM otc_proposals LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE otc_proposals ADD COLUMN turn TEXT DEFAULT ''")
+    try:
+        cur.execute("SELECT revision_count FROM otc_proposals LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE otc_proposals ADD COLUMN revision_count INTEGER DEFAULT 0")
+
     conn.commit()
 
     # Auto-seed traders from traders_seed.json if the traders table is empty

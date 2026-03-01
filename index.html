@@ -799,17 +799,17 @@
           <div class="form-group"><label>Counterparty <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">For OTC trades, select the trader on the other side. Leave as None for exchange trades.</span></span> <span id="cptyHint" style="font-size:10px;color:var(--text-muted)"></span></label><select id="tradeCpty"><option value="">None (Exchange)</option></select></div>
         </div>
 
-        <!-- Conditional fields -->
+        <!-- Conditional fields (multi-leg) -->
         <div id="conditionalFields" style="display:none;margin-top:12px">
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
-            <div class="form-group cond-spread" style="display:none"><label>Near Month</label><input type="month" id="tradeNearMonth"></div>
-            <div class="form-group cond-spread" style="display:none"><label>Far Month</label><input type="month" id="tradeFarMonth"></div>
+            <div class="form-group cond-spread" style="display:none"><label>Leg 1 — Near Month <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Front-month contract. For a calendar spread, you BUY the near month and SELL the far month (or vice versa). P&L = change in spread between the two months.</span></span></label><input type="month" id="tradeNearMonth"></div>
+            <div class="form-group cond-spread" style="display:none"><label>Leg 2 — Far Month <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Back-month contract. The spread is quoted as near minus far. Entry price should be the spread value at entry.</span></span></label><input type="month" id="tradeFarMonth"></div>
             <div class="form-group cond-option" style="display:none"><label>Strike Price</label><input type="number" id="tradeStrike" step="0.01"></div>
             <div class="form-group cond-option" style="display:none"><label>Expiry</label><input type="date" id="tradeExpiry"></div>
             <div class="form-group cond-option" style="display:none"><label>Call / Put</label><select id="tradeCallPut"><option value="CALL">Call</option><option value="PUT">Put</option></select></div>
             <div class="form-group cond-option" style="display:none"><label>Premium</label><input type="number" id="tradePremium" step="0.01"></div>
-            <div class="form-group cond-basis" style="display:none"><label>Basis Hub</label><select id="tradeBasisHub"></select></div>
-            <div class="form-group cond-diff" style="display:none"><label>Spread Value</label><input type="number" id="tradeDiffSpread" step="0.01"></div>
+            <div class="form-group cond-basis" style="display:none"><label>Leg 2 — Basis Hub <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Secondary pricing point. Basis swap P&L = change in differential between the primary hub (Leg 1) and this hub (Leg 2).</span></span></label><select id="tradeBasisHub"></select></div>
+            <div class="form-group cond-diff" style="display:none"><label>Spread Value <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The differential value at entry (e.g., WTI-Brent spread in $/BBL).</span></span></label><input type="number" id="tradeDiffSpread" step="0.01"></div>
           </div>
         </div>
 
@@ -920,15 +920,27 @@
       <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:var(--red);border-color:rgba(239,68,68,0.3)" onclick="flatAll()" title="Close all open positions">Flat All</button>
     </div>
 
-    <!-- OTC Proposals Section -->
-    <div id="otcProposalsSection" style="display:none;margin-bottom:16px">
+    <!-- OTC Desk -->
+    <div id="otcDeskSection" style="margin-bottom:16px">
       <div class="card" style="border-color:rgba(139,92,246,0.3)">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
-          <span>OTC Proposals <span id="otcProposalCount" style="font-size:11px;color:var(--text-muted)"></span></span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-weight:700">OTC Desk</span>
+            <span id="otcActiveCount" class="otc-turn-badge your-turn" style="display:none"></span>
+            <div class="otc-tabs">
+              <button class="otc-tab active" id="otcTabActive" onclick="switchOtcTab('active')">Active</button>
+              <button class="otc-tab" id="otcTabHistory" onclick="switchOtcTab('history')">History</button>
+            </div>
+          </div>
           <button class="btn btn-ghost btn-sm" onclick="loadOtcProposals()" title="Refresh">Refresh</button>
         </div>
-        <div class="card-body" id="otcProposalsBody" style="padding:8px 16px;max-height:300px;overflow-y:auto">
-          <div style="text-align:center;color:var(--text-muted);padding:12px;font-size:12px">No pending proposals</div>
+        <div class="card-body" style="padding:8px 16px;max-height:400px;overflow-y:auto">
+          <div id="otcActiveBody">
+            <div style="text-align:center;color:var(--text-muted);padding:12px;font-size:12px">No active negotiations</div>
+          </div>
+          <div id="otcHistoryBody" style="display:none">
+            <div style="text-align:center;color:var(--text-muted);padding:12px;font-size:12px">No history</div>
+          </div>
         </div>
       </div>
     </div>
