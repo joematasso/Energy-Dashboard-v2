@@ -153,11 +153,15 @@ async function openConvo(convId) {
   } else if (convo.type === 'dm') {
     const other = convo.members.find(m=>m.trader_name!==STATE.trader.trader_name);
     headerAvatar.style.display = 'flex';
-    headerAvatar.classList.remove('clickable');
     if (other && other.photo_url) {
+      headerAvatar.classList.remove('clickable');
+      headerAvatar.classList.add('enlargeable');
       headerAvatar.innerHTML = '<img src="' + other.photo_url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+      headerAvatar.onclick = function(ev) { ev.stopPropagation(); showImageLightbox(other.photo_url, other.display_name); };
     } else {
+      headerAvatar.classList.remove('clickable', 'enlargeable');
       headerAvatar.innerHTML = (other ? other.display_name : 'D').charAt(0).toUpperCase();
+      headerAvatar.onclick = null;
     }
   } else {
     headerAvatar.style.display = 'none';
@@ -240,7 +244,9 @@ function renderMessages(msgs, isPolling) {
       if (!isGrouped) {
         const initials = (m.display_name || '?').charAt(0).toUpperCase();
         const imgContent = m.photo_url ? `<img src="${m.photo_url}" alt="">` : initials;
-        avatarHtml = `<div class="msg-avatar">${imgContent}</div>`;
+        const safeDisplayName = (m.display_name || '').replace(/'/g, "\\'");
+        const avatarClick = m.photo_url ? ` onclick="showImageLightbox('${m.photo_url}','${safeDisplayName}')" style="cursor:pointer"` : '';
+        avatarHtml = `<div class="msg-avatar"${avatarClick}>${imgContent}</div>`;
       } else {
         avatarHtml = `<div class="msg-avatar-spacer"></div>`;
       }
@@ -609,13 +615,14 @@ function chatImageSelected(input) {
   input.value = '';
 }
 
-function showImageLightbox(src) {
+function showImageLightbox(src, caption) {
   const existing = document.getElementById('chatImgLightbox');
   if (existing) existing.remove();
   const overlay = document.createElement('div');
   overlay.id = 'chatImgLightbox';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
-  overlay.innerHTML = '<img src="' + src + '" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5)">';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out;gap:12px';
+  overlay.innerHTML = '<img src="' + src + '" style="max-width:90vw;max-height:85vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5)">'
+    + (caption ? '<div style="color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.5)">' + caption + '</div>' : '');
   overlay.onclick = function() { overlay.remove(); };
   document.body.appendChild(overlay);
 }
