@@ -14,12 +14,15 @@ let CHAT_STATE = {
 function toggleChat() {
   CHAT_STATE.open = !CHAT_STATE.open;
   const panel = document.getElementById('chatPanel');
+  const fab = document.querySelector('.mobile-fab');
   if(CHAT_STATE.open) {
     panel.classList.add('open');
+    if(fab) fab.classList.add('chat-hidden');
     loadConversations();
     if(!CHAT_STATE.pollTimer) CHAT_STATE.pollTimer = setInterval(pollChat, 5000);
   } else {
     panel.classList.remove('open');
+    if(fab) fab.classList.remove('chat-hidden');
     CHAT_STATE.showingPicker = false;
     if(CHAT_STATE.pollTimer) { clearInterval(CHAT_STATE.pollTimer); CHAT_STATE.pollTimer = null; }
   }

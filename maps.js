@@ -146,13 +146,18 @@ function renderPipelineMap(sector) {
   // Build SVG with viewBox for Mercator world projection
   const z = MAP_ZOOM[sector];
   let svg = `<svg viewBox="${z.vx} ${z.vy} ${z.vw} ${z.vh}" width="100%" style="max-width:850px;min-width:450px" xmlns="http://www.w3.org/2000/svg" data-sector="${sector}">`;
-  // Ocean background (full world canvas)
-  svg += `<rect x="0" y="0" width="1000" height="600" fill="${waterFill}"/>`;
+  // Ocean background (extended for horizontal wrapping: -1000 to 2000)
+  svg += `<rect x="-1000" y="0" width="3000" height="600" fill="${waterFill}"/>`;
 
-  // Draw all countries from world GeoJSON paths
+  // Draw all countries — define once, repeat 3x for seamless horizontal wrap
+  svg += `<defs><g id="${sector}World">`;
   for (const [country, path] of Object.entries(COUNTRY_PATHS)) {
     svg += `<path d="${path}" fill="${landFill}" stroke="${borderStroke}" stroke-width="0.3"/>`;
   }
+  svg += `</g></defs>`;
+  svg += `<use href="#${sector}World" x="-1000"/>`;
+  svg += `<use href="#${sector}World" x="0"/>`;
+  svg += `<use href="#${sector}World" x="1000"/>`;
 
   // North Sea label (for crude)
   if (sector === 'crude') {
@@ -161,11 +166,11 @@ function renderPipelineMap(sector) {
 
   // Pipelines
   sectorPipes.forEach(pipe => {
-    svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}"/>`;
+    svg += `<polyline class="pipe" points="${pipe.points}" stroke="${pipe.color}" data-name="${pipe.name}" vector-effect="non-scaling-stroke"/>`;
     const pts = pipe.points.split(' ').map(p => p.split(',').map(Number));
     const mid = pts[Math.floor(pts.length / 2)];
     if (mid) {
-      svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0.7">${pipe.name}</text>`;
+      svg += `<text class="pipe-label" x="${mid[0]}" y="${mid[1] - 5}" text-anchor="middle" fill="${pipe.color}" opacity="0.7" data-base-size="7">${pipe.name}</text>`;
     }
   });
 
@@ -178,20 +183,20 @@ function renderPipelineMap(sector) {
     const r = isSelected ? 6 : 4.5;
     const strokeW = isSelected ? 2 : 1.2;
 
-    svg += `<circle class="hub-dot" cx="${pos.x}" cy="${pos.y}" r="${r}" fill="${h.color}" stroke="${isSelected ? '#fff' : h.color}" stroke-width="${strokeW}" opacity="${isSelected ? 1 : 0.85}" onclick="mapHubClick('${sector}','${h.name}')"/>`;
+    svg += `<circle class="hub-dot" cx="${pos.x}" cy="${pos.y}" r="${r}" data-base-r="${r}" fill="${h.color}" stroke="${isSelected ? '#fff' : h.color}" stroke-width="${strokeW}" opacity="${isSelected ? 1 : 0.85}" onclick="mapHubClick('${sector}','${h.name}')" vector-effect="non-scaling-stroke"/>`;
 
     const anchor = pos.x > 500 ? 'end' : 'start';
     const lx = pos.x > 500 ? pos.x - 6 : pos.x + 6;
     const ly = pos.y - 2;
 
-    svg += `<text class="hub-label" x="${lx}" y="${ly}" text-anchor="${anchor}" fill="${textFill}" style="font-size:7px">${h.name}</text>`;
+    svg += `<text class="hub-label" x="${lx}" y="${ly}" text-anchor="${anchor}" fill="${textFill}" data-base-size="7" style="font-size:7px">${h.name}</text>`;
     const isLargeNum = h.name.includes('Baltic') || h.name.includes('Index') || h.base > 100;
     const priceStr = isLargeNum ? '$' + price.toFixed(0) : '$' + price.toFixed(2);
-    svg += `<text class="hub-price-label" x="${lx}" y="${ly + 9}" text-anchor="${anchor}" fill="${brightText}" style="font-size:8px;font-weight:600">${priceStr}</text>`;
+    svg += `<text class="hub-price-label" x="${lx}" y="${ly + 9}" text-anchor="${anchor}" fill="${brightText}" data-base-size="8" style="font-size:8px;font-weight:600">${priceStr}</text>`;
   });
 
   // Title (positioned relative to current viewBox)
-  svg += `<text x="${z.vx + z.vw/2}" y="${z.vy + z.vh - 8}" text-anchor="middle" fill="${textFill}" style="font-size:7px;font-family:var(--font-sans);font-weight:600">${sectorTitle}</text>`;
+  svg += `<text class="map-title" x="${z.vx + z.vw/2}" y="${z.vy + z.vh - 8}" text-anchor="middle" fill="${textFill}" data-base-size="7" style="font-size:7px;font-family:var(--font-sans);font-weight:600">${sectorTitle}</text>`;
   svg += `</svg>`;
 
   // Legend
@@ -244,6 +249,7 @@ function initMapZoom(sector) {
     if (rafPan) return;
     rafPan = requestAnimationFrame(() => {
       z.vx = newVx; z.vy = newVy;
+      mapWrapX(sector);
       svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
       rafPan = null;
     });
@@ -270,6 +276,7 @@ function initMapZoom(sector) {
       const rect = cachedTouchRect || svgEl.getBoundingClientRect();
       z.vx = startVx - (e.touches[0].clientX - startX) * (z.vw / rect.width);
       z.vy = startVy - (e.touches[0].clientY - startY) * (z.vh / rect.height);
+      mapWrapX(sector);
       svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
     } else if (e.touches.length === 2) {
       const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
@@ -282,6 +289,33 @@ function initMapZoom(sector) {
     e.preventDefault();
   }, { passive: false });
   wrap.addEventListener('touchend', () => { dragging = false; lastTouchDist = 0; });
+}
+
+// Normalize vx to [0,1000) for seamless horizontal wrapping
+function mapWrapX(sector) {
+  const z = MAP_ZOOM[sector];
+  while (z.vx < 0) z.vx += 1000;
+  while (z.vx >= 1000) z.vx -= 1000;
+}
+
+function mapScaleElements(sector) {
+  const z = MAP_ZOOM[sector];
+  const wrap = document.getElementById(sector + 'MapWrap');
+  const svgEl = wrap && wrap.querySelector('svg');
+  if (!svgEl) return;
+  const scale = 1 / z.zoom; // inverse: as zoom increases, elements shrink in SVG units
+  // Scale text elements
+  svgEl.querySelectorAll('[data-base-size]').forEach(el => {
+    el.style.fontSize = (parseFloat(el.dataset.baseSize) * scale) + 'px';
+  });
+  // Scale hub dot radii
+  svgEl.querySelectorAll('.hub-dot[data-base-r]').forEach(el => {
+    el.setAttribute('r', parseFloat(el.dataset.baseR) * scale);
+  });
+  // Scale country border stroke width (paths inside defs)
+  svgEl.querySelectorAll('defs path').forEach(el => {
+    el.setAttribute('stroke-width', 0.3 * scale);
+  });
 }
 
 function mapZoomAt(sector, dir, e) {
@@ -313,7 +347,9 @@ function mapZoomAt(sector, dir, e) {
   if (z.zoom < 0.5) { mapZoomReset(sector); return; }
   if (z.zoom > 5) { z.zoom = 5; z.vw = z.baseVw / 5; z.vh = z.baseVh / 5; }
 
+  mapWrapX(sector);
   svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
+  mapScaleElements(sector);
   const lbl = document.getElementById(sector + 'ZoomLvl');
   if (lbl) lbl.textContent = Math.round(z.zoom * 100) + '%';
 }
@@ -328,6 +364,7 @@ function mapZoomReset(sector) {
   const wrap = document.getElementById(sector + 'MapWrap');
   const svgEl = wrap && wrap.querySelector('svg');
   if (svgEl) svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
+  mapScaleElements(sector);
   const lbl = document.getElementById(sector + 'ZoomLvl');
   if (lbl) lbl.textContent = '100%';
 }
