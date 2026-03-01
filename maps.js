@@ -121,17 +121,17 @@ const PIPE_LEGENDS = {
 
 // Major oil & gas producing basins (Mercator projected polygons)
 const BASINS = [
-  { name:'Permian',         points:'210,239 221,239 221,247 210,247', cx:215, cy:243, color:'#a855f7', sector:'both', info:{ type:'Shale / Tight Oil', formations:'Wolfcamp, Bone Spring, Spraberry, Delaware', production:'~6.2 MMbbl/d oil, ~25 Bcf/d gas', rigs:'~300-350 active' }},
-  { name:'Eagle Ford',      points:'225,248 233,248 233,251 225,251', cx:229, cy:249, color:'#f59e0b', sector:'both', info:{ type:'Shale', formations:'Eagle Ford Shale (Upper & Lower)', production:'~1.1 MMbbl/d oil, ~7 Bcf/d gas', rigs:'~50-70 active' }},
-  { name:'Haynesville',     points:'236,241 244,241 244,245 236,245', cx:240, cy:243, color:'#ef4444', sector:'ng', info:{ type:'Shale Gas', formations:'Haynesville Shale, Bossier Shale', production:'~16 Bcf/d gas', rigs:'~45-55 active' }},
-  { name:'Marcellus',       points:'275,223 289,223 289,230 281,230 275,227', cx:281, cy:226, color:'#22d3ee', sector:'ng', info:{ type:'Shale Gas', formations:'Marcellus Shale (Upper & Lower)', production:'~28 Bcf/d gas', rigs:'~25-35 active' }},
-  { name:'Utica',           points:'271,223 278,223 282,229 272,229', cx:275, cy:226, color:'#06b6d4', sector:'ng', info:{ type:'Shale Gas / Condensate', formations:'Utica / Point Pleasant', production:'~8 Bcf/d gas', rigs:'~10-15 active' }},
-  { name:'Barnett',         points:'228,241 232,241 232,244 228,244', cx:230, cy:242, color:'#84cc16', sector:'ng', info:{ type:'Shale Gas', formations:'Barnett Shale', production:'~2 Bcf/d gas (declining)', rigs:'~2-5 active' }},
-  { name:'DJ / Niobrara',   points:'206,223 212,223 212,228 206,228', cx:209, cy:225, color:'#f97316', sector:'both', info:{ type:'Tight Oil / Shale', formations:'Niobrara, Codell', production:'~450 Kbbl/d oil, ~5 Bcf/d gas', rigs:'~10-15 active' }},
-  { name:'San Juan',        points:'197,232 203,232 203,236 197,236', cx:200, cy:234, color:'#14b8a6', sector:'ng', info:{ type:'Conventional / CBM', formations:'Fruitland Coal, Pictured Cliffs', production:'~3 Bcf/d gas', rigs:'~5-10 active' }},
-  { name:'Anadarko',        points:'224,235 231,235 231,239 224,239', cx:227, cy:237, color:'#ec4899', sector:'both', info:{ type:'Shale / Tight Oil', formations:'SCOOP, STACK, Woodford, Springer', production:'~400 Kbbl/d oil, ~6 Bcf/d gas', rigs:'~30-40 active' }},
-  { name:'Bakken',          points:'206,206 215,206 215,213 206,213', cx:210, cy:209, color:'#8b5cf6', sector:'crude', info:{ type:'Tight Oil', formations:'Bakken, Three Forks', production:'~1.2 MMbbl/d oil', rigs:'~30-40 active' }},
-  { name:'Gulf of Mexico',  points:'233,249 258,249 258,255 247,255 233,253', cx:245, cy:252, color:'#0ea5e9', sector:'crude', info:{ type:'Deepwater / Ultra-deepwater', formations:'Wilcox, Norphlet, Miocene', production:'~1.8 MMbbl/d oil', rigs:'~15-20 floating rigs' }},
+  { name:'Permian',         points:'208,201 220,201 220,212 208,212', cx:214, cy:206, color:'#a855f7', sector:'both', info:{ type:'Shale / Tight Oil', formations:'Wolfcamp, Bone Spring, Spraberry, Delaware', production:'~6.2 MMbbl/d oil, ~25 Bcf/d gas', rigs:'~300-350 active' }},
+  { name:'Eagle Ford',      points:'223,214 232,214 232,220 223,220', cx:227, cy:217, color:'#f59e0b', sector:'both', info:{ type:'Shale', formations:'Eagle Ford Shale (Upper & Lower)', production:'~1.1 MMbbl/d oil, ~7 Bcf/d gas', rigs:'~50-70 active' }},
+  { name:'Haynesville',     points:'236,203 245,203 245,208 236,208', cx:240, cy:206, color:'#ef4444', sector:'ng', info:{ type:'Shale Gas', formations:'Haynesville Shale, Bossier Shale', production:'~16 Bcf/d gas', rigs:'~45-55 active' }},
+  { name:'Marcellus',       points:'272,171 293,171 293,184 272,184', cx:283, cy:177, color:'#22d3ee', sector:'ng', info:{ type:'Shale Gas', formations:'Marcellus Shale (Upper & Lower)', production:'~28 Bcf/d gas', rigs:'~25-35 active' }},
+  { name:'Utica',           points:'271,173 280,173 280,182 271,182', cx:275, cy:178, color:'#06b6d4', sector:'ng', info:{ type:'Shale Gas / Condensate', formations:'Utica / Point Pleasant', production:'~8 Bcf/d gas', rigs:'~10-15 active' }},
+  { name:'Barnett',         points:'227,201 232,201 232,207 227,207', cx:229, cy:204, color:'#84cc16', sector:'ng', info:{ type:'Shale Gas', formations:'Barnett Shale', production:'~2 Bcf/d gas (declining)', rigs:'~2-5 active' }},
+  { name:'DJ / Niobrara',   points:'205,173 213,173 213,181 205,181', cx:209, cy:177, color:'#f97316', sector:'both', info:{ type:'Tight Oil / Shale', formations:'Niobrara, Codell', production:'~450 Kbbl/d oil, ~5 Bcf/d gas', rigs:'~10-15 active' }},
+  { name:'San Juan',        points:'195,188 201,188 201,193 195,193', cx:198, cy:190, color:'#14b8a6', sector:'ng', info:{ type:'Conventional / CBM', formations:'Fruitland Coal, Pictured Cliffs', production:'~3 Bcf/d gas', rigs:'~5-10 active' }},
+  { name:'Anadarko',        points:'224,190 233,190 233,200 224,200', cx:228, cy:195, color:'#ec4899', sector:'both', info:{ type:'Shale / Tight Oil', formations:'SCOOP, STACK, Woodford, Springer', production:'~400 Kbbl/d oil, ~6 Bcf/d gas', rigs:'~30-40 active' }},
+  { name:'Bakken',          points:'204,144 216,144 216,156 204,156', cx:210, cy:150, color:'#8b5cf6', sector:'crude', info:{ type:'Tight Oil', formations:'Bakken, Three Forks', production:'~1.2 MMbbl/d oil', rigs:'~30-40 active' }},
+  { name:'Gulf of Mexico',  points:'239,216 259,216 259,226 239,226', cx:249, cy:221, color:'#0ea5e9', sector:'crude', info:{ type:'Deepwater / Ultra-deepwater', formations:'Wilcox, Norphlet, Miocene', production:'~1.8 MMbbl/d oil', rigs:'~15-20 floating rigs' }},
 ];
 
 // Pipeline metadata for info tooltip
