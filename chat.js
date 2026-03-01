@@ -1072,6 +1072,7 @@ const CALL_STATE = {
   timerInterval: null,
   startTime: null,
   ringTimeout: null,    // caller-side unanswered timeout
+  disconnectTimeout: null, // delay before ending on 'disconnected'
   incomingOffer: null,
   incomingCaller: null,
   incomingCallType: 'audio',
@@ -1138,28 +1139,44 @@ async function startCall(type) {
     };
 
     CALL_STATE.peer.ontrack = (e) => {
-      CALL_STATE.remoteStream = e.streams[0];
+      const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+      CALL_STATE.remoteStream = stream;
+      // Attach video
       if (CALL_STATE.callType === 'video') {
         const remoteVid = document.getElementById('callRemoteVideo');
-        if (remoteVid) { remoteVid.srcObject = e.streams[0]; remoteVid.play().catch(()=>{}); }
+        if (remoteVid && remoteVid.srcObject !== stream) {
+          remoteVid.srcObject = stream;
+          remoteVid.play().catch(()=>{});
+        }
       }
-      // Always route audio
+      // Route audio through a separate Audio element (only once)
       if (!CALL_STATE.remoteAudio) {
         CALL_STATE.remoteAudio = new Audio();
+        CALL_STATE.remoteAudio.srcObject = stream;
+        CALL_STATE.remoteAudio.play().catch(() => {});
       }
-      CALL_STATE.remoteAudio.srcObject = e.streams[0];
-      CALL_STATE.remoteAudio.play().catch(() => {});
     };
 
-    CALL_STATE.peer.onconnectionstatechange = () => {
+    CALL_STATE.peer.oniceconnectionstatechange = () => {
       if (!CALL_STATE.peer) return;
-      const st = CALL_STATE.peer.connectionState;
-      if (st === 'connected') {
+      const st = CALL_STATE.peer.iceConnectionState;
+      if (st === 'connected' || st === 'completed') {
         if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
+        if (CALL_STATE.disconnectTimeout) { clearTimeout(CALL_STATE.disconnectTimeout); CALL_STATE.disconnectTimeout = null; }
         document.getElementById('callStatus').textContent = 'Connected';
         if (!CALL_STATE.startTime) startCallTimer();
-      } else if (st === 'disconnected' || st === 'failed') {
+      } else if (st === 'failed') {
         endCall();
+      } else if (st === 'disconnected') {
+        // Transient — wait 5s before ending (ICE may reconnect)
+        if (!CALL_STATE.disconnectTimeout) {
+          CALL_STATE.disconnectTimeout = setTimeout(() => {
+            if (CALL_STATE.peer && CALL_STATE.peer.iceConnectionState === 'disconnected') {
+              endCall();
+            }
+            CALL_STATE.disconnectTimeout = null;
+          }, 5000);
+        }
       }
     };
 
@@ -1222,25 +1239,40 @@ async function acceptCall() {
     };
 
     CALL_STATE.peer.ontrack = (e) => {
-      CALL_STATE.remoteStream = e.streams[0];
+      const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+      CALL_STATE.remoteStream = stream;
       if (CALL_STATE.callType === 'video') {
         const remoteVid = document.getElementById('callRemoteVideo');
-        if (remoteVid) { remoteVid.srcObject = e.streams[0]; remoteVid.play().catch(()=>{}); }
+        if (remoteVid && remoteVid.srcObject !== stream) {
+          remoteVid.srcObject = stream;
+          remoteVid.play().catch(()=>{});
+        }
       }
       if (!CALL_STATE.remoteAudio) {
         CALL_STATE.remoteAudio = new Audio();
+        CALL_STATE.remoteAudio.srcObject = stream;
+        CALL_STATE.remoteAudio.play().catch(() => {});
       }
-      CALL_STATE.remoteAudio.srcObject = e.streams[0];
-      CALL_STATE.remoteAudio.play().catch(() => {});
       document.getElementById('callStatus').textContent = 'Connected';
       if (!CALL_STATE.startTime) startCallTimer();
     };
 
-    CALL_STATE.peer.onconnectionstatechange = () => {
+    CALL_STATE.peer.oniceconnectionstatechange = () => {
       if (!CALL_STATE.peer) return;
-      const st = CALL_STATE.peer.connectionState;
-      if (st === 'disconnected' || st === 'failed') {
+      const st = CALL_STATE.peer.iceConnectionState;
+      if (st === 'failed') {
         endCall();
+      } else if (st === 'disconnected') {
+        if (!CALL_STATE.disconnectTimeout) {
+          CALL_STATE.disconnectTimeout = setTimeout(() => {
+            if (CALL_STATE.peer && CALL_STATE.peer.iceConnectionState === 'disconnected') {
+              endCall();
+            }
+            CALL_STATE.disconnectTimeout = null;
+          }, 5000);
+        }
+      } else if (st === 'connected' || st === 'completed') {
+        if (CALL_STATE.disconnectTimeout) { clearTimeout(CALL_STATE.disconnectTimeout); CALL_STATE.disconnectTimeout = null; }
       }
     };
 
@@ -1290,6 +1322,7 @@ function endVoiceCall() { endCall(); }
 
 function endCallLocal() {
   if (CALL_STATE.ringTimeout) { clearTimeout(CALL_STATE.ringTimeout); CALL_STATE.ringTimeout = null; }
+  if (CALL_STATE.disconnectTimeout) { clearTimeout(CALL_STATE.disconnectTimeout); CALL_STATE.disconnectTimeout = null; }
   if (CALL_STATE.peer) { try { CALL_STATE.peer.close(); } catch(e){} CALL_STATE.peer = null; }
   if (CALL_STATE.localStream) { CALL_STATE.localStream.getTracks().forEach(t => t.stop()); CALL_STATE.localStream = null; }
   if (CALL_STATE.remoteAudio) { CALL_STATE.remoteAudio.pause(); CALL_STATE.remoteAudio.srcObject = null; CALL_STATE.remoteAudio = null; }
