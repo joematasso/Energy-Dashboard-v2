@@ -199,9 +199,12 @@ function renderPipelineMap(sector) {
     svg += `<path d="${path}" fill="${landFill}" stroke="${borderStroke}" stroke-width="0.3"/>`;
   }
   svg += `</g></defs>`;
-  svg += `<use href="#${sector}World" x="-1000"/>`;
-  svg += `<use href="#${sector}World" x="0"/>`;
-  svg += `<use href="#${sector}World" x="1000"/>`;
+  // 3x3 tiled grid for seamless horizontal + vertical wrapping
+  for (const dy of [-600, 0, 600]) {
+    for (const dx of [-1000, 0, 1000]) {
+      svg += `<use href="#${sector}World" x="${dx}" y="${dy}"/>`;
+    }
+  }
 
   // North Sea label (for crude)
   if (sector === 'crude') {
@@ -255,8 +258,6 @@ function renderPipelineMap(sector) {
     });
   }
 
-  // Title
-  svg += `<text class="map-title" x="${z.vx + z.vw/2}" y="${z.vy + z.vh - 8}" text-anchor="middle" fill="${textFill}" data-base-size="7" style="font-size:7px;font-family:var(--font-sans);font-weight:600">${sectorTitle}</text>`;
   svg += `</svg>`;
 
   // Layer control panel
@@ -312,7 +313,7 @@ function initMapZoom(sector) {
     if (rafPan) return;
     rafPan = requestAnimationFrame(() => {
       z.vx = newVx; z.vy = newVy;
-      mapWrapX(sector);
+      mapWrapXY(sector);
       svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
       rafPan = null;
     });
@@ -339,7 +340,7 @@ function initMapZoom(sector) {
       const rect = cachedTouchRect || svgEl.getBoundingClientRect();
       z.vx = startVx - (e.touches[0].clientX - startX) * (z.vw / rect.width);
       z.vy = startVy - (e.touches[0].clientY - startY) * (z.vh / rect.height);
-      mapWrapX(sector);
+      mapWrapXY(sector);
       svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
     } else if (e.touches.length === 2) {
       const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
@@ -354,11 +355,13 @@ function initMapZoom(sector) {
   wrap.addEventListener('touchend', () => { dragging = false; lastTouchDist = 0; });
 }
 
-// Normalize vx to [0,1000) for seamless horizontal wrapping
-function mapWrapX(sector) {
+// Normalize vx to [0,1000) and vy to [0,600) for seamless wrapping
+function mapWrapXY(sector) {
   const z = MAP_ZOOM[sector];
   while (z.vx < 0) z.vx += 1000;
   while (z.vx >= 1000) z.vx -= 1000;
+  while (z.vy < 0) z.vy += 600;
+  while (z.vy >= 600) z.vy -= 600;
 }
 
 function mapScaleElements(sector) {
@@ -410,7 +413,7 @@ function mapZoomAt(sector, dir, e) {
   if (z.zoom < 0.5) { mapZoomReset(sector); return; }
   if (z.zoom > 5) { z.zoom = 5; z.vw = z.baseVw / 5; z.vh = z.baseVh / 5; }
 
-  mapWrapX(sector);
+  mapWrapXY(sector);
   svgEl.setAttribute('viewBox', `${z.vx} ${z.vy} ${z.vw} ${z.vh}`);
   mapScaleElements(sector);
   const lbl = document.getElementById(sector + 'ZoomLvl');
