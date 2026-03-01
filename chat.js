@@ -6,7 +6,9 @@ let CHAT_STATE = {
   conversations: [],
   activeConvo: null,
   showingPicker: false,
-  pollTimer: null
+  showingAddMembers: false,
+  pollTimer: null,
+  lastMsgId: null
 };
 
 function toggleChat() {
@@ -103,11 +105,14 @@ async function openConvo(convId) {
   if(!convo) return;
   CHAT_STATE.activeConvo = convo;
   CHAT_STATE.showingPicker = false;
+  CHAT_STATE.showingAddMembers = false;
+  CHAT_STATE.lastMsgId = null;
   document.getElementById('chatConvoList').style.display = 'none';
   const msgView = document.getElementById('chatMsgView');
   msgView.style.display = 'flex';
   document.getElementById('chatBackBtn').style.display = 'block';
   document.getElementById('chatNewBtn').style.display = 'none';
+  document.getElementById('chatNewGroupBtn').style.display = 'none';
   document.getElementById('chatRenameBtn').style.display = convo.type === 'group' ? 'block' : 'none';
   document.getElementById('chatAddMembersBtn').style.display = convo.type === 'group' ? 'block' : 'none';
   let name = convo.name;
@@ -252,11 +257,28 @@ function renderMessages(msgs, isPolling) {
     </div>`;
   });
 
+  // Track last message ID to skip redundant re-renders during polling
+  const newLastId = msgs.length ? msgs[msgs.length - 1].id : null;
+  if (isPolling && newLastId === CHAT_STATE.lastMsgId && msgs.length === container.querySelectorAll('.chat-msg').length) {
+    return; // Nothing changed — skip DOM thrash
+  }
+  CHAT_STATE.lastMsgId = newLastId;
+
   if (isPolling) container.classList.add('no-anim');
+  const savedScroll = container.scrollTop;
   container.innerHTML = html;
-  if (isPolling) container.classList.remove('no-anim');
-  // Only auto-scroll if user was already at bottom (not scrolled up reading history)
-  if (wasNearBottom || !isPolling) container.scrollTop = container.scrollHeight;
+  if (isPolling) {
+    // Defer removal so browser renders one frame with animation:none
+    requestAnimationFrame(() => container.classList.remove('no-anim'));
+    // Preserve scroll position unless new messages arrived
+    if (wasNearBottom) {
+      container.scrollTop = container.scrollHeight;
+    } else {
+      container.scrollTop = savedScroll;
+    }
+  } else {
+    container.scrollTop = container.scrollHeight;
+  }
   if (CHAT_STATE.activeConvo) loadPinnedBar(CHAT_STATE.activeConvo.id);
 }
 
@@ -551,6 +573,7 @@ function chatShowList() {
   document.getElementById('chatMsgView').style.display = 'none';
   document.getElementById('chatBackBtn').style.display = 'none';
   document.getElementById('chatNewBtn').style.display = 'block';
+  document.getElementById('chatNewGroupBtn').style.display = 'block';
   document.getElementById('chatRenameBtn').style.display = 'none';
   document.getElementById('chatAddMembersBtn').style.display = 'none';
   document.getElementById('chatHeaderAvatar').style.display = 'none';
@@ -614,6 +637,7 @@ async function chatAvatarUpload(input) {
 
 async function chatAddMembers() {
   if(!CHAT_STATE.activeConvo || CHAT_STATE.activeConvo.type !== 'group') return;
+  CHAT_STATE.showingAddMembers = true;
   const convId = CHAT_STATE.activeConvo.id;
 
   // Get current members
@@ -673,6 +697,7 @@ async function doAddMember(traderName, displayName, convId, el) {
 }
 
 function chatDoneAdding() {
+  CHAT_STATE.showingAddMembers = false;
   // Reload the conversation messages
   if(CHAT_STATE.activeConvo) {
     loadMessages(CHAT_STATE.activeConvo.id);
@@ -712,13 +737,27 @@ async function chatNewConvo() {
       const teamDot = t.team?`<span style="width:8px;height:8px;border-radius:50%;background:${t.team.color||'var(--accent)'};display:inline-block"></span>`:'';
       return `<div class="chat-convo-item" onclick="startDm('${t.trader_name}')">${t.photo_url ? `<div class="convo-avatar"><img src="${t.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>` : `<div class="convo-avatar">${(t.display_name||'?')[0].toUpperCase()}</div>`}<div class="convo-info"><div class="convo-name">${teamDot} ${t.display_name}</div><div class="convo-preview">${t.firm||''}</div></div></div>`;
     }).join('')}</div>
-    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
-      <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-dim)">Or create a group</h4>
-      <input id="chatGroupName" placeholder="Group name" style="width:100%;padding:8px;margin-bottom:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
-      <button class="btn btn-primary btn-sm" onclick="createGroup()" style="width:100%">Create Group Chat</button>
-    </div>
   </div>`;
   window._chatTraders = traders;
+}
+
+function chatNewGroup() {
+  if(!STATE.trader) return;
+  // Show group creation UI directly in the convo list area
+  document.getElementById('chatMsgView').style.display = 'none';
+  document.getElementById('chatConvoList').style.display = 'block';
+  document.getElementById('chatBackBtn').style.display = 'none';
+  document.getElementById('chatRenameBtn').style.display = 'none';
+  document.getElementById('chatAddMembersBtn').style.display = 'none';
+  CHAT_STATE.activeConvo = null;
+  CHAT_STATE.showingPicker = true;
+  const list = document.getElementById('chatConvoList');
+  list.innerHTML = `<div style="padding:12px">
+    <h4 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Create a Group Chat</h4>
+    <input id="chatGroupName" placeholder="Group name" style="width:100%;padding:8px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+    <button class="btn btn-primary btn-sm" onclick="createGroup()" style="width:100%">Create Group</button>
+    <button class="btn btn-ghost btn-sm" onclick="loadConversations()" style="width:100%;margin-top:8px">Cancel</button>
+  </div>`;
 }
 
 function filterChatTraders() {
@@ -762,7 +801,7 @@ async function createGroup() {
 
 async function pollChat() {
   if(!STATE.trader||!CHAT_STATE.open) return;
-  if(CHAT_STATE.activeConvo) {
+  if(CHAT_STATE.activeConvo && !CHAT_STATE.showingAddMembers) {
     await loadMessages(CHAT_STATE.activeConvo.id, true);
   }
   // Refresh unread counts (but don't overwrite picker)
