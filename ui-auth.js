@@ -145,6 +145,20 @@ async function syncTradesFromServer() {
   try {
     const pr = await fetch(API_BASE + '/api/traders/profile/' + encodeURIComponent(STATE.trader.trader_name));
     const pd = await pr.json();
+    if (pd.revoked || pr.status === 403) {
+      // Session revoked — silent logout
+      localStorage.removeItem('ng_trader');
+      STATE.trader = null;
+      location.reload();
+      return;
+    }
+    if (!pr.ok || !pd.success) {
+      // Trader no longer exists — silent logout
+      localStorage.removeItem('ng_trader');
+      STATE.trader = null;
+      location.reload();
+      return;
+    }
     if (pd.success) {
       const changed = STATE.trader.privileged !== pd.privileged;
       STATE.trader.privileged = pd.privileged;
@@ -152,7 +166,6 @@ async function syncTradesFromServer() {
       STATE.trader.display_name = pd.display_name;
       STATE.trader.firm = pd.firm;
       localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));
-      // Update advanced settings visibility if privilege changed
       if (changed) {
         const advSection = document.getElementById('settingsDateOverride');
         if (advSection) advSection.style.display = STATE.trader.privileged ? '' : 'none';

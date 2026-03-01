@@ -273,6 +273,9 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;padding:8px;max-height:160px;overflow-y:auto}
 .emoji-cell{background:none;border:none;cursor:pointer;font-size:20px;padding:4px;border-radius:6px;transition:transform 0.1s,background 0.1s;line-height:1}
 .emoji-cell:hover{background:var(--surface2);transform:scale(1.2)}
+.chat-emoji-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;border-radius:6px;display:flex;align-items:center;transition:color 0.12s,background 0.12s;flex-shrink:0}
+.chat-emoji-btn:hover{color:var(--accent);background:var(--surface2)}
+.emoji-picker-input{bottom:calc(100% + 8px);right:32px;left:auto;top:auto}
 /* Pinned message bar */
 .pinned-bar{padding:8px 14px;background:rgba(245,158,11,0.08);border-bottom:1px solid rgba(245,158,11,0.2);display:flex;align-items:center;gap:8px;cursor:pointer;transition:background 0.15s}
 .pinned-bar:hover{background:rgba(245,158,11,0.12)}

@@ -89,10 +89,14 @@ document.addEventListener('click', function(e) {
     const panel = document.getElementById('chatPanel');
     const chatTab = document.getElementById('chatTab');
     const headerChatBtn = document.getElementById('headerChatBtn');
-    // If click is inside the chat panel or on any chat toggle button, do nothing
+    const callOverlay = document.getElementById('callOverlay');
+    const incomingCall = document.getElementById('incomingCallUI');
+    // If click is inside the chat panel, chat toggle buttons, or call UI, do nothing
     if (panel && panel.contains(e.target)) return;
     if (chatTab && chatTab.contains(e.target)) return;
     if (headerChatBtn && headerChatBtn.contains(e.target)) return;
+    if (callOverlay && callOverlay.style.display !== 'none' && callOverlay.contains(e.target)) return;
+    if (incomingCall && incomingCall.style.display !== 'none' && incomingCall.contains(e.target)) return;
     // Close the chat
     CHAT_STATE.open = false;
     panel.classList.remove('open');
@@ -363,41 +367,53 @@ function formatMentions(text) {
 
 function escapeHtml(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-/* --- Reactions --- */
+/* --- Reactions & Emoji System --- */
 const QUICK_REACTIONS = ['👍','🔥','📈','📉','💯','😂'];
 const EMOJI_CATEGORIES = {
-  'Frequent': ['👍','👎','🔥','💯','📈','📉','🎯','💰','🚀','⚡','✅','❌','👀','🤝','💪','🙏'],
-  'Trading':  ['📈','📉','💰','💵','💸','🏦','📊','📋','🛢️','⛽','💎','🪙','📦','🔔','⏰','🧾'],
-  'Smileys':  ['😂','😅','🤣','😊','😎','🤔','😬','😱','🥳','😤','🫡','🤯','😏','🙄','😭','🥲'],
-  'Hands':    ['👍','👎','👏','🤝','💪','✌️','🤞','👋','🫶','🙏','🤙','👊','✊','🫰','🤌','☝️'],
-  'Objects':  ['🚀','⚡','🔥','💡','🎯','🏆','⭐','❤️','💔','🔒','🔓','📌','🗑️','✏️','📎','🔗']
+  'Frequent': ['👍','👎','🔥','💯','📈','📉','🎯','💰','🚀','⚡','✅','❌','👀','🤝','💪','🙏','😂','😎','🤔','❤️'],
+  'Trading':  ['📈','📉','💰','💵','💸','🏦','📊','📋','🛢️','⛽','💎','🪙','📦','🔔','⏰','🧾','🐂','🐻','⚖️','🏷️','💹','🔻','📐','🧮','⛏️','🏗️','🚢','✈️','🌾','⚡'],
+  'Smileys':  ['😂','😅','🤣','😊','😎','🤔','😬','😱','🥳','😤','🫡','🤯','😏','🙄','😭','🥲','😀','😁','🤩','🥴','😴','🤑','😇','🫣','😮','😐','🫠','🤓','😈','💀'],
+  'Hands':    ['👍','👎','👏','🤝','💪','✌️','🤞','👋','🫶','🙏','🤙','👊','✊','🫰','🤌','☝️','🖐️','✋','🤚','🤏','👌','🫵','🖕','🙌','👐','🤲'],
+  'Hearts':   ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💖','💝','💘','💗','💕','💞','❤️‍🔥','💔','♥️'],
+  'Objects':  ['🚀','⚡','🔥','💡','🎯','🏆','⭐','🏅','🎉','🎊','🔒','🔓','📌','🗑️','✏️','📎','🔗','💻','📱','🖥️','⌚','💣','🔧','🛡️','⚙️','🧲']
+};
+const EMOJI_NAMES = {
+  '👍':'thumbs up','👎':'thumbs down','🔥':'fire hot','💯':'hundred percent','📈':'chart up bull','📉':'chart down bear',
+  '🎯':'target bullseye','💰':'money bag','🚀':'rocket moon','⚡':'lightning bolt','✅':'check yes','❌':'cross no',
+  '👀':'eyes looking','🤝':'handshake deal','💪':'strong flex','🙏':'pray please','😂':'laughing cry','😎':'cool sunglasses',
+  '🤔':'thinking hmm','❤️':'red heart love','💵':'dollar bill','💸':'money fly','🏦':'bank','📊':'bar chart',
+  '📋':'clipboard','🛢️':'oil barrel crude','⛽':'gas fuel','💎':'diamond gem','🪙':'coin','📦':'package box',
+  '🔔':'bell alert','⏰':'alarm clock','🧾':'receipt','🐂':'bull long','🐻':'bear short','⚖️':'scale balance',
+  '💹':'chart yen','🔻':'red triangle down','📐':'triangle ruler','🧮':'abacus calculate','⛏️':'pick mining',
+  '🏗️':'construction build','🚢':'ship freight','✈️':'airplane plane','🌾':'wheat grain ag','😅':'sweat smile',
+  '🤣':'rofl rolling','😊':'blush happy','😬':'grimace','😱':'scream shock','🥳':'party celebrate',
+  '😤':'angry huff','🫡':'salute','🤯':'mind blown','😏':'smirk','🙄':'eye roll','😭':'crying sob',
+  '🥲':'smile tear','😀':'grin','😁':'beam','🤩':'star eyes','🥴':'woozy drunk','😴':'sleep zzz',
+  '🤑':'money face','😇':'angel halo','🫣':'peeking','😮':'surprised oh','😐':'neutral','🫠':'melting',
+  '🤓':'nerd glasses','😈':'devil','💀':'skull dead','👏':'clap','✌️':'peace victory','🤞':'fingers crossed',
+  '👋':'wave hello','🫶':'heart hands','🤙':'call me','👊':'fist bump','✊':'raised fist','🤌':'pinch italian',
+  '☝️':'point up','🖐️':'hand raised','🤏':'pinching small','👌':'ok perfect','🙌':'hands raised',
+  '🧡':'orange heart','💛':'yellow heart','💚':'green heart','💙':'blue heart','💜':'purple heart',
+  '🖤':'black heart','🤍':'white heart','💖':'sparkling heart','💝':'gift heart','❤️‍🔥':'heart fire',
+  '💔':'broken heart','🏆':'trophy winner','🏅':'medal','🎉':'party popper','🎊':'confetti',
+  '🔒':'locked','🔓':'unlocked','📌':'pin','💡':'idea lightbulb','⭐':'star','💣':'bomb',
+  '🔧':'wrench tool','🛡️':'shield protect','⚙️':'gear settings','💻':'laptop computer','📱':'phone mobile'
 };
 
 let _emojiPickerMsgId = null;
+let _emojiPickerMode = 'react'; // 'react' for reactions, 'input' for text insert
 
-function showReactPicker(event, msgId) {
-  event.stopPropagation();
-  closePickers();
-  _emojiPickerMsgId = msgId;
-
-  const btn = event.currentTarget;
-  const actionsDiv = btn.closest('.msg-actions-inline');
-  const msgEl = btn.closest('.chat-msg');
-
-  const picker = document.createElement('div');
-  picker.className = 'emoji-picker';
-  picker.onclick = (e) => e.stopPropagation();
-
+function _buildEmojiPickerHTML(mode) {
+  const clickFn = mode === 'input' ? 'insertEmojiToInput' : 'pickEmoji';
+  let html = '';
   // Quick bar
-  let html = '<div class="emoji-quick-bar">';
+  html += '<div class="emoji-quick-bar">';
   QUICK_REACTIONS.forEach(e => {
-    html += `<button class="emoji-quick-btn" onclick="pickEmoji('${e}')">${e}</button>`;
+    html += `<button class="emoji-quick-btn" onclick="${clickFn}('${e}')" title="${EMOJI_NAMES[e]||''}">${e}</button>`;
   });
   html += '</div>';
-
   // Search
   html += '<div class="emoji-search-wrap"><input class="emoji-search" placeholder="Search emoji..." oninput="filterEmojis(this.value)"></div>';
-
   // Category tabs
   const cats = Object.keys(EMOJI_CATEGORIES);
   html += '<div class="emoji-tabs">';
@@ -405,25 +421,32 @@ function showReactPicker(event, msgId) {
     html += `<button class="emoji-tab${i===0?' active':''}" onclick="switchEmojiTab(this,'${cat}')">${cat}</button>`;
   });
   html += '</div>';
-
-  // Emoji grid (show first category by default)
+  // Emoji grid
   html += '<div class="emoji-grid" id="emojiGrid">';
   EMOJI_CATEGORIES[cats[0]].forEach(e => {
-    html += `<button class="emoji-cell" onclick="pickEmoji('${e}')">${e}</button>`;
+    html += `<button class="emoji-cell" onclick="${clickFn}('${e}')" title="${EMOJI_NAMES[e]||''}">${e}</button>`;
   });
   html += '</div>';
+  return html;
+}
 
-  picker.innerHTML = html;
+function showReactPicker(event, msgId) {
+  event.stopPropagation();
+  closePickers();
+  _emojiPickerMsgId = msgId;
+  _emojiPickerMode = 'react';
 
-  // Position: above or below the message depending on space
-  const chatPanel = document.getElementById('chatPanel');
+  const btn = event.currentTarget;
+  const actionsDiv = btn.closest('.msg-actions-inline');
+
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker';
+  picker.onclick = (e) => e.stopPropagation();
+  picker.innerHTML = _buildEmojiPickerHTML('react');
+
   actionsDiv.after(picker);
   actionsDiv.classList.add('picker-open');
-
-  // Focus search
   setTimeout(() => { const s = picker.querySelector('.emoji-search'); if (s) s.focus(); }, 50);
-
-  // Auto-close on outside click
   setTimeout(() => {
     document.addEventListener('click', function _close(ev) {
       if (!picker.contains(ev.target) && !btn.contains(ev.target)) {
@@ -434,6 +457,44 @@ function showReactPicker(event, msgId) {
   }, 10);
 }
 
+function toggleInputEmojiPicker(event) {
+  event.stopPropagation();
+  const existing = document.getElementById('inputEmojiPicker');
+  if (existing) { existing.remove(); return; }
+  closePickers();
+  _emojiPickerMode = 'input';
+
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker emoji-picker-input';
+  picker.id = 'inputEmojiPicker';
+  picker.onclick = (e) => e.stopPropagation();
+  picker.innerHTML = _buildEmojiPickerHTML('input');
+
+  const wrap = document.getElementById('chatInputWrap');
+  wrap.appendChild(picker);
+  setTimeout(() => { const s = picker.querySelector('.emoji-search'); if (s) s.focus(); }, 50);
+  setTimeout(() => {
+    document.addEventListener('click', function _close(ev) {
+      if (!picker.contains(ev.target) && !ev.target.closest('.chat-emoji-btn')) {
+        const p = document.getElementById('inputEmojiPicker');
+        if (p) p.remove();
+        document.removeEventListener('click', _close);
+      }
+    });
+  }, 10);
+}
+
+function insertEmojiToInput(emoji) {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  const start = input.selectionStart || input.value.length;
+  const end = input.selectionEnd || start;
+  input.value = input.value.substring(0, start) + emoji + input.value.substring(end);
+  input.focus();
+  const newPos = start + emoji.length;
+  input.setSelectionRange(newPos, newPos);
+}
+
 function pickEmoji(emoji) {
   if (_emojiPickerMsgId) toggleReaction(_emojiPickerMsgId, emoji);
   closePickers();
@@ -442,26 +503,31 @@ function pickEmoji(emoji) {
 function switchEmojiTab(btn, cat) {
   btn.parentElement.querySelectorAll('.emoji-tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  const grid = document.getElementById('emojiGrid');
+  const grid = btn.closest('.emoji-picker') ? btn.closest('.emoji-picker').querySelector('.emoji-grid') : document.getElementById('emojiGrid');
   if (!grid) return;
   const emojis = EMOJI_CATEGORIES[cat] || [];
-  grid.innerHTML = emojis.map(e => `<button class="emoji-cell" onclick="pickEmoji('${e}')">${e}</button>`).join('');
+  const clickFn = _emojiPickerMode === 'input' ? 'insertEmojiToInput' : 'pickEmoji';
+  grid.innerHTML = emojis.map(e => `<button class="emoji-cell" onclick="${clickFn}('${e}')" title="${EMOJI_NAMES[e]||''}">${e}</button>`).join('');
 }
 
 function filterEmojis(query) {
   const grid = document.getElementById('emojiGrid');
   if (!grid) return;
-  if (!query.trim()) {
-    // Reset to active tab
+  const q = query.trim().toLowerCase();
+  if (!q) {
     const activeTab = document.querySelector('.emoji-tab.active');
     if (activeTab) switchEmojiTab(activeTab, activeTab.textContent);
     return;
   }
-  // Search across all categories (match by showing all)
+  // Search by emoji name keywords
   const all = [];
   const seen = new Set();
   Object.values(EMOJI_CATEGORIES).forEach(arr => arr.forEach(e => { if (!seen.has(e)) { seen.add(e); all.push(e); } }));
-  grid.innerHTML = all.map(e => `<button class="emoji-cell" onclick="pickEmoji('${e}')">${e}</button>`).join('');
+  const matches = all.filter(e => { const name = EMOJI_NAMES[e] || ''; return name.includes(q) || e === q; });
+  const clickFn = _emojiPickerMode === 'input' ? 'insertEmojiToInput' : 'pickEmoji';
+  grid.innerHTML = matches.length
+    ? matches.map(e => `<button class="emoji-cell" onclick="${clickFn}('${e}')" title="${EMOJI_NAMES[e]||''}">${e}</button>`).join('')
+    : '<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);font-size:11px;padding:12px">No matches</div>';
 }
 
 function closePickers() {

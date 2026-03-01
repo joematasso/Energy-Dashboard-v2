@@ -27,6 +27,7 @@ def admin_list_traders():
                (SELECT COUNT(*) FROM trades WHERE trader_name=t.trader_name) as trade_count
         FROM traders t
         LEFT JOIN teams tm ON t.team_id = tm.id
+        WHERE t.status != 'DELETED'
         ORDER BY t.created_at DESC
     """).fetchall()
 
@@ -118,7 +119,9 @@ def admin_delete_trader(tid):
     if trader:
         db.execute("DELETE FROM trades WHERE trader_name=?", (trader['trader_name'],))
         db.execute("DELETE FROM performance_snapshots WHERE trader_name=?", (trader['trader_name'],))
-    db.execute("DELETE FROM traders WHERE id=?", (tid,))
+    # Soft-delete: mark as DELETED so active sessions get silently revoked
+    # on next heartbeat or profile sync (within 60s)
+    db.execute("UPDATE traders SET status='DELETED' WHERE id=?", (tid,))
     db.commit()
     return jsonify({'success': True})
 

@@ -500,7 +500,9 @@ try {
   fetchTradeFeed();
   setInterval(()=>{
     if(STATE.trader&&STATE.trader.trader_name){
-      fetch(API_BASE+'/api/traders/heartbeat/'+encodeURIComponent(STATE.trader.trader_name),{method:'POST'}).catch(()=>{});
+      fetch(API_BASE+'/api/traders/heartbeat/'+encodeURIComponent(STATE.trader.trader_name),{method:'POST'})
+        .then(r=>{if(r.status===403)return r.json().then(d=>{if(d.revoked){localStorage.removeItem('ng_trader');STATE.trader=null;location.reload();}});})
+        .catch(()=>{});
     }
   }, 60000);
   renderCurrentPage();

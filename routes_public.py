@@ -124,6 +124,8 @@ def login_trader():
 
     if trader['status'] == 'DISABLED':
         return jsonify({'success': False, 'error': 'Your account has been disabled. Contact your admin.'}), 403
+    if trader['status'] == 'DELETED':
+        return jsonify({'success': False, 'error': 'Invalid name or PIN. Contact your admin for access.'}), 401
 
     # Update last_seen
     db.execute("UPDATE traders SET last_seen=CURRENT_TIMESTAMP WHERE id=?", (trader['id'],))
@@ -154,6 +156,9 @@ def login_trader():
 @public_bp.route('/api/traders/heartbeat/<trader>', methods=['POST'])
 def trader_heartbeat(trader):
     db = get_db()
+    row = db.execute("SELECT status FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    if not row or row['status'] == 'DELETED':
+        return jsonify({'success': False, 'revoked': True}), 403
     db.execute("UPDATE traders SET last_seen=CURRENT_TIMESTAMP WHERE trader_name=?", (trader,))
     db.commit()
     return jsonify({'success': True})
@@ -165,6 +170,8 @@ def get_trader_profile(trader):
     row = db.execute("SELECT * FROM traders WHERE trader_name=?", (trader,)).fetchone()
     if not row:
         return jsonify({'success': False}), 404
+    if row['status'] == 'DELETED':
+        return jsonify({'success': False, 'revoked': True}), 403
     return jsonify({
         'success': True,
         'privileged': bool(row['privileged']) if 'privileged' in row.keys() else False,

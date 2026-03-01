@@ -1465,6 +1465,7 @@
         <button class="chat-attach-btn" onclick="document.getElementById('chatImageInput').click()" title="Attach image"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
         <input type="file" id="chatImageInput" accept="image/*" style="display:none" onchange="chatImageSelected(this)">
         <textarea id="chatInput" rows="1" placeholder="Message… (@ to mention · Shift+↵ for newline)" maxlength="2000" onkeydown="chatInputKeydown(event)" oninput="chatInputChanged()"></textarea>
+        <button class="chat-emoji-btn" onclick="toggleInputEmojiPicker(event)" title="Insert emoji"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
         <button class="chat-send-btn" onclick="chatSend()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></button>
       </div>
     </div>
