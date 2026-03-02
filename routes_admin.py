@@ -713,6 +713,19 @@ def delete_tournament(tid):
     return jsonify({'success': True})
 
 
+@admin_bp.route('/api/admin/tournaments/all', methods=['DELETE'])
+@admin_required
+def delete_all_tournaments():
+    """Delete every tournament and all associated data."""
+    db = get_db()
+    db.execute("DELETE FROM tournament_news_events")
+    db.execute("DELETE FROM tournament_trades")
+    db.execute("DELETE FROM tournament_entries")
+    db.execute("DELETE FROM tournaments")
+    db.commit()
+    return jsonify({'success': True})
+
+
 @admin_bp.route('/api/admin/tournaments/<int:tid>/enroll-all', methods=['POST'])
 @admin_required
 def enroll_all_traders(tid):
