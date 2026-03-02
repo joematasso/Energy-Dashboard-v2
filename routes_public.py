@@ -280,10 +280,12 @@ def submit_trade(trader):
     if not is_basis and entry_price <= 0:
         return jsonify({'success': False, 'error': 'Entry price must be positive'}), 400
 
-    # Validate price vs direction: BUY >= spot, SELL <= spot (skip for basis trades)
+    # Validate price vs direction: BUY >= spot, SELL <= spot (skip for basis and backdated trades)
     spot_ref = float(data.get('spotRef', entry_price))
     direction = data.get('direction', '')
-    if not is_basis:
+    is_privileged_trader = trader_row['privileged'] if 'privileged' in trader_row.keys() else False
+    is_backdating = bool(data.get('backdate')) and is_privileged_trader
+    if not is_basis and not is_backdating:
         if direction == 'BUY' and entry_price < spot_ref * 0.999:
             return jsonify({'success': False, 'error': 'BUY price must be at or above spot'}), 400
         if direction == 'SELL' and entry_price > spot_ref * 1.001:

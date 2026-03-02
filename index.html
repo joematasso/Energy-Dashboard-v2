@@ -175,10 +175,19 @@
       <button class="map-toggle-btn" onclick="toggleMap('ng')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg> <span id="ngMapLabel">Show Pipeline Map</span></button>
       <div class="map-container" id="ngMapContainer" style="display:none"></div>
     </div>
+    <div class="pricing-toggle" id="ngPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('ng','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('ng','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('ng','index',this)">Index</button>
+    </div>
     <div class="bench-grid" id="ngBenchGrid"></div>
     <div class="chart-container" id="ngChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="ngChartTitle">Henry Hub</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('ng'))">&#9432;</button></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('ng','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('ng','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('ng',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('ng',30,this)">1M</button>
@@ -187,6 +196,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="ngChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="ngSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="ngSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="ngSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">Basis Spreads vs Henry Hub</div>
@@ -318,10 +332,19 @@
     </div>
     <div id="crudePageContent">
       <div class="hub-toggle-bar" id="crudeToggles"></div>
+      <div class="pricing-toggle" id="crudePricingToggle">
+        <button class="pricing-btn active" onclick="setPricingType('crude','cash',this)">Cash</button>
+        <button class="pricing-btn" onclick="setPricingType('crude','balmo',this)">Balmo</button>
+        <button class="pricing-btn" onclick="setPricingType('crude','index',this)">Index</button>
+      </div>
       <div class="bench-grid" id="crudeBenchGrid"></div>
       <div class="chart-container" id="crudeChartContainer">
         <div class="chart-header">
           <div class="chart-title"><span id="crudeChartTitle">WTI Cushing</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('crude'))">&#9432;</button></div>
+          <div class="chart-type-btns">
+            <button class="chart-type-btn active" onclick="setChartType('crude','line',this)">Line</button>
+            <button class="chart-type-btn" onclick="setChartType('crude','candle',this)">Candle</button>
+          </div>
           <div class="chart-range-btns">
             <button class="range-btn" data-range="7" onclick="setRange('crude',7,this)">1W</button>
             <button class="range-btn active" data-range="30" onclick="setRange('crude',30,this)">1M</button>
@@ -330,6 +353,11 @@
           </div>
         </div>
         <div class="chart-canvas-wrap"><canvas id="crudeChart"></canvas></div>
+      </div>
+      <div class="spread-chart-section">
+        <div class="section-header">Location Spread</div>
+        <div class="spread-controls"><select class="spread-hub-sel" id="crudeSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="crudeSpread2"><option value="">Hub 2</option></select></div>
+        <div class="chart-canvas-wrap"><canvas id="crudeSpreadChart"></canvas></div>
       </div>
 
       <div class="section-header">Differentials vs WTI Cushing</div>
@@ -409,10 +437,19 @@
   <!-- ===== POWER PAGE ===== -->
   <div class="page" id="page-power">
     <div class="hub-toggle-bar" id="powerToggles"></div>
+    <div class="pricing-toggle" id="powerPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('power','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('power','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('power','index',this)">Index</button>
+    </div>
     <div class="bench-grid" id="powerBenchGrid"></div>
     <div class="chart-container" id="powerChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="powerChartTitle">ERCOT Hub</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('power'))">&#9432;</button></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('power','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('power','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('power',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('power',30,this)">1M</button>
@@ -421,6 +458,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="powerChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="powerSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="powerSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="powerSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">Spark Spreads (Heat Rate: 7.0 MMBtu/MWh)</div>
@@ -459,10 +501,19 @@
   <!-- ===== FREIGHT PAGE ===== -->
   <div class="page" id="page-freight">
     <div class="hub-toggle-bar" id="freightToggles"></div>
+    <div class="pricing-toggle" id="freightPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('freight','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('freight','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('freight','index',this)">Index</button>
+    </div>
     <div class="bench-grid" id="freightBenchGrid"></div>
     <div class="chart-container" id="freightChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="freightChartTitle">Baltic Dry Index</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('freight'))">&#9432;</button></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('freight','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('freight','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('freight',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('freight',30,this)">1M</button>
@@ -471,6 +522,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="freightChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="freightSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="freightSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="freightSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">Route Differentials vs Baltic Dry Index</div>
@@ -499,10 +555,19 @@
   <!-- ===== AGRICULTURE PAGE ===== -->
   <div class="page" id="page-ag">
     <div class="hub-toggle-bar" id="agToggles"></div>
+    <div class="pricing-toggle" id="agPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('ag','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('ag','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('ag','index',this)">Index</button>
+    </div>
     <div class="bench-grid" id="agBenchGrid"></div>
     <div class="chart-container" id="agChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="agChartTitle">Corn (CBOT)</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('ag'))">&#9432;</button></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('ag','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('ag','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('ag',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('ag',30,this)">1M</button>
@@ -511,6 +576,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="agChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="agSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="agSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="agSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">Spreads vs <span id="agDiffTitle">Corn (CBOT)</span></div>
@@ -539,10 +609,19 @@
   <!-- ===== METALS PAGE ===== -->
   <div class="page" id="page-metals">
     <div class="hub-toggle-bar" id="metalsToggles"></div>
+    <div class="pricing-toggle" id="metalsPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('metals','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('metals','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('metals','index',this)">Index</button>
+    </div>
     <div class="bench-grid" id="metalsBenchGrid"></div>
     <div class="chart-container" id="metalsChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="metalsChartTitle">Gold (COMEX)</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('metals'))">&#9432;</button></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('metals','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('metals','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('metals',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('metals',30,this)">1M</button>
@@ -551,6 +630,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="metalsChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="metalsSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="metalsSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="metalsSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">Spreads vs <span id="metalsDiffTitle">Gold (COMEX)</span></div>
@@ -579,6 +663,11 @@
   <!-- ===== TRADE BLOTTER ===== -->
   <div class="page" id="page-ngls">
     <div class="hub-toggle-bar" id="nglsToggles"></div>
+    <div class="pricing-toggle" id="nglsPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('ngls','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('ngls','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('ngls','index',this)">Index</button>
+    </div>
     <div class="bench-grid" id="nglsBenchGrid"></div>
 
     <!-- Frac Spread Calculator -->
@@ -611,6 +700,10 @@
     <div class="chart-container" id="nglsChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="nglsChartTitle">Ethane (C2)</span></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('ngls','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('ngls','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('ngls',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('ngls',30,this)">1M</button>
@@ -619,6 +712,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="nglsChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="nglsSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="nglsSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="nglsSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">NGL Products — Mont Belvieu</div>
@@ -650,6 +748,11 @@
     <div class="map-section">
       <button class="map-toggle-btn" onclick="toggleMap('lng')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg> <span id="lngMapLabel">Show LNG Map</span></button>
       <div class="map-container" id="lngMapContainer" style="display:none"></div>
+    </div>
+    <div class="pricing-toggle" id="lngPricingToggle">
+      <button class="pricing-btn active" onclick="setPricingType('lng','cash',this)">Cash</button>
+      <button class="pricing-btn" onclick="setPricingType('lng','balmo',this)">Balmo</button>
+      <button class="pricing-btn" onclick="setPricingType('lng','index',this)">Index</button>
     </div>
     <div class="bench-grid" id="lngBenchGrid"></div>
 
@@ -714,6 +817,10 @@
     <div class="chart-container" id="lngChartContainer">
       <div class="chart-header">
         <div class="chart-title"><span id="lngChartTitle">JKM (Platts)</span><button class="info-btn" onclick="openHubInfo(getSelectedHub('lng'))">&#9432;</button></div>
+        <div class="chart-type-btns">
+          <button class="chart-type-btn active" onclick="setChartType('lng','line',this)">Line</button>
+          <button class="chart-type-btn" onclick="setChartType('lng','candle',this)">Candle</button>
+        </div>
         <div class="chart-range-btns">
           <button class="range-btn" data-range="7" onclick="setRange('lng',7,this)">1W</button>
           <button class="range-btn active" data-range="30" onclick="setRange('lng',30,this)">1M</button>
@@ -722,6 +829,11 @@
         </div>
       </div>
       <div class="chart-canvas-wrap"><canvas id="lngChart"></canvas></div>
+    </div>
+    <div class="spread-chart-section">
+      <div class="section-header">Location Spread</div>
+      <div class="spread-controls"><select class="spread-hub-sel" id="lngSpread1"><option value="">Hub 1</option></select><span style="color:var(--text-muted);font-size:12px">vs</span><select class="spread-hub-sel" id="lngSpread2"><option value="">Hub 2</option></select></div>
+      <div class="chart-canvas-wrap"><canvas id="lngSpreadChart"></canvas></div>
     </div>
 
     <div class="section-header">LNG Benchmarks vs JKM</div>

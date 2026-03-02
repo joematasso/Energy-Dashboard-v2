@@ -269,10 +269,12 @@ function renderBlotterTable() {
         + '<div class="bdet-item"><span class="bdet-label">Leg 2 (Far)</span><span>' + (t.farMonth||'—') + '</span></div>';
     }
     if (BASIS_TYPES.has(t.type) && t.basisHub) {
-      var _p1 = getPrice(t.hub), _p2 = getPrice(t.basisHub);
-      legInfo = '<div class="bdet-item"><span class="bdet-label">Leg 1 Hub</span><span>' + t.hub + ' ($' + _p1.toFixed(4) + ')</span></div>'
-        + '<div class="bdet-item"><span class="bdet-label">Leg 2 Hub</span><span>' + t.basisHub + ' ($' + _p2.toFixed(4) + ')</span></div>'
-        + '<div class="bdet-item"><span class="bdet-label">Differential</span><span>$' + (_p1-_p2).toFixed(4) + '</span></div>';
+      var _p1 = getPrice(t.hub), _p2 = getPrice(t.basisHub), _diff = _p1 - _p2;
+      var _diffColor = _diff >= 0 ? 'var(--green)' : 'var(--red)';
+      legInfo = '<div class="bdet-item"><span class="bdet-label">Trade Hub</span><span>' + t.hub + ' ($' + _p1.toFixed(4) + ')</span></div>'
+        + '<div class="bdet-item"><span class="bdet-label">Base Hub (Reference)</span><span>' + t.basisHub + ' ($' + _p2.toFixed(4) + ')</span></div>'
+        + '<div class="bdet-item"><span class="bdet-label">Formula</span><span style="color:var(--text-dim)">' + t.hub + ' - ' + t.basisHub + '</span></div>'
+        + '<div class="bdet-item"><span class="bdet-label">Differential</span><span style="font-weight:700;font-size:14px;color:' + _diffColor + '">' + (_diff >= 0 ? '+' : '') + _diff.toFixed(4) + '</span></div>';
     }
     if (t.type === 'MULTILEG' && t.legs && t.legs.length) {
       legInfo = t.legs.map(function(leg, i) {
@@ -286,7 +288,7 @@ function renderBlotterTable() {
       <td>${sectorBadge}</td>
       <td>${typeCell}</td>
       <td style="${dirColor};font-weight:700;font-size:12px">${t.direction}</td>
-      <td style="font-weight:500;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}${t.basisHub ? ' vs ' + t.basisHub : ''}">${t.hub}${BASIS_TYPES.has(t.type) && t.basisHub ? '<br><span style="font-size:10px;color:var(--text-muted)">vs ' + t.basisHub + '</span>' : ''}${t.type === 'MULTILEG' && t.legs && t.legs.length ? '<br><span style="font-size:10px;color:var(--text-muted)">' + t.legs.length + ' legs</span>' : ''}</td>
+      <td style="font-weight:500;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.hub}${t.basisHub ? ' vs ' + t.basisHub : ''}">${t.hub}${BASIS_TYPES.has(t.type) && t.basisHub ? '<br><span style="font-size:10px;color:var(--text-muted)">' + t.basisHub + ' (base)</span><br><span style="font-size:10px;font-weight:700;color:' + ((getPrice(t.hub)-getPrice(t.basisHub)) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + ((getPrice(t.hub)-getPrice(t.basisHub)) >= 0 ? '+' : '') + (getPrice(t.hub)-getPrice(t.basisHub)).toFixed(4) + ' diff</span>' : ''}${t.type === 'MULTILEG' && t.legs && t.legs.length ? '<br><span style="font-size:10px;color:var(--text-muted)">' + t.legs.length + ' legs</span>' : ''}</td>
       <td style="font-size:11px;color:var(--text-dim)">${delMo}</td>
       <td class="mono" style="font-size:12px">${volDisplay}</td>
       <td class="mono" style="font-size:12px">${isLarge ? entry.toFixed(0) : entry.toFixed(3)}</td>

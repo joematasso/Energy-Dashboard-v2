@@ -1,4 +1,18 @@
 /* =====================================================================
+   SHARED HELPERS
+   ===================================================================== */
+function _populateSpreadSelectors(sector, hubs) {
+  const s1 = document.getElementById(sector + 'Spread1');
+  const s2 = document.getElementById(sector + 'Spread2');
+  if (!s1 || !s2) return;
+  const v1 = s1.value, v2 = s2.value;
+  const opts = '<option value="">Select hub</option>' + hubs.filter(h => STATE.visibleHubs[h.name]).map(h => `<option value="${h.name}">${h.name}</option>`).join('');
+  s1.innerHTML = opts; s2.innerHTML = opts;
+  if (v1) s1.value = v1; if (v2) s2.value = v2;
+  s1.onchange = s2.onchange = () => renderSpreadChart(sector);
+}
+
+/* =====================================================================
    RENDER FUNCTIONS — NATURAL GAS
    ===================================================================== */
 function renderNGPage() {
@@ -9,9 +23,10 @@ function renderNGPage() {
   ).join('');
 
   // Bench grid
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('ngBenchGrid');
   grid.innerHTML = NG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'ng'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.ng === h.name ? 'selected' : '';
     const isAECO = h.currency === 'CAD/GJ';
     const cadPrice = isAECO ? mmbtuToCADGJ(p) : 0;
@@ -19,7 +34,7 @@ function renderNGPage() {
       ? `<div class="hub-price">C$${cadPrice.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)"> /GJ</span></div><div style="font-size:11px;color:var(--text-dim)">US$${p.toFixed(3)}/MMBtu</div>`
       : `<div class="hub-price">$${p.toFixed(2)}</div>`;
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ng','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}${isAECO?' 🇨🇦':''}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}${isAECO?' 🇨🇦':''} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       ${priceDisplay}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -70,6 +85,10 @@ function renderNGPage() {
     </tr>`;
   }).join('');
 
+  // Spread chart
+  _populateSpreadSelectors('ng', NG_HUBS);
+  renderSpreadChart('ng');
+
   // News
   renderNews('ng', 'ngNews');
 
@@ -105,12 +124,13 @@ function renderCrudePage() {
   ).join('');
 
   // Bench grid
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('crudeBenchGrid');
   grid.innerHTML = CRUDE_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'crude'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.crude === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('crude','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -159,6 +179,10 @@ function renderCrudePage() {
     </tr>`;
   }).join('');
 
+  // Spread chart
+  _populateSpreadSelectors('crude', CRUDE_HUBS);
+  renderSpreadChart('crude');
+
   // News
   renderNews('crude', 'crudeNews');
 
@@ -189,12 +213,13 @@ function renderPowerPage() {
   ).join('');
 
   // Bench grid
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('powerBenchGrid');
   grid.innerHTML = POWER_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'power'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.power === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('power','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -244,6 +269,10 @@ function renderPowerPage() {
     </tr>`;
   }).join('');
 
+  // Spread chart
+  _populateSpreadSelectors('power', POWER_HUBS);
+  renderSpreadChart('power');
+
   // News
   renderNews('power', 'powerNews');
 
@@ -261,13 +290,14 @@ function renderFreightPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#000;border-color:'+h.color:''}">${h.name}</button>`
   ).join('');
 
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('freightBenchGrid');
   grid.innerHTML = FREIGHT_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'freight'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.freight === h.name ? 'selected' : '';
     const isIdx = h.base > 100;
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('freight','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${isIdx ? p.toFixed(0) : '$'+p.toFixed(2)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${isIdx?c.toFixed(0):c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -318,6 +348,9 @@ function renderFreightPage() {
     </tr>`;
   }).join('');
 
+  _populateSpreadSelectors('freight', FREIGHT_HUBS);
+  renderSpreadChart('freight');
+
   renderNews('freight', 'freightNews');
   renderCalendar('freightCalendar', 'freight');
 }
@@ -338,12 +371,13 @@ function renderAgPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#000;border-color:'+h.color:''}">${h.name.replace(/ \(.*\)/,'')}</button>`
   ).join('');
 
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('agBenchGrid');
   grid.innerHTML = AG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'ag'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.ag === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ag','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatAgPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -389,6 +423,9 @@ function renderAgPage() {
     </tr>`;
   }).join('');
 
+  _populateSpreadSelectors('ag', AG_HUBS);
+  renderSpreadChart('ag');
+
   renderNews('ag', 'agNews');
   renderCalendar('agCalendar', 'ag');
 }
@@ -409,12 +446,13 @@ function renderMetalsPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#000;border-color:'+h.color:''}">${h.name.replace(/ \(.*\)/,'')}</button>`
   ).join('');
 
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('metalsBenchGrid');
   grid.innerHTML = METALS_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'metals'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.metals === h.name ? 'selected' : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('metals','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatMetalPrice(h, p)}</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -460,6 +498,9 @@ function renderMetalsPage() {
     </tr>`;
   }).join('');
 
+  _populateSpreadSelectors('metals', METALS_HUBS);
+  renderSpreadChart('metals');
+
   renderNews('metals', 'metalsNews');
   renderCalendar('metalsCalendar', 'metals');
 }
@@ -475,13 +516,14 @@ function renderNGLsPage() {
   ).join('');
 
   // Bench grid — ¢/gal primary, $/bbl secondary
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('nglsBenchGrid');
   grid.innerHTML = NGL_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'ngls'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.ngls === h.name ? 'selected' : '';
     const bblPrice = (p * 42 / 100).toFixed(2);
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ngls','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${p.toFixed(1)}¢<span style="font-size:11px;color:var(--text-muted)">/gal</span></div>
       <div style="font-size:11px;color:var(--text-dim)">$${bblPrice}/bbl</div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)}¢ (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
@@ -568,6 +610,9 @@ function renderNGLsPage() {
     }).join('');
   }
 
+  _populateSpreadSelectors('ngls', NGL_HUBS);
+  renderSpreadChart('ngls');
+
   renderNews('ngls', 'nglsNews');
   renderCalendar('nglsCalendar', 'ngls');
 }
@@ -585,13 +630,14 @@ function renderLNGPage() {
   if (MAP_STATE.lng) renderPipelineMap('lng');
 
   // Bench grid
+  const promptLabel = getPromptMonthLabel();
   const grid = document.getElementById('lngBenchGrid');
   grid.innerHTML = LNG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
-    const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
+    const p = getDisplayPrice(h.name, 'lng'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.lng === h.name ? 'selected' : '';
     const regionFlag = h.region === 'Asia' ? '🇯🇵' : h.region === 'Europe' ? '🇪🇺' : h.region === 'US Export' ? '🇺🇸' : h.region === 'LatAm' ? '🌎' : '🌐';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('lng','${h.name}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${regionFlag} ${h.name.replace(/ \(.*\)/,'')}</div>${priceBadge(h.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${regionFlag} ${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)">/MMBtu</span></div>
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
@@ -688,6 +734,9 @@ function renderLNGPage() {
       </tr>`;
     }).join('');
   }
+
+  _populateSpreadSelectors('lng', LNG_HUBS);
+  renderSpreadChart('lng');
 
   renderNews('lng', 'lngNews');
   renderCalendar('lngCalendar', 'lng');

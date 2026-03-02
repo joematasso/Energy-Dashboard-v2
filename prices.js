@@ -229,6 +229,42 @@ function getPriceChangePct(name) {
   return ((h[h.length-1] - h[h.length-2]) / h[h.length-2]) * 100;
 }
 
+function getPromptMonthLabel() {
+  const now = new Date();
+  const prompt = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return prompt.toLocaleDateString('en-US', { month: 'short' }) + ' ' + String(prompt.getFullYear()).slice(-2);
+}
+
+function getDisplayPrice(hubName, sector) {
+  const pt = (STATE.pricingType && STATE.pricingType[sector]) || 'cash';
+  const hist = priceHistory[hubName];
+  if (!hist || !hist.length) return 0;
+  if (pt === 'cash') return hist[hist.length - 1];
+  if (pt === 'balmo') {
+    const now = new Date();
+    const dayOfMonth = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const elapsed = Math.max(1, Math.min(hist.length, dayOfMonth));
+    const slice = hist.slice(-elapsed);
+    return slice.reduce((s, v) => s + v, 0) / slice.length;
+  }
+  if (pt === 'index') {
+    const n = Math.min(30, hist.length);
+    const slice = hist.slice(-n);
+    return slice.reduce((s, v) => s + v, 0) / slice.length;
+  }
+  return hist[hist.length - 1];
+}
+
+function setPricingType(sector, type, btn) {
+  STATE.pricingType[sector] = type;
+  if (btn) {
+    btn.parentElement.querySelectorAll('.pricing-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  renderCurrentPage();
+}
+
 function getSelectedHub(sector) { return STATE.selectedHubs[sector]; }
 function setSelectedHub(sector, name) { STATE.selectedHubs[sector] = name; renderCurrentPage(); }
 

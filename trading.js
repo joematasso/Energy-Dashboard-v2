@@ -552,6 +552,26 @@ document.getElementById('tradeHub').addEventListener('change', function() {
   document.getElementById('tradeEntry').value = price.toFixed(4);
 });
 
+// Delivery month auto-fills entry price from forward curve
+document.getElementById('tradeDelivery').addEventListener('change', function() {
+  const hub = document.getElementById('tradeHub').value;
+  if (!hub || !this.value) return;
+  const fwd = STATE.forwardCurves[hub];
+  if (!fwd || !fwd.length) return;
+  const now = new Date();
+  const target = new Date(this.value + '-01');
+  const monthsAhead = (target.getFullYear() - now.getFullYear()) * 12 + target.getMonth() - now.getMonth();
+  if (monthsAhead >= 1 && monthsAhead <= fwd.length) {
+    const fwdPrice = fwd[monthsAhead - 1].price;
+    document.getElementById('tradeEntry').value = fwdPrice.toFixed(4);
+    document.getElementById('tradeFormHint').textContent = 'Forward price for ' + target.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) + ': $' + fwdPrice.toFixed(4);
+  } else if (monthsAhead === 0) {
+    const price = getPrice(hub);
+    document.getElementById('tradeEntry').value = price.toFixed(4);
+    document.getElementById('tradeFormHint').textContent = 'Prompt month (spot price)';
+  }
+});
+
 async function submitTrade() {
   const type = document.getElementById('tradeType').value;
   const hub = document.getElementById('tradeHub').value;
@@ -597,8 +617,8 @@ async function submitTrade() {
     if (tradeDirection === 'SELL' && stopPrice >= spotPrice) return toast('Stop SELL trigger should be below current market', 'error');
   }
 
-  // For MARKET orders, validate as before
-  if (orderType === 'MARKET') {
+  // For MARKET orders, validate as before (backdated trades bypass)
+  if (orderType === 'MARKET' && !isBackdating) {
     const isBasisTrade = type === 'BASIS_SWAP';
     if (!isBasisTrade && tradeDirection === 'BUY' && currentPrice < spotPrice) {
       return toast('BUY price must be at or above spot ($' + spotPrice.toFixed(4) + ')', 'error');

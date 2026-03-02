@@ -309,6 +309,22 @@ function renderTAToolbar(containerId) {
 }
 
 /* =====================================================================
+   OHLC GENERATION (from close-only data)
+   ===================================================================== */
+function _generateOHLC(closeData) {
+  const bars = [];
+  for (let i = 0; i < closeData.length; i++) {
+    const close = closeData[i];
+    const open = i === 0 ? close : closeData[i - 1];
+    const range = Math.abs(close - open) || close * 0.002;
+    const hBump = range * (0.2 + ((i * 17 + 7) % 13) / 26);
+    const lBump = range * (0.2 + ((i * 11 + 3) % 13) / 26);
+    bars.push({ open, high: Math.max(open, close) + hBump, low: Math.min(open, close) - lBump, close });
+  }
+  return bars;
+}
+
+/* =====================================================================
    CHART RENDERING
    ===================================================================== */
 function drawChart(canvasId, hubName, range) {
@@ -324,8 +340,23 @@ function drawChart(canvasId, hubName, range) {
   const hub = findHub(hubName);
   const hist = (typeof getChartHistory === 'function') ? getChartHistory(hubName) : priceHistory[hubName];
   if (!hist || !hub) return;
-  const data = hist.slice(-range);
+  const fullData = hist.slice(-range);
+  if (fullData.length < 2) return;
+
+  // Apply zoom window if set
+  const zoom = STATE.chartZoom && STATE.chartZoom[canvasId];
+  let data;
+  if (zoom && zoom.start >= 0 && zoom.end > zoom.start && zoom.end <= fullData.length) {
+    data = fullData.slice(zoom.start, zoom.end);
+  } else {
+    data = fullData;
+  }
   if (data.length < 2) return;
+
+  // Chart type: line or candle
+  const sector = canvasId.replace('Chart', '');
+  const chartType = (STATE.chartTypes && STATE.chartTypes[sector]) || 'line';
+  const ohlcBars = chartType === 'candle' ? _generateOHLC(data) : null;
 
   // Determine which sub-charts are active
   const ta = STATE.ta || {};
@@ -351,8 +382,14 @@ function drawChart(canvasId, hubName, range) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const W = rect.width, H = mainH;
 
-  const min = Math.min(...data) * 0.998;
-  const max = Math.max(...data) * 1.002;
+  let min, max;
+  if (ohlcBars) {
+    min = Math.min(...ohlcBars.map(b => b.low)) * 0.998;
+    max = Math.max(...ohlcBars.map(b => b.high)) * 1.002;
+  } else {
+    min = Math.min(...data) * 0.998;
+    max = Math.max(...data) * 1.002;
+  }
   const padL = 65, padR = 35, padT = 20, padB = 40;
   const cW = W - padL - padR, cH = H - padT - padB;
 
@@ -408,21 +445,9 @@ function drawChart(canvasId, hubName, range) {
   if (ta.adx) taData.adx = _adx(data, 14);
   if (ta.obv) taData.obv = _obv(data);
 
-  // Gradient fill under price line
-  const grad = ctx.createLinearGradient(0, padT, 0, H - padB);
-  grad.addColorStop(0, hub.color + '30'); grad.addColorStop(1, hub.color + '00');
-  ctx.beginPath();
-  for (let i = 0; i < data.length; i++) {
-    const x = _xPos(i), y = _yPos(data[i]);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.lineTo(padL + cW, padT + cH); ctx.lineTo(padL, padT + cH);
-  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
-
-  // --- Ichimoku Cloud (drawn behind price line) ---
+  // --- Ichimoku Cloud (drawn behind price) ---
   if (taData.ichimoku) {
     const ik = taData.ichimoku;
-    // Cloud fill
     ctx.beginPath(); ctx.fillStyle = 'rgba(249,115,22,0.06)';
     let started = false;
     for (let i = 0; i < data.length; i++) {
@@ -435,20 +460,53 @@ function drawChart(canvasId, hubName, range) {
       ctx.lineTo(_xPos(i), _yPos(ik.spanB[i]));
     }
     ctx.closePath(); ctx.fill();
-    // Lines
     _drawLine(ik.tenkan, '#f97316', 1);
     _drawLine(ik.kijun, '#3b82f6', 1);
     _drawLine(ik.spanA, 'rgba(249,115,22,0.4)', 0.8, [2, 2]);
     _drawLine(ik.spanB, 'rgba(59,130,246,0.4)', 0.8, [2, 2]);
   }
 
-  // Price line
-  ctx.beginPath();
-  for (let i = 0; i < data.length; i++) {
-    const x = _xPos(i), y = _yPos(data[i]);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  // --- Price rendering: Line or Candlestick ---
+  if (ohlcBars) {
+    // Candlestick rendering
+    const barW = Math.max(2, (cW / data.length) * 0.65);
+    for (let i = 0; i < ohlcBars.length; i++) {
+      const b = ohlcBars[i], x = _xPos(i);
+      const bullish = b.close >= b.open;
+      const color = bullish ? '#10b981' : '#ef4444';
+      // Wick
+      ctx.strokeStyle = color; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, _yPos(b.high)); ctx.lineTo(x, _yPos(b.low)); ctx.stroke();
+      // Body
+      const bodyTop = _yPos(Math.max(b.open, b.close));
+      const bodyBot = _yPos(Math.min(b.open, b.close));
+      const bodyH = Math.max(1, bodyBot - bodyTop);
+      if (bullish) {
+        ctx.fillStyle = bgColor; ctx.fillRect(x - barW / 2, bodyTop, barW, bodyH);
+        ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(x - barW / 2, bodyTop, barW, bodyH);
+      } else {
+        ctx.fillStyle = color; ctx.fillRect(x - barW / 2, bodyTop, barW, bodyH);
+      }
+    }
+  } else {
+    // Line/area rendering
+    const grad = ctx.createLinearGradient(0, padT, 0, H - padB);
+    grad.addColorStop(0, hub.color + '30'); grad.addColorStop(1, hub.color + '00');
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const x = _xPos(i), y = _yPos(data[i]);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.lineTo(padL + cW, padT + cH); ctx.lineTo(padL, padT + cH);
+    ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    // Price line
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const x = _xPos(i), y = _yPos(data[i]);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = hub.color; ctx.lineWidth = 2; ctx.stroke();
   }
-  ctx.strokeStyle = hub.color; ctx.lineWidth = 2; ctx.stroke();
 
   // Current price dot
   ctx.beginPath(); ctx.arc(padL + cW, _yPos(data[data.length - 1]), 4, 0, Math.PI * 2);
@@ -488,9 +546,10 @@ function drawChart(canvasId, hubName, range) {
   // Bollinger Bands
   if (taData.bb) {
     const bb = taData.bb;
-    _drawLine(bb.upper, 'rgba(168,85,247,0.5)', 0.8, [3, 3]);
-    _drawLine(bb.lower, 'rgba(168,85,247,0.5)', 0.8, [3, 3]);
-    ctx.beginPath(); ctx.fillStyle = 'rgba(168,85,247,0.06)';
+    _drawLine(bb.upper, 'rgba(168,85,247,0.8)', 1.5);
+    _drawLine(bb.lower, 'rgba(168,85,247,0.8)', 1.5);
+    _drawLine(bb.mid, 'rgba(168,85,247,0.5)', 1, [4, 2]);
+    ctx.beginPath(); ctx.fillStyle = 'rgba(168,85,247,0.12)';
     let started = false;
     for (let i = 0; i < data.length; i++) {
       if (bb.upper[i] === null) continue;
@@ -527,8 +586,8 @@ function drawChart(canvasId, hubName, range) {
     ctx.fillText('ALERT ' + a.price.toFixed(2), padL + cW - 4, y - 3);
   });
 
-  // Store meta for crosshair
-  canvas._chartMeta = { padL, padR, padT, padB, cW, cH, min, max, data, hubName, hub, taData, subChartList, subH, subGap, mainH, decimals };
+  // Store meta for crosshair + zoom/pan
+  canvas._chartMeta = { padL, padR, padT, padB, cW, cH, min, max, data, fullData, ohlcBars, hubName, hub, taData, subChartList, subH, subGap, mainH, decimals, sector };
 
   // --- Sub-charts ---
   if (subChartList.length) {
@@ -734,16 +793,71 @@ function initChartCrosshair(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || canvas._crosshairInit) return;
   canvas._crosshairInit = true;
+  let _panState = null;
 
+  // --- Wheel zoom ---
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const meta = canvas._chartMeta;
+    if (!meta || !meta.fullData) return;
+    const fullLen = meta.fullData.length;
+    const curZoom = (STATE.chartZoom && STATE.chartZoom[canvasId]) || { start: 0, end: fullLen };
+    const viewLen = curZoom.end - curZoom.start;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, (mx - meta.padL) / meta.cW));
+    const factor = e.deltaY > 0 ? 1.15 : 0.87;
+    const newLen = Math.round(Math.max(10, Math.min(fullLen, viewLen * factor)));
+    const anchor = curZoom.start + Math.round(pct * viewLen);
+    let ns = Math.round(anchor - pct * newLen), ne = ns + newLen;
+    if (ns < 0) { ns = 0; ne = newLen; }
+    if (ne > fullLen) { ne = fullLen; ns = fullLen - newLen; }
+    if (ne - ns === fullLen) { delete STATE.chartZoom[canvasId]; } else { STATE.chartZoom[canvasId] = { start: Math.max(0, ns), end: Math.min(fullLen, ne) }; }
+    drawChart(canvasId, meta.hubName, STATE.chartRanges[meta.sector]);
+  }, { passive: false });
+
+  // --- Drag pan ---
+  canvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const meta = canvas._chartMeta;
+    if (!meta || !meta.fullData) return;
+    _panState = { startX: e.clientX, zoom: { ...((STATE.chartZoom && STATE.chartZoom[canvasId]) || { start: 0, end: meta.fullData.length }) } };
+  });
+  canvas.addEventListener('mouseup', () => { _panState = null; });
+
+  // --- Double-click reset zoom ---
+  canvas.addEventListener('dblclick', () => {
+    if (STATE.chartZoom) delete STATE.chartZoom[canvasId];
+    const meta = canvas._chartMeta;
+    if (meta) drawChart(canvasId, meta.hubName, STATE.chartRanges[meta.sector]);
+  });
+
+  // --- Crosshair / pan mousemove ---
   canvas.addEventListener('mousemove', e => {
     const meta = canvas._chartMeta;
     if (!meta) return;
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
+
+    // Handle pan drag
+    if (_panState && meta.fullData) {
+      const dx = e.clientX - _panState.startX;
+      const dataPerPx = meta.data.length / meta.cW;
+      const shift = Math.round(-dx * dataPerPx);
+      const fullLen = meta.fullData.length;
+      const viewLen = _panState.zoom.end - _panState.zoom.start;
+      let ns = _panState.zoom.start + shift, ne = ns + viewLen;
+      if (ns < 0) { ns = 0; ne = viewLen; }
+      if (ne > fullLen) { ne = fullLen; ns = fullLen - viewLen; }
+      STATE.chartZoom[canvasId] = { start: ns, end: ne };
+      drawChart(canvasId, meta.hubName, STATE.chartRanges[meta.sector]);
+      return;
+    }
+
     const { padL, padR, padT, cW, cH, min, max, data, hub, hubName, taData, subChartList, subH, subGap, mainH, decimals } = meta;
 
     if (mx < padL || mx > padL + cW) {
-      drawChart(canvasId, hubName, STATE.chartRanges[canvasId.replace('Chart', '')]);
+      drawChart(canvasId, hubName, STATE.chartRanges[meta.sector]);
       return;
     }
 
@@ -755,7 +869,7 @@ function initChartCrosshair(canvasId) {
     const snapY = padT + (1 - (price - min) / range) * cH;
 
     // Redraw base chart (sets transform to dpr)
-    drawChart(canvasId, hubName, STATE.chartRanges[canvasId.replace('Chart', '')]);
+    drawChart(canvasId, hubName, STATE.chartRanges[canvasId.replace('Chart', '') || 'ng']);
     const ctx = canvas.getContext('2d');
     ctx.save();
 
@@ -855,7 +969,7 @@ function initChartCrosshair(canvasId) {
 
   canvas.addEventListener('mouseleave', () => {
     const meta = canvas._chartMeta;
-    if (meta) drawChart(canvasId, meta.hubName, STATE.chartRanges[canvasId.replace('Chart', '')]);
+    if (meta) drawChart(canvasId, meta.hubName, STATE.chartRanges[canvasId.replace('Chart', '') || 'ng']);
   });
 
   canvas.addEventListener('click', e => {
@@ -914,9 +1028,129 @@ function checkPriceAlerts() {
    ===================================================================== */
 function setRange(sector, days, btn) {
   STATE.chartRanges[sector] = days;
+  // Clear zoom on range change
+  if (STATE.chartZoom) delete STATE.chartZoom[sector + 'Chart'];
   btn.parentElement.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderCurrentPage();
+}
+
+function setChartType(sector, type, btn) {
+  STATE.chartTypes[sector] = type;
+  if (btn) {
+    btn.parentElement.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  renderCurrentPage();
+}
+
+function renderSpreadChart(sector) {
+  const canvas = document.getElementById(sector + 'SpreadChart');
+  if (!canvas) return;
+  const sel1 = document.getElementById(sector + 'Spread1');
+  const sel2 = document.getElementById(sector + 'Spread2');
+  if (!sel1 || !sel2 || !sel1.value || !sel2.value || sel1.value === sel2.value) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    if (!rect.width) return;
+    canvas.width = rect.width * dpr; canvas.height = 180 * dpr;
+    canvas.style.width = rect.width + 'px'; canvas.style.height = '180px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    ctx.fillStyle = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    ctx.fillRect(0, 0, rect.width, 180);
+    ctx.fillStyle = isLight ? '#94a3b8' : '#475569';
+    ctx.font = '12px IBM Plex Mono'; ctx.textAlign = 'center';
+    ctx.fillText('Select two different hubs to view spread', rect.width / 2, 95);
+    return;
+  }
+  const hub1 = sel1.value, hub2 = sel2.value;
+  const h1 = (typeof getChartHistory === 'function') ? getChartHistory(hub1) : priceHistory[hub1];
+  const h2 = (typeof getChartHistory === 'function') ? getChartHistory(hub2) : priceHistory[hub2];
+  if (!h1 || !h2) return;
+  const len = Math.min(h1.length, h2.length, 90);
+  const d1 = h1.slice(-len), d2 = h2.slice(-len);
+  const spread = d1.map((v, i) => v - d2[i]);
+  if (spread.length < 2) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  if (!rect.width) return;
+  canvas.width = rect.width * dpr; canvas.height = 180 * dpr;
+  canvas.style.width = rect.width + 'px'; canvas.style.height = '180px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const W = rect.width, H = 180;
+  const padL = 65, padR = 20, padT = 20, padB = 30;
+  const cW = W - padL - padR, cH = H - padT - padB;
+  const sMin = Math.min(...spread) * 1.05, sMax = Math.max(...spread) * 1.05;
+  const sMinAdj = Math.min(sMin, 0), sMaxAdj = Math.max(sMax, 0);
+  const range = sMaxAdj - sMinAdj || 1;
+
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const bgColor = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+  const gridColor = isLight ? '#e2e8f0' : 'rgba(30,45,61,0.6)';
+  const textColor = isLight ? '#475569' : '#94a3b8';
+
+  ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
+
+  function yPos(v) { return padT + (1 - (v - sMinAdj) / range) * cH; }
+  function xPos(i) { return padL + (i / (spread.length - 1)) * cW; }
+
+  // Zero line
+  const zeroY = yPos(0);
+  ctx.strokeStyle = isLight ? '#94a3b8' : 'rgba(148,163,184,0.5)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(padL, zeroY); ctx.lineTo(padL + cW, zeroY); ctx.stroke(); ctx.setLineDash([]);
+
+  // Grid
+  ctx.strokeStyle = gridColor; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (cH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillStyle = textColor; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+    ctx.fillText((sMaxAdj - (sMaxAdj - sMinAdj) * (i / 4)).toFixed(2), padL - 6, y + 3);
+  }
+
+  // Filled areas above/below zero
+  // Green above zero
+  ctx.beginPath(); ctx.moveTo(xPos(0), zeroY);
+  for (let i = 0; i < spread.length; i++) {
+    const y = Math.min(yPos(spread[i]), zeroY);
+    ctx.lineTo(xPos(i), y);
+  }
+  ctx.lineTo(xPos(spread.length - 1), zeroY); ctx.closePath();
+  ctx.fillStyle = 'rgba(16,185,129,0.15)'; ctx.fill();
+
+  // Red below zero
+  ctx.beginPath(); ctx.moveTo(xPos(0), zeroY);
+  for (let i = 0; i < spread.length; i++) {
+    const y = Math.max(yPos(spread[i]), zeroY);
+    ctx.lineTo(xPos(i), y);
+  }
+  ctx.lineTo(xPos(spread.length - 1), zeroY); ctx.closePath();
+  ctx.fillStyle = 'rgba(239,68,68,0.15)'; ctx.fill();
+
+  // Spread line
+  ctx.beginPath();
+  for (let i = 0; i < spread.length; i++) {
+    const x = xPos(i), y = yPos(spread[i]);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Current spread label
+  const cur = spread[spread.length - 1];
+  ctx.font = 'bold 11px IBM Plex Mono'; ctx.textAlign = 'left';
+  ctx.fillStyle = cur >= 0 ? '#10b981' : '#ef4444';
+  ctx.fillText((cur >= 0 ? '+' : '') + cur.toFixed(3), padL + cW + 3, yPos(cur) + 4);
+
+  // Title
+  ctx.font = '10px IBM Plex Mono'; ctx.fillStyle = textColor; ctx.textAlign = 'left';
+  ctx.fillText(hub1 + ' - ' + hub2, padL, padT - 6);
 }
 
 function sparklineSVG(data, color, w, h) {
