@@ -410,17 +410,15 @@ function initPrices() {
   // Fetch real prices and real history in parallel (non-blocking)
   Promise.all([fetchLivePrices(), _fetchPriceHistory()]).then(([liveOk, histOk]) => {
     if (liveOk) {
-      // Re-seed tick engine history with real prices — patches the last 5 ticks toward reality
+      // Re-seed ENTIRE tick history for live hubs centered on the real price
+      // so that Index/Balmo averages start from reality, not static base prices
       for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
         hubs.forEach(h => {
           const real = _livePrices[h.name];
           if (real === undefined) return;
-          const hist = priceHistory[h.name];
-          const n = Math.min(5, hist.length);
-          for (let i = n; i >= 1; i--) {
-            const frac = (n - i + 1) / (n + 1);
-            hist[hist.length - i] = hist[hist.length - i] + (real - hist[hist.length - i]) * frac;
-          }
+          // Regenerate history centered on real price with very low vol for live hubs
+          const liveVol = isHubLive(h.name) ? h.vol * 0.05 : h.vol * 0.3;
+          priceHistory[h.name] = genHistory(real, 180, liveVol);
         });
       }
     }
@@ -438,9 +436,9 @@ function initPrices() {
 }
 
 function _rebaseToLivePrices() {
-  // Nudge the last tick toward the real price to prevent long-term drift.
-  // Live hubs (real anchor): 70% hard pull back to anchor every 15 min.
-  // Estimated hubs: gentle 20% nudge.
+  // When live prices refresh, re-anchor the simulation.
+  // Live hubs: snap directly to real price (drift is negligible so no visible jump).
+  // Estimated hubs: gentle 20% nudge to avoid jarring changes.
   for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
     hubs.forEach(h => {
       const real = _livePrices[h.name];
@@ -450,9 +448,13 @@ function _rebaseToLivePrices() {
       const current = hist[hist.length - 1];
       const isPower = sector === 'power';
       const floor = isPower ? -h.base * 0.5 : h.base * 0.4;
-      const pull = isHubLive(h.name) ? 0.70 : 0.20;
-      const nudged = Math.max(floor, current + (real - current) * pull);
-      hist[hist.length - 1] = nudged;
+      if (isHubLive(h.name)) {
+        // Snap to real price — with ±0.3% clamp the current value is already close
+        hist[hist.length - 1] = Math.max(floor, real);
+      } else {
+        const nudged = Math.max(floor, current + (real - current) * 0.20);
+        hist[hist.length - 1] = nudged;
+      }
     });
   }
 }
@@ -498,20 +500,20 @@ function tickPrices() {
       const hist = priceHistory[h.name];
       const last = hist[hist.length - 1];
       const live = isHubLive(h.name);
-      // Live hubs are anchored to real daily/intraday prices — use 10% of normal vol
-      // so the price ticks slightly (keeping P&L active) but stays close to the real anchor.
-      const volScale = live ? 0.10 : 1.0;
+      // Live hubs: negligible drift (1% of normal vol) — just enough to keep P&L active.
+      // Estimated hubs: full simulation volatility.
+      const volScale = live ? 0.01 : 1.0;
       let drift = (Math.random()-0.5) * 2 * (h.base * h.vol/100 / 15) * volScale;
-      // Apply weather-driven bias for gas and power hubs (also dampened for live)
+      // Apply weather-driven bias for gas and power hubs (dampened for live)
       if ((sector === 'ng' || sector === 'power') && STATE.weatherBias[h.name]) {
         drift += last * STATE.weatherBias[h.name] * (0.3 + Math.random() * 0.4) * volScale;
       }
       let next = last + drift;
-      // Hard clamp for live hubs: never drift more than ±2% from the real anchor
+      // Hard clamp for live hubs: never drift more than ±0.3% from the real anchor
       if (live) {
         const anchor = _livePrices[h.name];
         if (anchor !== undefined && anchor > 0) {
-          const maxDev = anchor * 0.02;
+          const maxDev = anchor * 0.003;
           if (next > anchor + maxDev) next = anchor + maxDev;
           if (next < anchor - maxDev) next = Math.max(anchor - maxDev, 0.001);
         }
