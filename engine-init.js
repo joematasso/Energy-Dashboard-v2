@@ -85,8 +85,10 @@ function processPendingOrders() {
       if (order.direction === 'BUY' && spot <= order.limitPrice) { shouldFill = true; fillPrice = order.limitPrice; }
       if (order.direction === 'SELL' && spot >= order.limitPrice) { shouldFill = true; fillPrice = order.limitPrice; }
     } else if (order.orderType === 'STOP') {
-      if (order.direction === 'BUY' && spot >= order.stopPrice) { shouldFill = true; fillPrice = spot; }
-      if (order.direction === 'SELL' && spot <= order.stopPrice) { shouldFill = true; fillPrice = spot; }
+      // STOP orders convert to market — apply bid-ask spread
+      const ba = (typeof getBidAsk === 'function') ? getBidAsk(order.hub, order.sector || 'ng') : null;
+      if (order.direction === 'BUY' && spot >= order.stopPrice) { shouldFill = true; fillPrice = ba ? ba.ask : spot; }
+      if (order.direction === 'SELL' && spot <= order.stopPrice) { shouldFill = true; fillPrice = ba ? ba.bid : spot; }
     } else if (order.orderType === 'STOP_LIMIT') {
       // Stop triggered?
       if (!order._stopTriggered) {
@@ -479,6 +481,8 @@ function runTickEngines() {
   processPendingOrders();
   processStopLossTargets();
   processAutoRolls();
+  processExpiredContracts();
+  checkMarginLevels();
   checkAlerts();
   checkCalendarAlerts();
 }
@@ -606,6 +610,151 @@ function processAutoRolls() {
 
 
 /* =====================================================================
+   FORCED EXPIRY — Close expired contracts that are not set to auto-roll
+   ===================================================================== */
+function processExpiredContracts() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let changed = false;
+
+  STATE.trades.forEach(t => {
+    if (t.status !== 'OPEN') return;
+    if (!t.deliveryMonth) return;
+    if (t._expiryProcessed) return;
+    // Skip trades that will be handled by auto-roll
+    if (t.autoRoll !== false && STATE.settings && STATE.settings.autoRollEnabled) return;
+
+    const sector = t.sector || (typeof inferSectorFromType === 'function' ? inferSectorFromType(t.type) : '');
+    if (!sector) return;
+
+    const expiry = (typeof getContractExpiry === 'function') ? getContractExpiry(t.hub, t.deliveryMonth, sector) : null;
+    if (!expiry) return;
+
+    const daysToExpiry = Math.ceil((expiry.getTime() - now.getTime()) / 86400000);
+    if (daysToExpiry > 0) return; // Not expired yet
+
+    // Contract expired — force close at last available price (cash settlement)
+    const closePrice = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
+    if (!closePrice && closePrice !== 0) return;
+
+    const dir = t.direction === 'BUY' ? 1 : -1;
+    const pnl = (closePrice - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    t.status = 'CLOSED';
+    t.closePrice = closePrice;
+    t.realizedPnl = pnl;
+    t.closedAt = new Date().toISOString();
+    t.closeReason = 'EXPIRY';
+    t._expiryProcessed = true;
+    changed = true;
+
+    const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const monthLabel = new Date(t.deliveryMonth + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    addNotification('position', 'Contract Expired',
+      t.direction + ' ' + parseFloat(t.volume).toLocaleString() + ' ' + t.hub +
+      ' ' + monthLabel + ' expired. Settled at $' + closePrice.toFixed(4) +
+      ' | P&L: ' + pnlStr);
+    toast('Contract expired: ' + t.hub + ' ' + monthLabel + ' settled', pnl >= 0 ? 'success' : 'error');
+    if (typeof playSound === 'function') playSound('alert');
+
+    // Server sync
+    if (STATE.connected && STATE.trader && t.id) {
+      fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CLOSED', closePrice, realizedPnl: pnl, closeReason: 'EXPIRY' })
+      }).catch(() => {});
+    }
+  });
+
+  if (changed) {
+    localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+  }
+}
+
+/* =====================================================================
+   MARGIN MONITORING — Warn at 75%, force-liquidate at 90%
+   ===================================================================== */
+const MARGIN_MAINTENANCE = 0.75;
+const MARGIN_LIQUIDATION = 0.90;
+let _lastMarginWarning = 0;
+
+function checkMarginLevels() {
+  if (!STATE.trader) return;
+  const open = STATE.trades.filter(t => t.status === 'OPEN');
+  if (!open.length) return;
+
+  const balance = (STATE.settings && STATE.settings.balance) || (STATE.trader && STATE.trader.starting_balance) || 1000000;
+  let realized = 0, unrealized = 0;
+  STATE.trades.forEach(t => {
+    if (t.status === 'CLOSED') {
+      realized += parseFloat(t.realizedPnl || 0);
+    } else if (t.status === 'OPEN') {
+      const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
+      const dir = t.direction === 'BUY' ? 1 : -1;
+      unrealized += (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    }
+  });
+
+  const equity = balance + realized + unrealized;
+  if (equity <= 0) return;
+  const usedMargin = open.reduce((s, t) => s + ((typeof calcMargin === 'function') ? calcMargin(t) : 0), 0);
+  if (usedMargin <= 0) return;
+
+  const marginUtil = usedMargin / equity;
+
+  // LIQUIDATION: force-close worst-performing position
+  if (marginUtil >= MARGIN_LIQUIDATION) {
+    let worstPnl = Infinity, worstTrade = null;
+    open.forEach(t => {
+      const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
+      const dir = t.direction === 'BUY' ? 1 : -1;
+      const pnl = (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+      if (pnl < worstPnl) { worstPnl = pnl; worstTrade = t; }
+    });
+
+    if (worstTrade) {
+      const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(worstTrade) : getPrice(worstTrade.hub);
+      const dir = worstTrade.direction === 'BUY' ? 1 : -1;
+      const pnl = (spot - parseFloat(worstTrade.entryPrice)) * parseFloat(worstTrade.volume) * dir;
+      worstTrade.status = 'CLOSED';
+      worstTrade.closePrice = spot;
+      worstTrade.realizedPnl = pnl;
+      worstTrade.closedAt = new Date().toISOString();
+      worstTrade.closeReason = 'MARGIN_CALL';
+      localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+
+      const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      addNotification('position', 'MARGIN CALL — Position Liquidated',
+        worstTrade.direction + ' ' + parseFloat(worstTrade.volume).toLocaleString() + ' ' + worstTrade.hub +
+        ' force-closed. Margin utilization: ' + (marginUtil * 100).toFixed(0) + '%' +
+        ' | P&L: ' + pnlStr);
+      toast('MARGIN CALL: ' + worstTrade.hub + ' liquidated!', 'error');
+      if (typeof playSound === 'function') playSound('alert');
+
+      // Server sync
+      if (STATE.connected && STATE.trader && worstTrade.id) {
+        fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + worstTrade.id, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, closeReason: 'MARGIN_CALL' })
+        }).catch(() => {});
+      }
+    }
+    return;
+  }
+
+  // WARNING: approaching maintenance margin
+  if (marginUtil >= MARGIN_MAINTENANCE) {
+    const now = Date.now();
+    if (now - _lastMarginWarning > 120000) {
+      _lastMarginWarning = now;
+      addNotification('position', 'Margin Warning',
+        'Margin utilization at ' + (marginUtil * 100).toFixed(0) + '%. ' +
+        'Reduce positions or add funds to avoid liquidation.');
+      toast('Margin warning: ' + (marginUtil * 100).toFixed(0) + '% utilization', 'error');
+    }
+  }
+}
+
+/* =====================================================================
    INIT — STARTUP
    ===================================================================== */
 try {
@@ -618,6 +767,8 @@ try {
   initClock();
   setInterval(tickPrices, 8000);
   setInterval(runTickEngines, 8000);  // Process pending orders, stop-losses, alerts on each tick
+  // Record daily settlement prices (capture once at startup, then hourly)
+  if (typeof recordDailySettlement === 'function') { recordDailySettlement(); setInterval(recordDailySettlement, 3600000); }
   updateNotifBadge();  // Initialize notification badge
   setInterval(fetchLiveNews, 900000);
   setInterval(fetchTradeFeed, 60000);

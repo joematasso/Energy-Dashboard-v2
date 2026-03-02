@@ -670,20 +670,27 @@ async function submitTrade() {
     if (tradeDirection === 'SELL' && stopPrice >= spotPrice) return toast('Stop SELL trigger should be below current market', 'error');
   }
 
-  // For MARKET orders, validate as before (backdated trades bypass)
+  // For MARKET orders: apply bid-ask spread + slippage, then validate
+  let fillPrice = currentPrice;
   if (orderType === 'MARKET' && !isBackdating) {
     const isBasisTrade = type === 'BASIS_SWAP';
-    if (!isBasisTrade && tradeDirection === 'BUY' && currentPrice < spotPrice) {
-      return toast('BUY price must be at or above spot ($' + spotPrice.toFixed(4) + ')', 'error');
+    const tradeSector = document.getElementById('tradeSector') ? document.getElementById('tradeSector').value : 'ng';
+    if (!isBasisTrade && typeof getBidAsk === 'function') {
+      const ba = getBidAsk(hub, tradeSector);
+      if (ba && ba.spread > 0) {
+        fillPrice = tradeDirection === 'BUY' ? ba.ask : ba.bid;
+      }
     }
-    if (!isBasisTrade && tradeDirection === 'SELL' && currentPrice > spotPrice) {
-      return toast('SELL price must be at or below spot ($' + spotPrice.toFixed(4) + ')', 'error');
+    // Apply slippage for large orders
+    if (!isBasisTrade && typeof calcSlippage === 'function') {
+      const slip = calcSlippage(hub, tradeSector, parseFloat(volume), tradeDirection);
+      if (slip !== 0) fillPrice += slip;
     }
   }
 
   const trade = {
     type, direction: tradeDirection, hub,
-    volume: parseFloat(volume), entryPrice: orderType === 'MARKET' ? currentPrice : (limitPrice || stopPrice || currentPrice),
+    volume: parseFloat(volume), entryPrice: orderType === 'MARKET' ? fillPrice : (limitPrice || stopPrice || currentPrice),
     spotRef: spotPrice,
     sector: document.getElementById('tradeSector') ? document.getElementById('tradeSector').value : '',
     deliveryMonth: document.getElementById('tradeDelivery').value,

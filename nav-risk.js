@@ -268,7 +268,7 @@ function renderRiskMargin(openTrades, equity) {
   const availEl = document.getElementById('riskMarginAvail');
   if (barEl) {
     barEl.style.width = pct.toFixed(1) + '%';
-    barEl.style.background = pct > 80 ? 'var(--red)' : pct > 50 ? '#f59e0b' : 'var(--accent)';
+    barEl.style.background = pct > 90 ? 'var(--red)' : pct > 75 ? '#f59e0b' : 'var(--accent)';
   }
   if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
   if (usedEl) usedEl.textContent = '$' + usedMargin.toLocaleString(undefined, { maximumFractionDigits: 0 });

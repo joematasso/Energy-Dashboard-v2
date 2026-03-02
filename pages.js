@@ -23,7 +23,7 @@ function renderNGPage() {
   ).join('');
 
   // Bench grid
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('ng');
   const grid = document.getElementById('ngBenchGrid');
   grid.innerHTML = NG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'ng'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
@@ -33,9 +33,12 @@ function renderNGPage() {
     const priceDisplay = isAECO
       ? `<div class="hub-price">C$${cadPrice.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)"> /GJ</span></div><div style="font-size:11px;color:var(--text-dim)">US$${p.toFixed(3)}/MMBtu</div>`
       : `<div class="hub-price">$${p.toFixed(3)}</div>`;
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'ng') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${ba.bid.toFixed(3)} / Ask ${ba.ask.toFixed(3)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ng','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}${isAECO?' 🇨🇦':''} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       ${priceDisplay}
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -129,14 +132,17 @@ function renderCrudePage() {
   ).join('');
 
   // Bench grid
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('crude');
   const grid = document.getElementById('crudeBenchGrid');
   grid.innerHTML = CRUDE_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'crude'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.crude === h.name ? 'selected' : '';
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'crude') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${ba.bid.toFixed(2)} / Ask ${ba.ask.toFixed(2)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('crude','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -223,14 +229,17 @@ function renderPowerPage() {
   ).join('');
 
   // Bench grid
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('power');
   const grid = document.getElementById('powerBenchGrid');
   grid.innerHTML = POWER_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'power'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.power === h.name ? 'selected' : '';
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'power') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${ba.bid.toFixed(2)} / Ask ${ba.ask.toFixed(2)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('power','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}</div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -305,15 +314,18 @@ function renderFreightPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#000;border-color:'+h.color:''}">${h.name}</button>`
   ).join('');
 
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('freight');
   const grid = document.getElementById('freightBenchGrid');
   grid.innerHTML = FREIGHT_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'freight'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.freight === h.name ? 'selected' : '';
     const isIdx = h.base > 100;
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'freight') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${isIdx ? ba.bid.toFixed(0) : ba.bid.toFixed(2)} / Ask ${isIdx ? ba.ask.toFixed(0) : ba.ask.toFixed(2)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('freight','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${isIdx ? p.toFixed(0) : '$'+p.toFixed(2)}</div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${isIdx?c.toFixed(0):c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -390,14 +402,17 @@ function renderAgPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#000;border-color:'+h.color:''}">${h.name.replace(/ \(.*\)/,'')}</button>`
   ).join('');
 
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('ag');
   const grid = document.getElementById('agBenchGrid');
   grid.innerHTML = AG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'ag'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.ag === h.name ? 'selected' : '';
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'ag') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${formatAgPrice(h, ba.bid)} / Ask ${formatAgPrice(h, ba.ask)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ag','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatAgPrice(h, p)}</div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -469,14 +484,17 @@ function renderMetalsPage() {
     `<button class="hub-toggle ${STATE.visibleHubs[h.name]?'on':''}" onclick="toggleHub('${h.name}')" style="${STATE.visibleHubs[h.name]?'background:'+h.color+';color:#000;border-color:'+h.color:''}">${h.name.replace(/ \(.*\)/,'')}</button>`
   ).join('');
 
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('metals');
   const grid = document.getElementById('metalsBenchGrid');
   grid.innerHTML = METALS_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'metals'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.metals === h.name ? 'selected' : '';
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'metals') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${formatMetalPrice(h, ba.bid)} / Ask ${formatMetalPrice(h, ba.ask)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('metals','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${formatMetalPrice(h, p)}</div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -543,16 +561,19 @@ function renderNGLsPage() {
   ).join('');
 
   // Bench grid — ¢/gal primary, $/bbl secondary
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('ngls');
   const grid = document.getElementById('nglsBenchGrid');
   grid.innerHTML = NGL_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'ngls'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.ngls === h.name ? 'selected' : '';
     const bblPrice = (p * 42 / 100).toFixed(2);
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'ngls') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${ba.bid.toFixed(1)}¢ / Ask ${ba.ask.toFixed(1)}¢</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ngls','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">${p.toFixed(1)}¢<span style="font-size:11px;color:var(--text-muted)">/gal</span></div>
       <div style="font-size:11px;color:var(--text-dim)">$${bblPrice}/bbl</div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(2)}¢ (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}
@@ -663,15 +684,18 @@ function renderLNGPage() {
   if (MAP_STATE.lng) renderPipelineMap('lng');
 
   // Bench grid
-  const promptLabel = getPromptMonthLabel();
+  const promptLabel = getPromptMonthLabel('lng');
   const grid = document.getElementById('lngBenchGrid');
   grid.innerHTML = LNG_HUBS.filter(h => STATE.visibleHubs[h.name]).map(h => {
     const p = getDisplayPrice(h.name, 'lng'), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const sel = STATE.selectedHubs.lng === h.name ? 'selected' : '';
     const regionFlag = h.region === 'Asia' ? '🇯🇵' : h.region === 'Europe' ? '🇪🇺' : h.region === 'US Export' ? '🇺🇸' : h.region === 'LatAm' ? '🌎' : '🌐';
+    const ba = typeof getBidAsk === 'function' ? getBidAsk(h.name, 'lng') : null;
+    const baLine = ba && ba.spread > 0 ? `<div style="font-size:9px;color:var(--text-dim)">Bid ${ba.bid.toFixed(2)} / Ask ${ba.ask.toFixed(2)}</div>` : '';
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('lng','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${regionFlag} ${h.name.replace(/ \(.*\)/,'')} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       <div class="hub-price">$${p.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)">/MMBtu</span></div>
+      ${baLine}
       <div class="hub-change ${c>=0?'up':'down'}">${c>=0?'+':''}${c.toFixed(3)} (${cp>=0?'+':''}${cp.toFixed(2)}%)</div>
       <div class="sparkline">${sparklineSVG(getChartHistory(h.name), h.color, 150, 24)}</div>
       ${hubSrcLine(h.name)}

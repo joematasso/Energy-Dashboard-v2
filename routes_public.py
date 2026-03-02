@@ -286,9 +286,10 @@ def submit_trade(trader):
     is_privileged_trader = trader_row['privileged'] if 'privileged' in trader_row.keys() else False
     is_backdating = bool(data.get('backdate')) and is_privileged_trader
     if not is_basis and not is_backdating:
-        if direction == 'BUY' and entry_price < spot_ref * 0.999:
+        # Tolerance widened to accommodate bid-ask spread + slippage (up to ~0.5%)
+        if direction == 'BUY' and entry_price < spot_ref * 0.995:
             return jsonify({'success': False, 'error': 'BUY price must be at or above spot'}), 400
-        if direction == 'SELL' and entry_price > spot_ref * 1.001:
+        if direction == 'SELL' and entry_price > spot_ref * 1.005:
             return jsonify({'success': False, 'error': 'SELL price must be at or below spot'}), 400
 
     starting_balance = trader_row['starting_balance']

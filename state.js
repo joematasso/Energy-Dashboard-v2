@@ -498,6 +498,11 @@ function getChartHistory(hubName) {
 }
 
 function tickPrices() {
+  // Freeze prices when market is closed (weekends/holidays)
+  if (typeof MARKET_OPEN !== 'undefined' && !MARKET_OPEN) {
+    renderCurrentPage();
+    return;
+  }
   for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
     hubs.forEach(h => {
       const hist = priceHistory[h.name];
@@ -654,6 +659,96 @@ function getPrice(name) {
   return h ? h[h.length - 1] : 0;
 }
 
+// Bid-ask spread for spot/futures. Returns { bid, ask, mid, spread }.
+// Spreads calibrated per sector; tighter for benchmark hubs, wider after hours.
+function getBidAsk(hubName, sector) {
+  const mid = getPrice(hubName);
+  if (!mid || mid <= 0) return { bid: mid, ask: mid, mid, spread: 0 };
+
+  const baseSpreads = {
+    ng: 0.0008,      // ~0.08% (~$0.002 on $2.75)
+    crude: 0.0005,   // ~0.05% (~$0.04 on $80)
+    power: 0.0020,   // ~0.20% (less liquid)
+    freight: 0.0025, // ~0.25%
+    ag: 0.0006,      // ~0.06%
+    metals: 0.0004,  // ~0.04% (gold very tight)
+    ngls: 0.0015,    // ~0.15%
+    lng: 0.0018,     // ~0.18%
+  };
+  let spreadPct = baseSpreads[sector] || 0.001;
+
+  // Widen for non-benchmark hubs (not the first hub in sector array)
+  const hubs = ALL_HUB_SETS[sector];
+  if (hubs && hubs[0] && hubs[0].name !== hubName) {
+    spreadPct *= 1.5;
+  }
+
+  // Widen when market is closed
+  if (typeof MARKET_OPEN !== 'undefined' && !MARKET_OPEN) {
+    spreadPct *= 2.0;
+  }
+
+  const halfSpread = mid * spreadPct / 2;
+  return { bid: mid - halfSpread, ask: mid + halfSpread, mid, spread: halfSpread * 2 };
+}
+
+// Price slippage for large orders based on volume relative to typical daily volume.
+// Returns the slippage amount (positive = unfavorable for buyer, negative = unfavorable for seller).
+function calcSlippage(hubName, sector, volume, direction) {
+  const mid = getPrice(hubName);
+  if (!mid || mid <= 0) return 0;
+
+  const typicalDailyVol = {
+    ng: 500000, crude: 100000, power: 200000, freight: 50000,
+    ag: 300000, metals: 50000, ngls: 100000, lng: 200000,
+  };
+  const dailyVol = typicalDailyVol[sector] || 200000;
+  const volRatio = Math.abs(volume) / dailyVol;
+
+  // No slippage for small orders (< 10% of daily volume)
+  if (volRatio < 0.1) return 0;
+
+  // Linear: 0.05% per 10% of daily volume, capped at 0.5%
+  const slippagePct = Math.min(volRatio * 0.005, 0.005);
+  const slippage = mid * slippagePct;
+  return direction === 'BUY' ? slippage : -slippage;
+}
+
+// Daily settlement prices: { hubName: { "YYYY-MM-DD": price, ... }, ... }
+let _settlementPrices = {};
+try { _settlementPrices = JSON.parse(localStorage.getItem('ng_settlements') || '{}'); } catch(e) {}
+
+function recordDailySettlement() {
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
+    hubs.forEach(h => {
+      if (!_settlementPrices[h.name]) _settlementPrices[h.name] = {};
+      if (!_settlementPrices[h.name][dateStr]) {
+        const p = getPrice(h.name);
+        if (p > 0) _settlementPrices[h.name][dateStr] = p;
+      }
+    });
+  }
+  // Keep only last 30 days
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  for (const hub in _settlementPrices) {
+    for (const d in _settlementPrices[hub]) {
+      if (d < cutoffStr) delete _settlementPrices[hub][d];
+    }
+  }
+  try { localStorage.setItem('ng_settlements', JSON.stringify(_settlementPrices)); } catch(e) {}
+}
+
+function getSettlementPrice(hubName, dateStr) {
+  if (_settlementPrices[hubName] && _settlementPrices[hubName][dateStr]) {
+    return _settlementPrices[hubName][dateStr];
+  }
+  return getPrice(hubName);
+}
+
 function getPriceChange(name) {
   const h = priceHistory[name];
   if (!h || h.length < 2) return 0;
@@ -666,10 +761,30 @@ function getPriceChangePct(name) {
   return ((h[h.length-1] - h[h.length-2]) / h[h.length-2]) * 100;
 }
 
-function getPromptMonthLabel() {
+function getPromptMonthLabel(sector) {
   const now = new Date();
-  const prompt = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return prompt.toLocaleDateString('en-US', { month: 'short' }) + ' ' + String(prompt.getFullYear()).slice(-2);
+  now.setHours(0, 0, 0, 0);
+  // Start with next calendar month as candidate prompt month
+  let y = now.getFullYear();
+  let m = now.getMonth() + 1; // 0-indexed → next month
+  if (m > 11) { m = 0; y++; }
+
+  // Check up to 3 months forward — find first non-expired contract
+  for (let i = 0; i < 3; i++) {
+    const testM = (m + i) % 12;
+    const testY = y + Math.floor((m + i) / 12);
+    const ym = testY + '-' + String(testM + 1).padStart(2, '0');
+    // Use sector-specific expiry rules if available (positions.js getContractExpiry)
+    if (sector && typeof getContractExpiry === 'function') {
+      const expiry = getContractExpiry('_generic', ym, sector);
+      if (expiry && expiry < now) continue; // This month's contract already expired
+    }
+    const dt = new Date(testY, testM, 1);
+    return dt.toLocaleDateString('en-US', { month: 'short' }) + ' ' + String(dt.getFullYear()).slice(-2);
+  }
+  // Fallback: month+1
+  const fallback = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return fallback.toLocaleDateString('en-US', { month: 'short' }) + ' ' + String(fallback.getFullYear()).slice(-2);
 }
 
 function getDisplayPrice(hubName, sector) {
