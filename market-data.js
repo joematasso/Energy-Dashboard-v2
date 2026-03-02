@@ -220,7 +220,7 @@ function renderNewsTicker() {
   // Calculate speed: measure actual content width, target ~60px/sec
   requestAnimationFrame(() => {
     const contentWidth = inner.scrollWidth / 2; // half because we duplicated
-    const speed = 60; // pixels per second — comfortable reading pace
+    const speed = 25; // pixels per second — slow comfortable reading pace
     const duration = Math.max(30, contentWidth / speed);
     inner.style.animation = `newsScroll ${duration}s linear infinite`;
   });
