@@ -135,6 +135,13 @@ function toggleAutoRoll(tradeId, enabled) {
   if (!t) return;
   t.autoRoll = enabled;
   localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+  // Sync to server
+  if (STATE.connected && STATE.trader) {
+    fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + tradeId, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoRoll: enabled })
+    }).catch(() => {});
+  }
   toast(enabled ? 'Auto-roll enabled for this position' : 'Auto-roll disabled', 'info');
 }
 
@@ -532,8 +539,7 @@ function closeTrade(id) {
   if (!t || t.status !== 'OPEN') return;
   const isMultiLeg = SPREAD_TYPES.has(t.type) || BASIS_TYPES.has(t.type) || (t.type === 'MULTILEG' && t.legs && t.legs.length);
   const cp = getTradeSpot(t);
-  if (!cp && cp !== 0) return toast('No market price available for ' + t.hub, 'error');
-  if (!isMultiLeg && cp <= 0) return toast('No market price available for ' + t.hub, 'error');
+  if (cp === null || cp === undefined || isNaN(cp)) return toast('No market price available for ' + t.hub, 'error');
   const isOtc = t.venue === 'OTC' && (t.counterpartyTrader || t.otcMirrorOf);
   const priceLabel = isMultiLeg ? 'spread $' + cp.toFixed(4) : 'market price $' + cp.toFixed(4);
   const confirmMsg = isOtc
@@ -547,6 +553,7 @@ function closeTrade(id) {
   t.closePrice = cp;
   t.realizedPnl = pnl;
   t.closedAt = new Date().toISOString();
+  t.closeReason = 'MANUAL';
   localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
 
   // Update server
@@ -905,6 +912,7 @@ function flatAll() {
     t.closePrice = cp;
     t.realizedPnl = pnl;
     t.closedAt = new Date().toISOString();
+    t.closeReason = 'FLAT_ALL';
     totalPnl += pnl;
     if (STATE.connected && STATE.trader) {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {

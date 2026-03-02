@@ -531,7 +531,7 @@ function processAutoRolls() {
 
     // Get next month's price from forward curve
     const nextPrice = (typeof _getContractPrice === 'function') ? _getContractPrice(t.hub, nextMonth) : null;
-    if (!nextPrice || nextPrice <= 0) {
+    if (nextPrice === null || nextPrice === undefined || isNaN(nextPrice)) {
       addNotification('position', 'Roll Failed', t.hub + ' ' + t.deliveryMonth + ': no price for ' + nextMonth);
       t._rollProcessed = true;
       return;

@@ -177,8 +177,9 @@ function renderCrudePage() {
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
+    const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
     return `<tr>
-      <td>${mLabel}</td>
+      <td>${mLabel}${src}</td>
       <td class="mono">$${pt.price.toFixed(2)}</td>
       <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
@@ -271,8 +272,9 @@ function renderPowerPage() {
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
+    const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
     return `<tr>
-      <td>${mLabel}</td>
+      <td>${mLabel}${src}</td>
       <td class="mono">$${pt.price.toFixed(2)}</td>
       <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
@@ -354,8 +356,9 @@ function renderFreightPage() {
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
+    const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
     return `<tr>
-      <td>${mLabel}</td>
+      <td>${mLabel}${src}</td>
       <td class="mono">${isIdx ? pt.price.toFixed(0) : '$'+pt.price.toFixed(2)}</td>
       <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${isIdx?change.toFixed(0):change.toFixed(2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
@@ -432,8 +435,9 @@ function renderAgPage() {
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
+    const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
     return `<tr>
-      <td>${mLabel}</td>
+      <td>${mLabel}${src}</td>
       <td class="mono">${selHubData ? formatAgPrice(selHubData, pt.price) : pt.price.toFixed(3)}</td>
       <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(3)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
@@ -510,8 +514,9 @@ function renderMetalsPage() {
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
+    const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
     return `<tr>
-      <td>${mLabel}</td>
+      <td>${mLabel}${src}</td>
       <td class="mono">${selHubData ? formatMetalPrice(selHubData, pt.price) : '$'+pt.price.toFixed(2)}</td>
       <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
@@ -625,8 +630,9 @@ function renderNGLsPage() {
       const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
       const change = pt.price - prevPrice;
       const bblPrice = (pt.price * 42 / 100).toFixed(2);
+      const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
       return `<tr>
-        <td>${mLabel}</td>
+        <td>${mLabel}${src}</td>
         <td class="mono">${pt.price.toFixed(2)}</td>
         <td class="mono">$${bblPrice}</td>
         <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
@@ -756,8 +762,9 @@ function renderLNGPage() {
       const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
       const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
       const change = pt.price - prevPrice;
+      const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
       return `<tr>
-        <td>${mLabel}</td>
+        <td>${mLabel}${src}</td>
         <td class="mono">$${pt.price.toFixed(3)}</td>
         <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(3)}</td>
         <td class="mono">${pt.oi.toLocaleString()}</td>

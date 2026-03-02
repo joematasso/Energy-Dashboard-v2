@@ -76,7 +76,7 @@ function renderLeaderboardData(serverData, isLive) {
   let realized=0,unrealized=0,wins=0,losses=0,grossWins=0,grossLosses=0;
   STATE.trades.forEach(t=>{
     if(t.status==='CLOSED'){const pnl=parseFloat(t.realizedPnl||0);realized+=pnl;if(pnl>0){wins++;grossWins+=pnl;}else if(pnl<0){losses++;grossLosses+=Math.abs(pnl);}}
-    else if(t.status==='OPEN'){const spot=(typeof getTradeSpot==='function')?getTradeSpot(t):getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;unrealized+=(spot-parseFloat(t.entryPrice))*parseFloat(t.volume)*dir;}
+    else if(t.status==='OPEN'){const spot=(typeof getTradeSpot==='function')?getTradeSpot(t):getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;const ep=parseFloat(t.entryPrice||0);const vol=parseFloat(t.volume||0);if(!isNaN(ep)&&!isNaN(vol))unrealized+=(spot-ep)*vol*dir;}
   });
   const equity=balance+realized+unrealized;
   const myRet=((equity-balance)/balance)*100;
