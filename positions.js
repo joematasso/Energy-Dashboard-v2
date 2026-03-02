@@ -441,7 +441,11 @@ function renderBlotterTable() {
     const canDelete = (Date.now() - created.getTime()) < 3600000;
     let actions = '';
     if (t._pending) {
-      actions = `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="event.stopPropagation();cancelPendingOrder('${t._pendingId}')">Cancel</button>`;
+      actions = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="event.stopPropagation();amendPendingOrder('${t._pendingId}')">Amend</button>`;
+      actions += `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="event.stopPropagation();cancelPendingOrder('${t._pendingId}')">Cancel</button>`;
+      if (t._ocoGroupId) {
+        actions += `<span style="font-size:9px;color:var(--amber);font-weight:700;padding:1px 4px;border:1px solid var(--amber);border-radius:3px;margin-left:2px">OCO</span>`;
+      }
     } else {
       if (t.status === 'OPEN') actions += `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="event.stopPropagation();closeTrade(${t.id})">Close</button>`;
       if (canDelete) actions += `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="event.stopPropagation();deleteTrade(${t.id})">Del</button>`;
@@ -509,7 +513,7 @@ function renderBlotterTable() {
       <div class="bdet-item"><span class="bdet-label">Settlement</span><span>${settleBadge}</span></div>
       <div class="bdet-item"><span class="bdet-label">Contract Expiry</span><span>${expiryHtml}</span></div>
       ${t.deliveryMonth && t.status === 'OPEN' ? `<div class="bdet-item"><span class="bdet-label">Auto-Roll</span><span><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${t.autoRoll ? 'checked' : ''} onchange="toggleAutoRoll('${t.id}',this.checked)"> Roll to next month before expiry</label>${t.rolledFrom ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Rolled from previous contract</div>' : ''}</span></div>` : ''}
-      ${t.closeReason ? `<div class="bdet-item"><span class="bdet-label">Close Reason</span><span style="font-weight:600;color:${t.closeReason === 'MARGIN_CALL' ? 'var(--red)' : t.closeReason === 'EXPIRY' ? '#ef4444' : t.closeReason === 'STOP_LOSS' ? '#f97316' : t.closeReason === 'AUTO_ROLL' ? '#f59e0b' : t.closeReason === 'TARGET' ? 'var(--green)' : 'var(--text-dim)'}">${t.closeReason === 'AUTO_ROLL' ? 'AUTO-ROLLED to next month' : t.closeReason === 'STOP_LOSS' ? 'STOP-LOSS triggered' : t.closeReason === 'TARGET' ? 'TARGET reached' : t.closeReason === 'EXPIRY' ? 'CONTRACT EXPIRED (cash settled)' : t.closeReason === 'MARGIN_CALL' ? 'MARGIN CALL — forced liquidation' : t.closeReason === 'FLAT_ALL' ? 'FLAT ALL positions' : t.closeReason}</span></div>` : ''}
+      ${t.closeReason ? `<div class="bdet-item"><span class="bdet-label">Close Reason</span><span style="font-weight:600;color:${t.closeReason === 'MARGIN_CALL' ? 'var(--red)' : t.closeReason === 'EXPIRY' ? '#ef4444' : t.closeReason === 'STOP_LOSS' || t.closeReason === 'TRAILING_STOP' ? '#f97316' : t.closeReason === 'AUTO_ROLL' ? '#f59e0b' : t.closeReason === 'TARGET' ? 'var(--green)' : 'var(--text-dim)'}">${t.closeReason === 'AUTO_ROLL' ? 'AUTO-ROLLED to next month' : t.closeReason === 'STOP_LOSS' ? 'STOP-LOSS triggered' : t.closeReason === 'TRAILING_STOP' ? 'TRAILING STOP triggered' : t.closeReason === 'TARGET' ? 'TARGET reached' : t.closeReason === 'EXPIRY' ? 'CONTRACT EXPIRED (cash settled)' : t.closeReason === 'MARGIN_CALL' ? 'MARGIN CALL — forced liquidation' : t.closeReason === 'FLAT_ALL' ? 'FLAT ALL positions' : t.closeReason}</span></div>` : ''}
       <div class="bdet-item"><span class="bdet-label">Broker</span><span>${brokerLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Counterparty</span><span>${cptyLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Venue</span><span>${venue}</span></div>
@@ -517,6 +521,10 @@ function renderBlotterTable() {
       <div class="bdet-item"><span class="bdet-label">Commission</span><span>${commission}</span></div>
       <div class="bdet-item"><span class="bdet-label">Stop Loss</span><span>${stopLoss}</span></div>
       <div class="bdet-item"><span class="bdet-label">Target Exit</span><span>${targetExit}</span></div>
+      ${t.trailAmount ? `<div class="bdet-item"><span class="bdet-label">Trailing Stop</span><span style="color:var(--amber);font-weight:600">${t.trailAmount}${t.trailType === 'pct' ? '%' : '$'} trail${t._highWaterMark ? ' (HWM: $' + parseFloat(t._highWaterMark).toFixed(4) + ')' : ''}</span></div>` : ''}
+      ${t._bracketOrder ? `<div class="bdet-item"><span class="bdet-label">Order Type</span><span style="color:var(--accent);font-weight:600">BRACKET (TP + SL)</span></div>` : ''}
+      ${t._ocoGroupId ? `<div class="bdet-item"><span class="bdet-label">OCO Group</span><span style="color:var(--amber);font-weight:600">${t._ocoGroupId}</span></div>` : ''}
+      ${t._amended ? `<div class="bdet-item"><span class="bdet-label">Amendments</span><span>${t._amended}x amended</span></div>` : ''}
       ${closeInfo}
       ${legInfo}
       <div class="bdet-item bdet-notes"><span class="bdet-label">Notes</span><span>${notesLabel}</span></div>

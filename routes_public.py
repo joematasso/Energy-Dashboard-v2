@@ -429,7 +429,7 @@ def update_trade(trader, trade_id):
 
     # Validate closeReason if provided
     if data.get('closeReason'):
-        valid_reasons = {'MANUAL', 'STOP_LOSS', 'TARGET', 'AUTO_ROLL', 'EXPIRY', 'MARGIN_CALL', 'FLAT_ALL'}
+        valid_reasons = {'MANUAL', 'STOP_LOSS', 'TARGET', 'AUTO_ROLL', 'EXPIRY', 'MARGIN_CALL', 'FLAT_ALL', 'TRAILING_STOP'}
         if data['closeReason'] not in valid_reasons:
             return jsonify({'success': False, 'error': f'Invalid close reason: {data["closeReason"]}'}), 400
 

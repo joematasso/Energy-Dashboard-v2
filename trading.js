@@ -677,6 +677,10 @@ async function submitTrade() {
   if (orderType === 'STOP' && !stopPrice) return toast('Stop trigger price is required for stop orders', 'error');
   if (orderType === 'STOP' && stopPrice < 0) return toast('Stop price cannot be negative', 'error');
   if (orderType === 'STOP_LIMIT' && (!stopPrice || !limitPrice)) return toast('Both stop trigger and limit price required for stop-limit orders', 'error');
+  const trailAmount = parseFloat(document.getElementById('tradeTrailAmount')?.value) || 0;
+  const trailType = document.getElementById('tradeTrailType')?.value || 'pct';
+  if (orderType === 'TRAILING_STOP' && trailAmount <= 0) return toast('Trail amount must be positive', 'error');
+  if (orderType === 'TRAILING_STOP' && trailType === 'pct' && trailAmount > 50) return toast('Trail percentage too large (max 50%)', 'error');
 
   // Validate limit price direction: LIMIT BUY should be below market, LIMIT SELL above
   if (orderType === 'LIMIT') {
@@ -722,6 +726,9 @@ async function submitTrade() {
     tif: tif,
     limitPrice: limitPrice || null,
     stopPrice: stopPrice || null,
+    trailAmount: orderType === 'TRAILING_STOP' ? trailAmount : null,
+    trailType: orderType === 'TRAILING_STOP' ? trailType : null,
+    _highWaterMark: orderType === 'TRAILING_STOP' ? currentPrice : null,
     status: 'OPEN',
     timestamp: new Date().toISOString(),
     // Blotter accuracy fields
@@ -794,8 +801,13 @@ async function submitTrade() {
     trade.legs = legs;
   }
 
-  // NON-MARKET orders → queue as pending
-  if (orderType !== 'MARKET') {
+  // Mark bracket orders (both stop + target set on market orders)
+  if (orderType === 'MARKET' && trade.stopLoss && trade.targetExit) {
+    trade._bracketOrder = true;
+  }
+
+  // NON-MARKET orders (except TRAILING_STOP which fills immediately) → queue as pending
+  if (orderType !== 'MARKET' && orderType !== 'TRAILING_STOP') {
     const pendingOrder = {
       ...trade,
       _pendingId: 'po_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
@@ -818,7 +830,7 @@ async function submitTrade() {
       }).catch(() => {});
     }
     playSound('trade');
-    const triggerLabel = orderType === 'LIMIT' ? `limit $${limitPrice.toFixed(3)}` : orderType === 'STOP' ? `stop $${stopPrice.toFixed(3)}` : `stop $${stopPrice.toFixed(3)} / limit $${limitPrice.toFixed(3)}`;
+    const triggerLabel = orderType === 'LIMIT' ? `limit $${limitPrice.toFixed(3)}` : orderType === 'STOP' ? `stop $${stopPrice.toFixed(3)}` : orderType === 'STOP_LIMIT' ? `stop $${stopPrice.toFixed(3)} / limit $${limitPrice.toFixed(3)}` : orderType;
     toast(`${orderType} order placed: ${tradeDirection} ${volume} ${hub} (${triggerLabel}, ${tif})`, 'success');
     resetTradeForm();
     renderBlotterPage();

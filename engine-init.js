@@ -5,11 +5,14 @@ function onOrderTypeChange() {
   const orderType = document.getElementById('tradeOrderType').value;
   document.getElementById('limitPriceGroup').style.display = ['LIMIT','STOP_LIMIT'].includes(orderType) ? 'block' : 'none';
   document.getElementById('stopPriceGroup').style.display = ['STOP','STOP_LIMIT'].includes(orderType) ? 'block' : 'none';
+  const trailGroup = document.getElementById('trailAmountGroup');
+  if (trailGroup) trailGroup.style.display = orderType === 'TRAILING_STOP' ? 'block' : 'none';
   // Hint update
   const hint = document.getElementById('tradeFormHint');
   if (orderType === 'LIMIT') hint.textContent = 'Order fills when price reaches your limit';
   else if (orderType === 'STOP') hint.textContent = 'Order triggers when price hits stop level';
   else if (orderType === 'STOP_LIMIT') hint.textContent = 'Stop triggers, then limit order placed';
+  else if (orderType === 'TRAILING_STOP') hint.textContent = 'Stop follows price by trail amount — locks in gains';
   else hint.textContent = '';
 }
 
@@ -25,6 +28,58 @@ function cancelPendingOrder(pendingId) {
     }).catch(() => {});
   }
   toast('Pending order cancelled', 'info');
+  renderBlotterPage();
+}
+
+function linkOcoOrders(pendingId1, pendingId2) {
+  const o1 = STATE.pendingOrders.find(o => o._pendingId === pendingId1);
+  const o2 = STATE.pendingOrders.find(o => o._pendingId === pendingId2);
+  if (!o1 || !o2) return toast('Could not find both orders', 'error');
+  const groupId = 'oco_' + Date.now();
+  o1._ocoGroupId = groupId;
+  o2._ocoGroupId = groupId;
+  localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders));
+  toast('Orders linked as OCO — when one fills, the other cancels', 'success');
+  renderBlotterPage();
+}
+
+function unlinkOcoOrder(pendingId) {
+  const o = STATE.pendingOrders.find(o => o._pendingId === pendingId);
+  if (o && o._ocoGroupId) {
+    const gid = o._ocoGroupId;
+    STATE.pendingOrders.forEach(x => { if (x._ocoGroupId === gid) delete x._ocoGroupId; });
+    localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders));
+    toast('OCO link removed', 'info');
+    renderBlotterPage();
+  }
+}
+
+function amendPendingOrder(pendingId) {
+  const order = STATE.pendingOrders.find(o => o._pendingId === pendingId);
+  if (!order) return toast('Order not found', 'error');
+  const newPrice = prompt('New price (current: $' + (order.limitPrice || order.stopPrice || 0).toFixed(4) + '):', (order.limitPrice || order.stopPrice || 0).toFixed(4));
+  if (newPrice === null) return;
+  const parsed = parseFloat(newPrice);
+  if (isNaN(parsed) || parsed <= 0) return toast('Invalid price', 'error');
+  const newVol = prompt('New volume (current: ' + order.volume + '):', order.volume);
+  if (newVol === null) return;
+  const parsedVol = parseFloat(newVol);
+  if (isNaN(parsedVol) || parsedVol <= 0) return toast('Invalid volume', 'error');
+  // Apply amendments
+  if (order.limitPrice) order.limitPrice = parsed;
+  if (order.stopPrice) order.stopPrice = parsed;
+  order.volume = parsedVol;
+  order.entryPrice = parsed;
+  order._amended = (order._amended || 0) + 1;
+  localStorage.setItem(traderStorageKey('pending_orders'), JSON.stringify(STATE.pendingOrders));
+  // Sync to server
+  if (order._serverId && STATE.connected && STATE.trader) {
+    fetch(API_BASE + '/api/pending-orders/' + STATE.trader.trader_name + '/' + order._serverId, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limitPrice: order.limitPrice, stopPrice: order.stopPrice, volume: order.volume })
+    }).catch(() => {});
+  }
+  toast('Order amended: $' + parsed.toFixed(4) + ' x ' + parsedVol, 'success');
   renderBlotterPage();
 }
 
@@ -113,9 +168,19 @@ function processPendingOrders() {
         id: Date.now() + Math.floor(Math.random()*1000),
         timestamp: new Date().toISOString(),
       };
+      // OCO: cancel linked orders when one fills
+      if (order._ocoGroupId) {
+        const ocoId = order._ocoGroupId;
+        const cancelled = STATE.pendingOrders.filter(o => o._ocoGroupId === ocoId && o._pendingId !== order._pendingId);
+        cancelled.forEach(o => {
+          addNotification('order', 'OCO Cancelled', `${o.orderType} ${o.direction} ${o.hub} cancelled (linked order filled)`);
+        });
+        STATE.pendingOrders = STATE.pendingOrders.filter(o => !(o._ocoGroupId === ocoId && o._pendingId !== order._pendingId));
+      }
       delete trade._pendingId;
       delete trade._pending;
       delete trade._stopTriggered;
+      delete trade._ocoGroupId;
       delete trade.createdAt;
       STATE.trades.unshift(trade);
       filled = true;
@@ -206,6 +271,48 @@ function processStopLossTargets() {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
           }).catch(() => {});
+        }
+      }
+    }
+
+    // Trailing stop
+    if (t.trailAmount && t.status === 'OPEN') {
+      const trail = parseFloat(t.trailAmount);
+      const isPct = t.trailType === 'pct';
+      // Update high-water mark
+      if (dir === 1) { // BUY — track highest
+        if (!t._highWaterMark || spot > t._highWaterMark) { t._highWaterMark = spot; changed = true; }
+        const stopLevel = isPct ? t._highWaterMark * (1 - trail / 100) : t._highWaterMark - trail;
+        if (spot <= stopLevel) {
+          const pnl = (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+          t.status = 'CLOSED'; t.closePrice = spot; t.realizedPnl = pnl;
+          t.closedAt = new Date().toISOString(); t.closeReason = 'TRAILING_STOP'; changed = true;
+          addNotification('position', 'Trailing Stop Hit', `${t.direction} ${t.hub} trailing stop at $${stopLevel.toFixed(4)} — P&L: ${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toLocaleString(undefined,{maximumFractionDigits:0})}`);
+          toast(`Trailing stop triggered: ${t.hub} at $${spot.toFixed(4)}`, pnl >= 0 ? 'success' : 'error');
+          playSound('alert');
+          if (STATE.connected && STATE.trader && t.id) {
+            fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
+            }).catch(() => {});
+          }
+        }
+      } else { // SELL — track lowest
+        if (!t._highWaterMark || spot < t._highWaterMark) { t._highWaterMark = spot; changed = true; }
+        const stopLevel = isPct ? t._highWaterMark * (1 + trail / 100) : t._highWaterMark + trail;
+        if (spot >= stopLevel) {
+          const pnl = (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+          t.status = 'CLOSED'; t.closePrice = spot; t.realizedPnl = pnl;
+          t.closedAt = new Date().toISOString(); t.closeReason = 'TRAILING_STOP'; changed = true;
+          addNotification('position', 'Trailing Stop Hit', `${t.direction} ${t.hub} trailing stop at $${stopLevel.toFixed(4)} — P&L: ${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toLocaleString(undefined,{maximumFractionDigits:0})}`);
+          toast(`Trailing stop triggered: ${t.hub} at $${spot.toFixed(4)}`, pnl >= 0 ? 'success' : 'error');
+          playSound('alert');
+          if (STATE.connected && STATE.trader && t.id) {
+            fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
+            }).catch(() => {});
+          }
         }
       }
     }
