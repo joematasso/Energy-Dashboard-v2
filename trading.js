@@ -525,11 +525,11 @@ function setDirection(dir) {
   const sellBtn = document.getElementById('dirSell');
   const hint = document.getElementById('priceHint');
   if (dir === 'BUY') {
-    buyBtn.style.background = 'var(--green)'; buyBtn.style.color = '#fff'; buyBtn.style.borderColor = 'var(--green)';
+    buyBtn.style.background = 'var(--buy)'; buyBtn.style.color = '#fff'; buyBtn.style.borderColor = 'var(--buy)';
     sellBtn.style.background = 'var(--surface2)'; sellBtn.style.color = 'var(--text-dim)'; sellBtn.style.borderColor = 'var(--border)';
     if(hint) hint.textContent = '(at or above spot for BUY)';
   } else if (dir === 'SELL') {
-    sellBtn.style.background = 'var(--red)'; sellBtn.style.color = '#fff'; sellBtn.style.borderColor = 'var(--red)';
+    sellBtn.style.background = 'var(--sell)'; sellBtn.style.color = '#fff'; sellBtn.style.borderColor = 'var(--sell)';
     buyBtn.style.background = 'var(--surface2)'; buyBtn.style.color = 'var(--text-dim)'; buyBtn.style.borderColor = 'var(--border)';
     if(hint) hint.textContent = '(at or below spot for SELL)';
   } else {
@@ -584,6 +584,13 @@ function updateMarginPreview() {
   document.getElementById('marginAvailable').style.color = available > reqMargin ? 'var(--green)' : 'var(--red)';
   const util = equity > 0 ? (((usedMargin + reqMargin) / equity) * 100).toFixed(1) : '0.0';
   document.getElementById('marginUtil').textContent = util + '%';
+  // Disable submit when insufficient margin
+  const submitBtn = document.getElementById('tradeSubmitBtn');
+  if (submitBtn) {
+    const insufficient = reqMargin > 0 && available < reqMargin;
+    submitBtn.disabled = insufficient;
+    submitBtn.title = insufficient ? 'Insufficient margin' : '';
+  }
 }
 
 // Listen for volume/type changes to update margin

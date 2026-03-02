@@ -362,7 +362,7 @@ function renderBlotterTable() {
   const tbody = document.getElementById('blotterBody');
   tbody.innerHTML = pageItems.map(({ t, spot, dir, vol, entry, mtm, margin, sector }) => {
     const mtmColor = mtm >= 0 ? 'green' : 'red';
-    const dirColor = t.direction === 'BUY' ? 'color:var(--green)' : 'color:var(--red)';
+    const dirColor = t.direction === 'BUY' ? 'color:var(--buy)' : 'color:var(--sell)';
     const isLarge = (t.hub||'').includes('Baltic') || (t.hub||'').includes('Index');
 
     // Sector badge

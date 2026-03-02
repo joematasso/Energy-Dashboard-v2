@@ -399,8 +399,8 @@ document.getElementById('mobHub').addEventListener('change', updateMobEntryPrice
 function setMobDir(dir) {
   mobDir=dir;
   const b=document.getElementById('mobBuy'),s=document.getElementById('mobSell'),h=document.getElementById('mobPriceHint');
-  if(dir==='BUY'){b.style.background='var(--green)';b.style.color='#fff';b.style.borderColor='var(--green)';s.style.background='var(--surface2)';s.style.color='var(--text-dim)';s.style.borderColor='var(--border)';if(h)h.textContent='(≥ spot for BUY)';}
-  else{s.style.background='var(--red)';s.style.color='#fff';s.style.borderColor='var(--red)';b.style.background='var(--surface2)';b.style.color='var(--text-dim)';b.style.borderColor='var(--border)';if(h)h.textContent='(≤ spot for SELL)';}
+  if(dir==='BUY'){b.style.background='var(--buy)';b.style.color='#fff';b.style.borderColor='var(--buy)';s.style.background='var(--surface2)';s.style.color='var(--text-dim)';s.style.borderColor='var(--border)';if(h)h.textContent='(≥ spot for BUY)';}
+  else{s.style.background='var(--sell)';s.style.color='#fff';s.style.borderColor='var(--sell)';b.style.background='var(--surface2)';b.style.color='var(--text-dim)';b.style.borderColor='var(--border)';if(h)h.textContent='(≤ spot for SELL)';}
 }
 
 function submitMobileTrade() {

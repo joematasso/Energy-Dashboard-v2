@@ -1020,7 +1020,7 @@
           <span style="color:var(--text-dim)">Margin Required: <strong id="marginRequired" style="color:var(--text)">$0</strong></span>
           <span style="color:var(--text-dim)">Available: <strong id="marginAvailable" style="color:var(--green)">$1,000,000</strong></span>
           <span style="color:var(--text-dim)">Utilization: <strong id="marginUtil" style="color:var(--text)">0%</strong></span>
-          <button class="btn btn-primary" onclick="submitTrade()" style="margin-left:auto">Submit Trade</button>
+          <button class="btn btn-primary" id="tradeSubmitBtn" onclick="submitTrade()" style="margin-left:auto">Submit Trade</button>
         </div>
       </div>
     </div>
@@ -1779,6 +1779,18 @@
     <div class="pricing-info-label">Options (all sectors)</div>
     <div class="pricing-info-desc">Typically expire 1 month before the underlying futures contract. American-style (exercisable any time before expiry) on most exchanges.</div>
   </div>
+</div>
+
+<!-- Keyboard shortcut bar -->
+<div class="shortcut-bar" id="shortcutBar">
+  <span><kbd class="kbd-hint">1-9</kbd> Sectors</span>
+  <span><kbd class="kbd-hint">B</kbd> Buy</span>
+  <span><kbd class="kbd-hint">S</kbd> Sell</span>
+  <span><kbd class="kbd-hint">F</kbd> Flip</span>
+  <span><kbd class="kbd-hint">Enter</kbd> Submit</span>
+  <span><kbd class="kbd-hint">I</kbd> Hub Info</span>
+  <span><kbd class="kbd-hint">Esc</kbd> Close</span>
+  <span><kbd class="kbd-hint">?</kbd> Help</span>
 </div>
 
 </body>

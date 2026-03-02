@@ -197,7 +197,7 @@ function renderRiskPage() {
   const riskOpen = document.getElementById('riskOpenBody');
   const open = STATE.trades.filter(t=>t.status==='OPEN');
   if (!open.length) { riskOpen.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px">No open positions</td></tr>'; }
-  else { riskOpen.innerHTML = open.map(t => { const spot=getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;const mtm=(spot-parseFloat(t.entryPrice))*parseFloat(t.volume)*dir;return `<tr><td>${t.hub}</td><td style="color:${t.direction==='BUY'?'var(--green)':'var(--red)'};font-weight:700">${t.direction}</td><td class="mono">${parseFloat(t.volume).toLocaleString()}</td><td class="mono ${mtm>=0?'green':'red'}">${mtm>=0?'+':'-'}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>`;}).join(''); }
+  else { riskOpen.innerHTML = open.map(t => { const spot=getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;const mtm=(spot-parseFloat(t.entryPrice))*parseFloat(t.volume)*dir;return `<tr><td>${t.hub}</td><td style="color:${t.direction==='BUY'?'var(--buy)':'var(--sell)'};font-weight:700">${t.direction}</td><td class="mono">${parseFloat(t.volume).toLocaleString()}</td><td class="mono ${mtm>=0?'green':'red'}">${mtm>=0?'+':'-'}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>`;}).join(''); }
 
   // Margin & Exposure
   renderRiskMargin(open, equity);

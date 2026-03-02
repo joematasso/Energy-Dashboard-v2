@@ -91,11 +91,52 @@ async function fetchMarketStatus() {
     const badge = document.getElementById('mktBadge');
     if(badge) {
       if(MARKET_OPEN) {
-        badge.className='mkt-badge mkt-open';
-        badge.textContent='MARKET OPEN';
+        const ctTime = d.ct_time || '';
+        const parts = ctTime.split(':');
+        if (parts.length >= 2) {
+          const nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+          const closeMin = 17 * 60;
+          const remain = closeMin - nowMin;
+          if (remain > 0 && remain <= 15) {
+            badge.className = 'mkt-badge mkt-closed';
+            badge.textContent = 'CLOSES ' + remain + 'm';
+            badge.style.animation = 'pulse 1s infinite';
+          } else if (remain > 0) {
+            const h = Math.floor(remain / 60), m = remain % 60;
+            badge.className = 'mkt-badge mkt-open';
+            badge.textContent = 'OPEN ' + (h > 0 ? h + 'h ' : '') + m + 'm';
+            badge.style.animation = '';
+          } else {
+            badge.className = 'mkt-badge mkt-open';
+            badge.textContent = 'MARKET OPEN';
+            badge.style.animation = '';
+          }
+        } else {
+          badge.className = 'mkt-badge mkt-open';
+          badge.textContent = 'MARKET OPEN';
+          badge.style.animation = '';
+        }
       } else {
-        badge.className='mkt-badge mkt-closed';
-        badge.textContent=MARKET_REASON==='Holiday'?'HOLIDAY':'MKT CLOSED';
+        badge.className = 'mkt-badge mkt-closed';
+        badge.style.animation = '';
+        const ctTime = d.ct_time || '', dow = d.ct_dow || '';
+        const parts = ctTime.split(':');
+        if (parts.length >= 2 && MARKET_REASON !== 'Holiday') {
+          const nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+          if (MARKET_REASON === 'Pre-Market') {
+            const remain = 8 * 60 - nowMin;
+            const h = Math.floor(remain / 60), m = remain % 60;
+            badge.textContent = 'OPENS ' + (h > 0 ? h + 'h ' : '') + m + 'm';
+          } else if (MARKET_REASON === 'After Hours') {
+            badge.textContent = 'OPENS 8:00 CT';
+          } else if (MARKET_REASON === 'Weekend') {
+            badge.textContent = dow === 'Saturday' ? 'OPENS MON 8AM' : 'OPENS TOM 8AM';
+          } else {
+            badge.textContent = 'MKT CLOSED';
+          }
+        } else {
+          badge.textContent = MARKET_REASON === 'Holiday' ? 'HOLIDAY' : 'MKT CLOSED';
+        }
       }
     }
   } catch(e) { console.warn('Market status fetch failed', e); }
@@ -304,7 +345,7 @@ function _otcIsMyTurn(p) {
 }
 
 function _otcTermsSummary(td) {
-  const dirColor = td.direction === 'BUY' ? 'var(--green)' : 'var(--red)';
+  const dirColor = td.direction === 'BUY' ? 'var(--buy)' : 'var(--sell)';
   return `<strong style="color:${dirColor}">${td.direction}</strong> `
     + `<strong>${parseFloat(td.volume).toLocaleString()}</strong> ${td.hub} `
     + `@ <strong>$${parseFloat(td.entryPrice).toFixed(4)}</strong>`
