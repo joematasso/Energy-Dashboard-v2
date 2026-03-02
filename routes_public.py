@@ -236,7 +236,12 @@ def submit_trade(trader):
         return jsonify({'success': False, 'error': f'Missing required fields: {", ".join(missing)}'}), 400
 
     # 3. Volume limits
-    volume = float(data.get('volume', 0))
+    try:
+        volume = float(data.get('volume', 0))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid volume'}), 400
+    if not math.isfinite(volume):
+        return jsonify({'success': False, 'error': 'Volume must be a finite number'}), 400
     trade_type = data.get('type', '')
     is_crude = trade_type.startswith('CRUDE') or trade_type in ('EFP', 'OPTION_CL')
     max_volume = 50000 if is_crude else 500000
@@ -275,13 +280,26 @@ def submit_trade(trader):
             return jsonify({'success': False, 'error': f'Trade type {trade_type} is not valid for {trade_sector} sector'}), 400
 
     # 4. Price validation
-    entry_price = float(data.get('entryPrice', 0))
+    try:
+        entry_price = float(data.get('entryPrice', 0))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid entry price'}), 400
+    if not math.isfinite(entry_price):
+        return jsonify({'success': False, 'error': 'Entry price must be a finite number'}), 400
     is_basis = trade_type == 'BASIS_SWAP'
     if not is_basis and entry_price <= 0:
         return jsonify({'success': False, 'error': 'Entry price must be positive'}), 400
+    # Basis swaps: reject absurd differentials (>$50)
+    if is_basis and abs(entry_price) > 50:
+        return jsonify({'success': False, 'error': 'Basis differential too large (max ±$50)'}), 400
 
     # Validate price vs direction: BUY >= spot, SELL <= spot (skip for basis and backdated trades)
-    spot_ref = float(data.get('spotRef', entry_price))
+    try:
+        spot_ref = float(data.get('spotRef', entry_price))
+    except (ValueError, TypeError):
+        spot_ref = entry_price
+    if not math.isfinite(spot_ref) or (not is_basis and spot_ref <= 0):
+        spot_ref = entry_price  # Fall back to entry price if spotRef is invalid
     direction = data.get('direction', '')
     is_privileged_trader = trader_row['privileged'] if 'privileged' in trader_row.keys() else False
     is_backdating = bool(data.get('backdate')) and is_privileged_trader
@@ -393,13 +411,36 @@ def update_trade(trader, trade_id):
 
     # Validate close price if closing a non-OTC trade
     if data.get('status') == 'CLOSED' and td.get('venue') != 'OTC':
-        close_price = float(data.get('closePrice', 0))
-        spot_ref = float(data.get('spotRef', 0)) or float(td.get('spotRef', 0))
-        if spot_ref > 0:
-            # Allow close price within 5% of spot reference (generous for sim, prevents abuse)
+        try:
+            close_price = float(data.get('closePrice', 0))
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'Invalid close price'}), 400
+        if not math.isfinite(close_price):
+            return jsonify({'success': False, 'error': 'Close price must be a finite number'}), 400
+        try:
+            spot_ref = float(data.get('spotRef', 0)) or float(td.get('spotRef', 0))
+        except (ValueError, TypeError):
+            spot_ref = 0
+        if spot_ref > 0 and math.isfinite(spot_ref):
+            # Allow close price within 2% of spot reference (accommodates bid-ask spread)
             deviation = abs(close_price - spot_ref) / spot_ref
-            if deviation > 0.05:
+            if deviation > 0.02 and td.get('type') != 'BASIS_SWAP':
                 return jsonify({'success': False, 'error': f'Close price ${close_price:.4f} deviates too far from market ${spot_ref:.4f}'}), 400
+
+    # Validate closeReason if provided
+    if data.get('closeReason'):
+        valid_reasons = {'MANUAL', 'STOP_LOSS', 'TARGET', 'AUTO_ROLL', 'EXPIRY', 'MARGIN_CALL', 'FLAT_ALL'}
+        if data['closeReason'] not in valid_reasons:
+            return jsonify({'success': False, 'error': f'Invalid close reason: {data["closeReason"]}'}), 400
+
+    # Validate realizedPnl is finite if provided
+    if data.get('realizedPnl') is not None:
+        try:
+            rpnl = float(data['realizedPnl'])
+            if not math.isfinite(rpnl):
+                return jsonify({'success': False, 'error': 'Realized P&L must be a finite number'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'Invalid realized P&L value'}), 400
 
     td.update(data)
     db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(td), trade_id))
@@ -491,7 +532,12 @@ def get_leaderboard():
                 direction = td.get('direction', '')
                 is_basis_trade = td.get('type') == 'BASIS_SWAP'
 
-                current_price = float(client_prices.get(hub, 0))
+                try:
+                    current_price = float(client_prices.get(hub, 0))
+                    if not math.isfinite(current_price) or current_price <= 0:
+                        current_price = 0
+                except (ValueError, TypeError):
+                    current_price = 0
                 if not current_price:
                     current_price = float(td.get('spotRef', ep))
 

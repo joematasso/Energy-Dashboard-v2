@@ -160,7 +160,7 @@ function processStopLossTargets() {
   STATE.trades.forEach(t => {
     if (t.status !== 'OPEN') return;
     const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
-    if (!spot) return;
+    if (!spot || isNaN(spot)) return;
     const dir = t.direction === 'BUY' ? 1 : -1;
 
     // Stop loss
@@ -564,6 +564,7 @@ function processAutoRolls() {
       sector: sector,
       deliveryMonth: nextMonth,
       autoRoll: true,
+      _rollProcessed: true,  // Prevent re-rolling on next tick if near expiry
       rolledFrom: t.id,
       venue: t.venue || '',
       counterparty: t.counterparty || '',
@@ -636,9 +637,13 @@ function processExpiredContracts() {
     // Contract expired — force close at last available price (cash settlement)
     const closePrice = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
     if (!closePrice && closePrice !== 0) return;
+    if (isNaN(closePrice)) return;
 
     const dir = t.direction === 'BUY' ? 1 : -1;
-    const pnl = (closePrice - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    const ep = parseFloat(t.entryPrice);
+    const vol = parseFloat(t.volume);
+    if (isNaN(ep) || isNaN(vol)) return;
+    const pnl = (closePrice - ep) * vol * dir;
     t.status = 'CLOSED';
     t.closePrice = closePrice;
     t.realizedPnl = pnl;
@@ -689,13 +694,17 @@ function checkMarginLevels() {
       realized += parseFloat(t.realizedPnl || 0);
     } else if (t.status === 'OPEN') {
       const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
+      if (!spot || isNaN(spot)) return;
       const dir = t.direction === 'BUY' ? 1 : -1;
-      unrealized += (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+      const ep = parseFloat(t.entryPrice);
+      const vol = parseFloat(t.volume);
+      if (isNaN(ep) || isNaN(vol)) return;
+      unrealized += (spot - ep) * vol * dir;
     }
   });
 
   const equity = balance + realized + unrealized;
-  if (equity <= 0) return;
+  if (!isFinite(equity) || equity <= 0) return;
   const usedMargin = open.reduce((s, t) => s + ((typeof calcMargin === 'function') ? calcMargin(t) : 0), 0);
   if (usedMargin <= 0) return;
 

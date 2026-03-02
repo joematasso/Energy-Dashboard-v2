@@ -657,7 +657,9 @@ async function submitTrade() {
   const stopPrice = parseFloat(document.getElementById('tradeStopPrice').value) || 0;
 
   if (orderType === 'LIMIT' && !limitPrice) return toast('Limit price is required for limit orders', 'error');
+  if (orderType === 'LIMIT' && limitPrice < 0) return toast('Limit price cannot be negative', 'error');
   if (orderType === 'STOP' && !stopPrice) return toast('Stop trigger price is required for stop orders', 'error');
+  if (orderType === 'STOP' && stopPrice < 0) return toast('Stop price cannot be negative', 'error');
   if (orderType === 'STOP_LIMIT' && (!stopPrice || !limitPrice)) return toast('Both stop trigger and limit price required for stop-limit orders', 'error');
 
   // Validate limit price direction: LIMIT BUY should be below market, LIMIT SELL above
@@ -696,8 +698,8 @@ async function submitTrade() {
     deliveryMonth: document.getElementById('tradeDelivery').value,
     autoRoll: document.getElementById('tradeAutoRoll')?.checked || false,
     counterparty: document.getElementById('tradeCpty').value,
-    stopLoss: document.getElementById('tradeStop').value || null,
-    targetExit: document.getElementById('tradeTarget').value || null,
+    stopLoss: parseFloat(document.getElementById('tradeStop').value) > 0 ? document.getElementById('tradeStop').value : null,
+    targetExit: parseFloat(document.getElementById('tradeTarget').value) > 0 ? document.getElementById('tradeTarget').value : null,
     venue: document.getElementById('tradeVenue').value,
     notes: document.getElementById('tradeNotes').value,
     orderType: orderType,
@@ -715,6 +717,19 @@ async function submitTrade() {
     quality: document.getElementById('tradeQuality')?.value || '',
     incoterms: document.getElementById('tradeIncoterms')?.value || '',
   };
+
+  // Validate stop-loss direction: should protect against adverse moves
+  if (trade.stopLoss && !isBasisType) {
+    const sl = parseFloat(trade.stopLoss);
+    if (tradeDirection === 'BUY' && sl >= currentPrice) return toast('Stop-loss for BUY must be below entry price ($' + currentPrice.toFixed(4) + ')', 'error');
+    if (tradeDirection === 'SELL' && sl <= currentPrice) return toast('Stop-loss for SELL must be above entry price ($' + currentPrice.toFixed(4) + ')', 'error');
+  }
+  // Validate target direction: should be in the profitable direction
+  if (trade.targetExit && !isBasisType) {
+    const te = parseFloat(trade.targetExit);
+    if (tradeDirection === 'BUY' && te <= currentPrice) return toast('Target for BUY must be above entry price ($' + currentPrice.toFixed(4) + ')', 'error');
+    if (tradeDirection === 'SELL' && te >= currentPrice) return toast('Target for SELL must be below entry price ($' + currentPrice.toFixed(4) + ')', 'error');
+  }
 
   // Delivery month restriction for non-privileged users
   const isPrivileged = STATE.trader && STATE.trader.privileged;
@@ -794,8 +809,8 @@ async function submitTrade() {
     return;
   }
 
-  // MARKET order → immediate execution
-  trade.entryPrice = currentPrice;
+  // MARKET order → immediate execution (use fillPrice which includes bid-ask spread + slippage)
+  trade.entryPrice = fillPrice;
 
   // OTC bilateral → send proposal instead of auto-executing
   if (isOtcBilateral && STATE.connected && STATE.trader) {

@@ -242,11 +242,14 @@ function getBasisPrice(t) {
 }
 
 function getMultilegPrice(t) {
-  if (!t.legs || !t.legs.length) return getPrice(t.hub);
+  if (!t.legs || !t.legs.length) return getPrice(t.hub) || 0;
   // Net price = sum of each leg's signed price (BUY = +, SELL = -)
   // Normalized per-unit relative to trade direction
   let net = 0;
-  t.legs.forEach(function(leg) { net += (leg.direction === 'BUY' ? 1 : -1) * getPrice(leg.hub); });
+  t.legs.forEach(function(leg) {
+    const p = getPrice(leg.hub) || 0;
+    net += (leg.direction === 'BUY' ? 1 : -1) * p;
+  });
   // If trade direction is SELL, the trade P&L inverts, so return raw net
   return net;
 }
@@ -506,7 +509,7 @@ function renderBlotterTable() {
       <div class="bdet-item"><span class="bdet-label">Settlement</span><span>${settleBadge}</span></div>
       <div class="bdet-item"><span class="bdet-label">Contract Expiry</span><span>${expiryHtml}</span></div>
       ${t.deliveryMonth && t.status === 'OPEN' ? `<div class="bdet-item"><span class="bdet-label">Auto-Roll</span><span><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${t.autoRoll ? 'checked' : ''} onchange="toggleAutoRoll('${t.id}',this.checked)"> Roll to next month before expiry</label>${t.rolledFrom ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Rolled from previous contract</div>' : ''}</span></div>` : ''}
-      ${t.closeReason === 'AUTO_ROLL' ? '<div class="bdet-item"><span class="bdet-label">Close Reason</span><span style="color:#f59e0b;font-weight:600">AUTO-ROLLED to next month</span></div>' : ''}
+      ${t.closeReason ? `<div class="bdet-item"><span class="bdet-label">Close Reason</span><span style="font-weight:600;color:${t.closeReason === 'MARGIN_CALL' ? 'var(--red)' : t.closeReason === 'EXPIRY' ? '#ef4444' : t.closeReason === 'STOP_LOSS' ? '#f97316' : t.closeReason === 'AUTO_ROLL' ? '#f59e0b' : t.closeReason === 'TARGET' ? 'var(--green)' : 'var(--text-dim)'}">${t.closeReason === 'AUTO_ROLL' ? 'AUTO-ROLLED to next month' : t.closeReason === 'STOP_LOSS' ? 'STOP-LOSS triggered' : t.closeReason === 'TARGET' ? 'TARGET reached' : t.closeReason === 'EXPIRY' ? 'CONTRACT EXPIRED (cash settled)' : t.closeReason === 'MARGIN_CALL' ? 'MARGIN CALL — forced liquidation' : t.closeReason === 'FLAT_ALL' ? 'FLAT ALL positions' : t.closeReason}</span></div>` : ''}
       <div class="bdet-item"><span class="bdet-label">Broker</span><span>${brokerLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Counterparty</span><span>${cptyLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Venue</span><span>${venue}</span></div>
@@ -566,7 +569,7 @@ function closeTrade(id) {
     } else {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + id, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp })
+        body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp, closeReason: 'MANUAL' })
       }).catch(() => {});
     }
   }
@@ -905,9 +908,12 @@ function flatAll() {
   let totalPnl = 0;
   open.forEach(t => {
     const cp = getTradeSpot(t);
-    if (!cp && cp !== 0) return;
+    if ((!cp && cp !== 0) || isNaN(cp)) return;
     const dir = t.direction === 'BUY' ? 1 : -1;
-    const pnl = (cp - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    const ep = parseFloat(t.entryPrice);
+    const vol = parseFloat(t.volume);
+    if (isNaN(ep) || isNaN(vol)) return;
+    const pnl = (cp - ep) * vol * dir;
     t.status = 'CLOSED';
     t.closePrice = cp;
     t.realizedPnl = pnl;
@@ -917,7 +923,7 @@ function flatAll() {
     if (STATE.connected && STATE.trader) {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp })
+        body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp, closeReason: 'FLAT_ALL' })
       }).catch(() => {});
     }
   });
