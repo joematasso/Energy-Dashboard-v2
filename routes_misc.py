@@ -193,42 +193,45 @@ def accept_otc_proposal(trader, proposal_id):
     direction = td['direction']
     mirror_direction = 'SELL' if direction == 'BUY' else 'BUY'
 
-    # Create initiator's trade
-    init_trade = {
-        'type': td['type'], 'direction': direction, 'hub': td['hub'],
-        'volume': volume, 'entryPrice': entry_price, 'spotRef': td.get('spotRef', entry_price),
-        'venue': 'OTC', 'counterparty': me['display_name'], 'counterpartyTrader': trader,
-        'otcMirrorOf': None, 'deliveryMonth': td.get('deliveryMonth', ''),
-        'sector': td.get('sector', ''), 'notes': td.get('notes', ''),
-        'status': 'OPEN', 'timestamp': datetime.utcnow().isoformat(),
-        'settlementType': td.get('settlementType', 'FINANCIAL'),
-        'broker': td.get('broker', ''),
-    }
-    cur = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
-                     (from_trader, json.dumps(init_trade)))
-    init_id = cur.lastrowid
+    # Create both trades atomically
+    try:
+        init_trade = {
+            'type': td['type'], 'direction': direction, 'hub': td['hub'],
+            'volume': volume, 'entryPrice': entry_price, 'spotRef': td.get('spotRef', entry_price),
+            'venue': 'OTC', 'counterparty': me['display_name'], 'counterpartyTrader': trader,
+            'otcMirrorOf': None, 'deliveryMonth': td.get('deliveryMonth', ''),
+            'sector': td.get('sector', ''), 'notes': td.get('notes', ''),
+            'status': 'OPEN', 'timestamp': datetime.utcnow().isoformat(),
+            'settlementType': td.get('settlementType', 'FINANCIAL'),
+            'broker': td.get('broker', ''),
+        }
+        cur = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
+                         (from_trader, json.dumps(init_trade)))
+        init_id = cur.lastrowid
 
-    # Create mirror trade for acceptor
-    mirror_trade = dict(init_trade)
-    mirror_trade['direction'] = mirror_direction
-    mirror_trade['counterparty'] = initiator['display_name']
-    mirror_trade['counterpartyTrader'] = from_trader
-    mirror_trade['otcMirrorOf'] = init_id
-    mirror_trade['notes'] = f'OTC — accepted from {initiator["display_name"]}'
-    cur2 = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
-                      (trader, json.dumps(mirror_trade)))
-    mirror_id = cur2.lastrowid
+        mirror_trade = dict(init_trade)
+        mirror_trade['direction'] = mirror_direction
+        mirror_trade['counterparty'] = initiator['display_name']
+        mirror_trade['counterpartyTrader'] = from_trader
+        mirror_trade['otcMirrorOf'] = init_id
+        mirror_trade['notes'] = f'OTC — accepted from {initiator["display_name"]}'
+        cur2 = db.execute("INSERT INTO trades (trader_name, trade_data) VALUES (?, ?)",
+                          (trader, json.dumps(mirror_trade)))
+        mirror_id = cur2.lastrowid
 
-    # Link back
-    init_trade['otcMirrorOf'] = mirror_id
-    db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(init_trade), init_id))
+        # Link back
+        init_trade['otcMirrorOf'] = mirror_id
+        db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(init_trade), init_id))
 
-    # Mark proposal accepted + append to revision history
-    revs = json.loads(prop['revision_history'] or '[]') if 'revision_history' in prop.keys() else []
-    revs.append({'by': trader, 'action': 'ACCEPTED', 'trade_data': td, 'message': '', 'at': datetime.utcnow().isoformat()})
-    db.execute("UPDATE otc_proposals SET status='ACCEPTED', resolved_at=?, revision_history=? WHERE id=?",
-               (datetime.utcnow().isoformat(), json.dumps(revs), proposal_id))
-    db.commit()
+        # Mark proposal accepted
+        revs = json.loads(prop['revision_history'] or '[]') if 'revision_history' in prop.keys() else []
+        revs.append({'by': trader, 'action': 'ACCEPTED', 'trade_data': td, 'message': '', 'at': datetime.utcnow().isoformat()})
+        db.execute("UPDATE otc_proposals SET status='ACCEPTED', resolved_at=?, revision_history=? WHERE id=?",
+                   (datetime.utcnow().isoformat(), json.dumps(revs), proposal_id))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'error': f'Failed to create OTC trades: {str(e)}'}), 500
 
     # Trade feed
     me_team = db.execute("SELECT name FROM teams WHERE id=?", (me['team_id'],)).fetchone() if me['team_id'] else None

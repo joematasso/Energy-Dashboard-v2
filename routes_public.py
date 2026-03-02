@@ -200,18 +200,21 @@ def update_display_name(trader):
 @public_bp.route('/api/trades/<trader>', methods=['GET'])
 def get_trades(trader):
     db = get_db()
+    limit = min(int(request.args.get('limit', 200)), 1000)
+    offset = max(int(request.args.get('offset', 0)), 0)
+    total = db.execute("SELECT COUNT(*) FROM trades WHERE trader_name=?", (trader,)).fetchone()[0]
     rows = db.execute(
-        "SELECT id, trade_data, created_at FROM trades WHERE trader_name=? ORDER BY created_at DESC",
-        (trader,)
+        "SELECT id, trade_data, created_at FROM trades WHERE trader_name=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (trader, limit, offset)
     ).fetchall()
     trades = []
     for row in rows:
         td = json.loads(row['trade_data'])
         td['id'] = row['id']
         td['server_created_at'] = row['created_at']
-        td.pop('backdated', None)  # Don't leak internal flag to clients
+        td.pop('backdated', None)
         trades.append(td)
-    return jsonify({'success': True, 'trades': trades})
+    return jsonify({'success': True, 'trades': trades, 'total': total, 'limit': limit, 'offset': offset})
 
 @public_bp.route('/api/trades/<trader>', methods=['POST'])
 def submit_trade(trader):
@@ -228,6 +231,18 @@ def submit_trade(trader):
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'No trade data provided'}), 400
+
+    # 1b. Market hours enforcement (OTC and privileged bypass)
+    venue = data.get('venue', '')
+    is_privileged = bool(trader_row.get('privileged'))
+    if venue and venue != 'OTC' and not is_privileged:
+        try:
+            from routes_market import is_market_open
+            mkt_open, mkt_reason, _ = is_market_open()
+            if not mkt_open:
+                return jsonify({'success': False, 'error': f'Exchange closed ({mkt_reason}). Use OTC or wait for market open.'}), 400
+        except ImportError:
+            pass  # If market module unavailable, allow trade
 
     # 2. Validate required fields
     required = ['type', 'direction', 'hub', 'volume', 'entryPrice']
@@ -487,6 +502,85 @@ def get_photo(trader):
     if row:
         return jsonify({'success': True, 'photo': row['photo_url']})
     return jsonify({'success': False, 'error': 'Trader not found'}), 404
+
+# ---------------------------------------------------------------------------
+# Trade Statistics API
+# ---------------------------------------------------------------------------
+@public_bp.route('/api/trades/<trader>/stats')
+def get_trade_stats(trader):
+    """Server-computed trade statistics."""
+    db = get_db()
+    trader_row = db.execute("SELECT * FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    if not trader_row:
+        return jsonify({'success': False, 'error': 'Trader not found'}), 404
+
+    rows = db.execute("SELECT trade_data FROM trades WHERE trader_name=?", (trader,)).fetchall()
+    wins, losses, gross_win, gross_loss = 0, 0, 0.0, 0.0
+    sector_pnl = {}
+    daily_pnl = {}
+    equity_peak = 0.0
+    max_dd = 0.0
+    balance = 1000000
+    running_equity = balance
+
+    for row in rows:
+        td = json.loads(row['trade_data'])
+        status = td.get('status', '')
+        pnl = float(td.get('realizedPnl', 0) or 0)
+        sector = td.get('sector', 'unknown')
+
+        if status == 'CLOSED':
+            running_equity += pnl
+            if running_equity > equity_peak:
+                equity_peak = running_equity
+            dd = (equity_peak - running_equity) / equity_peak if equity_peak > 0 else 0
+            if dd > max_dd:
+                max_dd = dd
+
+            if pnl > 0:
+                wins += 1
+                gross_win += pnl
+            elif pnl < 0:
+                losses += 1
+                gross_loss += abs(pnl)
+
+            sector_pnl[sector] = sector_pnl.get(sector, 0) + pnl
+
+            day = (td.get('closedAt') or td.get('timestamp', ''))[:10]
+            if day:
+                daily_pnl[day] = daily_pnl.get(day, 0) + pnl
+
+    total = wins + losses
+    win_rate = (wins / total * 100) if total > 0 else 0
+    avg_win = gross_win / wins if wins > 0 else 0
+    avg_loss = gross_loss / losses if losses > 0 else 0
+    profit_factor = gross_win / gross_loss if gross_loss > 0 else float('inf') if gross_win > 0 else 0
+
+    # Sharpe from daily P&L
+    daily_returns = list(daily_pnl.values())
+    if len(daily_returns) >= 2:
+        import statistics
+        mean_r = statistics.mean(daily_returns)
+        std_r = statistics.stdev(daily_returns)
+        sharpe = (mean_r / std_r * (252 ** 0.5)) if std_r > 0 else 0
+    else:
+        sharpe = 0
+
+    return jsonify({
+        'success': True,
+        'stats': {
+            'trade_count': total,
+            'wins': wins, 'losses': losses,
+            'win_rate': round(win_rate, 1),
+            'avg_win': round(avg_win, 2),
+            'avg_loss': round(avg_loss, 2),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 999,
+            'sharpe': round(sharpe, 2),
+            'max_drawdown': round(max_dd * 100, 2),
+            'total_pnl': round(running_equity - balance, 2),
+            'sector_breakdown': sector_pnl
+        }
+    })
 
 # ---------------------------------------------------------------------------
 # Leaderboard API
