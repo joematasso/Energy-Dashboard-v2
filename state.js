@@ -16,7 +16,7 @@ const _traderPrefix = _savedTrader ? 'ng_' + _savedTrader.trader_name + '_' : 'n
 const STATE = {
   trader: _savedTrader,
   trades: JSON.parse(localStorage.getItem(_traderPrefix + 'trades') || '[]'),
-  settings: JSON.parse(localStorage.getItem(_traderPrefix + 'settings') || localStorage.getItem('ng_settings') || '{"balance":1000000,"margin":"nymex","sound":false}'),
+  settings: JSON.parse(localStorage.getItem(_traderPrefix + 'settings') || localStorage.getItem('ng_settings') || '{"balance":1000000,"margin":"nymex","sound":false,"autoRollEnabled":false,"autoRollDays":3}'),
   connected: false,
   currentPage: 'ng',
   selectedHubs: { ng: 'Henry Hub', crude: 'WTI Cushing', power: 'ERCOT Hub', freight: 'Baltic Dry Index', ag: 'Corn (CBOT)', metals: 'Gold (COMEX)', ngls: 'Ethane (C2)', lng: 'JKM (Platts)' },

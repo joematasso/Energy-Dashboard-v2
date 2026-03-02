@@ -129,6 +129,15 @@ function getPromptMonthMin(sector) {
   return promptY + '-' + String(promptM + 1).padStart(2, '0');
 }
 
+// Toggle auto-roll on a specific trade
+function toggleAutoRoll(tradeId, enabled) {
+  const t = STATE.trades.find(x => String(x.id) === String(tradeId));
+  if (!t) return;
+  t.autoRoll = enabled;
+  localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+  toast(enabled ? 'Auto-roll enabled for this position' : 'Auto-roll disabled', 'info');
+}
+
 // Contract rollover info popup
 function showRolloverInfo(event) {
   event.stopPropagation();
@@ -489,6 +498,8 @@ function renderBlotterTable() {
       <div class="bdet-item"><span class="bdet-label">Full Type</span><span>${t.type}</span></div>
       <div class="bdet-item"><span class="bdet-label">Settlement</span><span>${settleBadge}</span></div>
       <div class="bdet-item"><span class="bdet-label">Contract Expiry</span><span>${expiryHtml}</span></div>
+      ${t.deliveryMonth && t.status === 'OPEN' ? `<div class="bdet-item"><span class="bdet-label">Auto-Roll</span><span><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${t.autoRoll ? 'checked' : ''} onchange="toggleAutoRoll('${t.id}',this.checked)"> Roll to next month before expiry</label>${t.rolledFrom ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Rolled from previous contract</div>' : ''}</span></div>` : ''}
+      ${t.closeReason === 'AUTO_ROLL' ? '<div class="bdet-item"><span class="bdet-label">Close Reason</span><span style="color:#f59e0b;font-weight:600">AUTO-ROLLED to next month</span></div>' : ''}
       <div class="bdet-item"><span class="bdet-label">Broker</span><span>${brokerLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Counterparty</span><span>${cptyLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Venue</span><span>${venue}</span></div>

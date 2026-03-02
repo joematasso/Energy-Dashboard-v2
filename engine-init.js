@@ -478,8 +478,130 @@ document.addEventListener('click', e => {
 function runTickEngines() {
   processPendingOrders();
   processStopLossTargets();
+  processAutoRolls();
   checkAlerts();
   checkCalendarAlerts();
+}
+
+/* =====================================================================
+   AUTO-ROLL — Automatically roll expiring futures to next month
+   ===================================================================== */
+function _nextDeliveryMonth(ym) {
+  // Input: "2026-04" → Output: "2026-05", handles year rollover
+  const [y, m] = ym.split('-').map(Number);
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  return ny + '-' + String(nm).padStart(2, '0');
+}
+
+function processAutoRolls() {
+  if (!STATE.settings.autoRollEnabled) return;
+  const threshold = STATE.settings.autoRollDays || 3;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let changed = false;
+
+  // Collect rolls to process (avoid mutating array while iterating)
+  const toRoll = [];
+  STATE.trades.forEach(t => {
+    if (t.status !== 'OPEN') return;
+    if (t.autoRoll === false) return;
+    if (!t.deliveryMonth) return;
+    if (t._rollProcessed) return; // Already processed this session
+
+    const sector = t.sector || (typeof inferSectorFromType === 'function' ? inferSectorFromType(t.type) : '');
+    if (!sector) return;
+
+    const expiry = (typeof getContractExpiry === 'function') ? getContractExpiry(t.hub, t.deliveryMonth, sector) : null;
+    if (!expiry) return;
+
+    const daysToExpiry = Math.ceil((expiry.getTime() - now.getTime()) / 86400000);
+    if (daysToExpiry <= threshold && daysToExpiry >= 0) {
+      toRoll.push({ trade: t, sector, daysToExpiry });
+    }
+  });
+
+  toRoll.forEach(({ trade: t, sector }) => {
+    // Get current price for this contract
+    const closePrice = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
+    if (!closePrice && closePrice !== 0) return;
+
+    // Calculate next delivery month
+    const nextMonth = _nextDeliveryMonth(t.deliveryMonth);
+
+    // Get next month's price from forward curve
+    const nextPrice = (typeof _getContractPrice === 'function') ? _getContractPrice(t.hub, nextMonth) : null;
+    if (!nextPrice || nextPrice <= 0) {
+      addNotification('position', 'Roll Failed', t.hub + ' ' + t.deliveryMonth + ': no price for ' + nextMonth);
+      t._rollProcessed = true;
+      return;
+    }
+
+    // Close the expiring trade
+    const dir = t.direction === 'BUY' ? 1 : -1;
+    const pnl = (closePrice - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    t.status = 'CLOSED';
+    t.closePrice = closePrice;
+    t.realizedPnl = pnl;
+    t.closedAt = new Date().toISOString();
+    t.closeReason = 'AUTO_ROLL';
+    t._rollProcessed = true;
+
+    // Create new rolled trade
+    const newId = Date.now() + Math.floor(Math.random() * 10000);
+    const rolledTrade = {
+      id: newId,
+      type: t.type,
+      direction: t.direction,
+      hub: t.hub,
+      volume: parseFloat(t.volume),
+      entryPrice: nextPrice,
+      spotRef: nextPrice,
+      sector: sector,
+      deliveryMonth: nextMonth,
+      autoRoll: true,
+      rolledFrom: t.id,
+      venue: t.venue || '',
+      counterparty: t.counterparty || '',
+      notes: (t.notes ? t.notes + ' | ' : '') + 'Rolled from ' + t.deliveryMonth,
+      orderType: 'MARKET',
+      status: 'OPEN',
+      timestamp: new Date().toISOString(),
+      stopLoss: t.stopLoss || null,
+      targetExit: t.targetExit || null,
+      settlementType: t.settlementType || 'FINANCIAL',
+      confirmRef: 'ROLL-' + Date.now(),
+      broker: t.broker || '',
+    };
+    t.rolledTo = newId;
+
+    STATE.trades.unshift(rolledTrade);
+    changed = true;
+
+    // Server sync
+    if (STATE.connected && STATE.trader) {
+      fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CLOSED', closePrice, realizedPnl: pnl, closeReason: 'AUTO_ROLL' })
+      }).catch(() => {});
+      fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rolledTrade)
+      }).catch(() => {});
+    }
+
+    const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    addNotification('position', 'Auto-Rolled',
+      t.direction + ' ' + parseFloat(t.volume).toLocaleString() + ' ' + t.hub +
+      ': ' + t.deliveryMonth + ' → ' + nextMonth +
+      ' | Close P&L: ' + pnlStr +
+      ' | New entry: $' + nextPrice.toFixed(4));
+    if (typeof playSound === 'function') playSound('trade');
+  });
+
+  if (changed) {
+    localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+  }
 }
 
 

@@ -592,6 +592,10 @@ document.getElementById('tradeHub').addEventListener('change', function() {
 
 // Delivery month auto-fills entry price from forward curve
 document.getElementById('tradeDelivery').addEventListener('change', function() {
+  // Show/hide auto-roll checkbox
+  const autoRollRow = document.getElementById('autoRollRow');
+  if (autoRollRow) autoRollRow.style.display = this.value ? 'block' : 'none';
+
   const hub = document.getElementById('tradeHub').value;
   if (!hub || !this.value) return;
   const fwd = STATE.forwardCurves[hub];
@@ -683,6 +687,7 @@ async function submitTrade() {
     spotRef: spotPrice,
     sector: document.getElementById('tradeSector') ? document.getElementById('tradeSector').value : '',
     deliveryMonth: document.getElementById('tradeDelivery').value,
+    autoRoll: document.getElementById('tradeAutoRoll')?.checked || false,
     counterparty: document.getElementById('tradeCpty').value,
     stopLoss: document.getElementById('tradeStop').value || null,
     targetExit: document.getElementById('tradeTarget').value || null,
