@@ -140,7 +140,7 @@ def _fetch_eia_prices():
             '&facets[series][]=RWTC&facets[series][]=RBRTE'
             '&sort[0][column]=period&sort[0][direction]=desc&length=5'
         )
-        r = requests.get(url, timeout=8)
+        r = requests.get(url, timeout=5)
         d = r.json()
         rows = d.get('response', {}).get('data', [])
 
@@ -226,16 +226,18 @@ def _fetch_nyiso_lmps():
 
 def _fetch_eia_spot_prices():
     """
-    Scrape EIA Today in Energy daily spot prices for NG and electricity.
+    Scrape EIA Today in Energy daily spot prices for NG, electricity, and petroleum.
     URL: https://www.eia.gov/todayinenergy/prices.php
 
+    Page layout (tables[0]): Product | Area | Price | %Chg  (petroleum: WTI, Brent, etc.)
     Page layout (tables[2]): Region | NG Price | NG %Chg | Elec Price | Elec %Chg | Spark Spread
     Page layout (tables[3]): Region | Gas Point Used | Power Point Used
     Prices update on business days; no API key required.
 
-    Returns tuple (ng_spots, power_spots):
-      ng_spots:    our_hub_name -> float ($/MMBtu)
-      power_spots: our_hub_name -> float ($/MWh)
+    Returns tuple (ng_spots, power_spots, petroleum_spots):
+      ng_spots:        our_hub_name -> float ($/MMBtu)
+      power_spots:     our_hub_name -> float ($/MWh)
+      petroleum_spots: dict with keys 'wti_spot', 'brent_spot' -> float ($/barrel)
     """
     try:
         from bs4 import BeautifulSoup
@@ -309,12 +311,49 @@ def _fetch_eia_spot_prices():
                 if -50.0 < pwr_val < 1500.0:
                     power_spots[pwr_hub] = round(pwr_val, 2)
 
-        logger.debug(f'EIA spot prices: {len(ng_spots)} NG {ng_spots}, {len(power_spots)} power {power_spots}')
-        return ng_spots, power_spots
+        # --- Parse Table 0: Petroleum spot prices (WTI, Brent) ---
+        petroleum_spots = {}
+        try:
+            for row in tables[0].find_all('tr'):
+                cells = row.find_all('td')
+                if len(cells) < 3:
+                    continue
+                # Table 0 format varies: some rows have Product|Area|Price|%Chg,
+                # others just Area|Price|%Chg (when product spans multiple rows).
+                text_vals = [c.get_text(strip=True) for c in cells]
+                # Look for WTI or Brent in any cell text
+                row_text = ' '.join(text_vals).lower()
+                price_val = None
+                if 'wti' in row_text and 'wti_spot' not in petroleum_spots:
+                    # Find the price cell: first numeric-looking value
+                    for t in text_vals:
+                        try:
+                            v = float(t.replace(',', ''))
+                            if 10.0 < v < 300.0:  # sanity: crude $/bbl range
+                                petroleum_spots['wti_spot'] = round(v, 2)
+                                break
+                        except ValueError:
+                            continue
+                elif 'brent' in row_text and 'brent_spot' not in petroleum_spots:
+                    for t in text_vals:
+                        try:
+                            v = float(t.replace(',', ''))
+                            if 10.0 < v < 300.0:
+                                petroleum_spots['brent_spot'] = round(v, 2)
+                                break
+                        except ValueError:
+                            continue
+            if petroleum_spots:
+                logger.debug(f'EIA petroleum spots from page: {petroleum_spots}')
+        except Exception as e:
+            logger.debug(f'EIA petroleum table parse error: {e}')
+
+        logger.debug(f'EIA spot prices: {len(ng_spots)} NG {ng_spots}, {len(power_spots)} power, {len(petroleum_spots)} petroleum')
+        return ng_spots, power_spots, petroleum_spots
 
     except Exception as e:
         logger.debug(f'EIA spot scrape failed: {e}')
-        return {}, {}
+        return {}, {}, {}
 
 
 def _fetch_fred_prices():
@@ -367,7 +406,7 @@ def _fetch_fred_prices():
     return result
 
 
-def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None, eia_power_spots=None, fred_prices=None):
+def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None, eia_power_spots=None, fred_prices=None, eia_petroleum_spots=None):
     """
     Map raw benchmark prices to the platform's hub names.
 
@@ -384,12 +423,14 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
         eia_power_spots = {}
     if fred_prices is None:
         fred_prices = {}
+    if eia_petroleum_spots is None:
+        eia_petroleum_spots = {}
 
     # --- Benchmarks ---
     # Priority chain (most authoritative → most available):
     # Henry Hub: EIA page physical spot > FRED EIA-sourced spot > yfinance NYMEX futures
-    # WTI:       EIA API RWTC spot      > FRED EIA-sourced spot > yfinance CL=F futures
-    # Brent:     yfinance BZ=F          > FRED EIA-sourced spot
+    # WTI:       EIA API RWTC spot / EIA page spot > FRED EIA-sourced spot > yfinance CL=F futures
+    # Brent:     yfinance BZ=F > EIA API/page spot > FRED EIA-sourced spot
     hh    = eia_ng_spots.get('Henry Hub') or eia_prices.get('henry_hub_eia') or fred_prices.get('henry_hub_fred') or yf_prices.get('NG=F')
     wti   = eia_prices.get('wti_eia')    or fred_prices.get('wti_fred')      or yf_prices.get('CL=F')
     brent = yf_prices.get('BZ=F')        or eia_prices.get('brent_eia')      or fred_prices.get('brent_fred')
@@ -402,10 +443,14 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
     hh_src  = ('eia_spot_page'      if eia_ng_spots.get('Henry Hub')        else
                'fred_backup'        if fred_prices.get('henry_hub_fred')    else
                'yfinance_ng')
-    wti_src = ('eia_api_rwtc'       if eia_prices.get('wti_eia')            else
+    # WTI: distinguish EIA API vs EIA page scrape
+    _wti_from_page = eia_petroleum_spots.get('wti_spot') and not eia_prices.get('wti_eia') != eia_petroleum_spots.get('wti_spot')
+    wti_src = ('eia_spot_page'      if eia_petroleum_spots.get('wti_spot') and eia_prices.get('wti_eia') == eia_petroleum_spots['wti_spot'] else
+               'eia_api_rwtc'       if eia_prices.get('wti_eia')            else
                'fred_backup'        if fred_prices.get('wti_fred')          else
                'yfinance_cl')
     brent_src = ('yfinance_bz'      if yf_prices.get('BZ=F')               else
+                 'eia_spot_page'    if eia_petroleum_spots.get('brent_spot') and eia_prices.get('brent_eia') == eia_petroleum_spots['brent_spot'] else
                  'eia_api_brent'    if eia_prices.get('brent_eia')          else
                  'fred_backup')
 
@@ -588,11 +633,19 @@ def fetch_live_prices():
         yf_prices              = f_yf.result()
         eia_prices             = f_eia.result()
         nyiso_lmps             = f_nyiso.result()
-        eia_ng_spots, eia_power_spots = f_spots.result()
+        eia_ng_spots, eia_power_spots, eia_petroleum_spots = f_spots.result()
         fred_prices            = f_fred.result()
 
+    # Merge EIA page petroleum spots into eia_prices as fallback for API
+    if eia_petroleum_spots.get('wti_spot') and not eia_prices.get('wti_eia'):
+        eia_prices['wti_eia'] = eia_petroleum_spots['wti_spot']
+        logger.debug(f"Using EIA page WTI spot: ${eia_petroleum_spots['wti_spot']}")
+    if eia_petroleum_spots.get('brent_spot') and not eia_prices.get('brent_eia'):
+        eia_prices['brent_eia'] = eia_petroleum_spots['brent_spot']
+        logger.debug(f"Using EIA page Brent spot: ${eia_petroleum_spots['brent_spot']}")
+
     hub_prices, live_hubs, hub_srcs = _build_hub_prices(
-        yf_prices, eia_prices, nyiso_lmps, eia_ng_spots, eia_power_spots, fred_prices
+        yf_prices, eia_prices, nyiso_lmps, eia_ng_spots, eia_power_spots, fred_prices, eia_petroleum_spots
     )
 
     sources = []

@@ -174,6 +174,7 @@ function renderRiskPage() {
 
   // Drawdown chart
   drawDrawdownChart(equityCurveArr);
+  try { initDrawdownCrosshair(); } catch(e) { console.error('Drawdown crosshair error:', e); }
 
   // Equity curve
   drawEquityCurve();
@@ -389,6 +390,14 @@ function drawEquityCurve() {
 
   if (equityPts.length < 2) { equityPts = fullPts; }
 
+  // Apply zoom if set
+  const fullEquityPts = equityPts;
+  const eqZoom = canvas._eqZoom;
+  if (eqZoom && eqZoom.end > eqZoom.start) {
+    equityPts = fullEquityPts.slice(eqZoom.start, eqZoom.end);
+    if (equityPts.length < 2) equityPts = fullEquityPts;
+  }
+
   const min=Math.min(...equityPts)*0.998,max=Math.max(...equityPts)*1.002,rangeV=max-min||1;
   const padL=75,padR=40,padT=20,padB=45,cW=W-padL-padR,cH=H-padT-padB;
 
@@ -455,20 +464,72 @@ function drawEquityCurve() {
   ctx.font = '10px JetBrains Mono';
   ctx.fillText('DD: '+drawdown.toFixed(2)+'%  Hi: $'+(periodHigh/1000).toFixed(1)+'k  Lo: $'+(periodLow/1000).toFixed(1)+'k', statsX, padT + 28);
 
-  // Store metadata for crosshair
-  canvas._eqMeta = { padL, padR, padT, padB, cW, cH, min, max, range: rangeV, data: equityPts, lineColor, W, H, startVal };
+  // Store metadata for crosshair + zoom
+  canvas._eqMeta = { padL, padR, padT, padB, cW, cH, min, max, range: rangeV, data: equityPts, fullData: fullEquityPts, lineColor, W, H, startVal };
 }
 
 function initEquityCrosshair() {
   const canvas = document.getElementById('equityChart');
   if (!canvas || canvas._eqCrosshairInit) return;
   canvas._eqCrosshairInit = true;
+  let _panState = null;
+
+  // Wheel zoom
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const meta = canvas._eqMeta;
+    if (!meta || !meta.fullData || meta.fullData.length < 3) return;
+    const fullLen = meta.fullData.length;
+    const curZoom = canvas._eqZoom || { start: 0, end: fullLen };
+    const viewLen = curZoom.end - curZoom.start;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, (mx - meta.padL) / meta.cW));
+    const factor = e.deltaY > 0 ? 1.15 : 0.87;
+    const newLen = Math.round(Math.max(10, Math.min(fullLen, viewLen * factor)));
+    const anchor = curZoom.start + Math.round(pct * viewLen);
+    let ns = Math.round(anchor - pct * newLen), ne = ns + newLen;
+    if (ns < 0) { ns = 0; ne = newLen; }
+    if (ne > fullLen) { ne = fullLen; ns = fullLen - newLen; }
+    if (ne - ns >= fullLen) { delete canvas._eqZoom; } else { canvas._eqZoom = { start: Math.max(0, ns), end: Math.min(fullLen, ne) }; }
+    drawEquityCurve();
+  }, { passive: false });
+
+  // Drag pan
+  canvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const meta = canvas._eqMeta;
+    if (!meta || !meta.fullData) return;
+    _panState = { startX: e.clientX, zoom: { ...(canvas._eqZoom || { start: 0, end: meta.fullData.length }) } };
+  });
+  canvas.addEventListener('mouseup', () => { _panState = null; });
+
+  // Double-click reset
+  canvas.addEventListener('dblclick', () => {
+    delete canvas._eqZoom;
+    drawEquityCurve();
+  });
 
   canvas.addEventListener('mousemove', e => {
     const meta = canvas._eqMeta;
     if (!meta) return;
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
+
+    // Handle pan drag
+    if (_panState && meta.fullData) {
+      const dataPerPx = meta.data.length / meta.cW;
+      const shift = Math.round(-(e.clientX - _panState.startX) * dataPerPx);
+      const fullLen = meta.fullData.length;
+      const viewLen = _panState.zoom.end - _panState.zoom.start;
+      let ns = _panState.zoom.start + shift, ne = ns + viewLen;
+      if (ns < 0) { ns = 0; ne = viewLen; }
+      if (ne > fullLen) { ne = fullLen; ns = fullLen - viewLen; }
+      canvas._eqZoom = { start: ns, end: ne };
+      drawEquityCurve();
+      return;
+    }
+
     const { padL, padT, cW, cH, min, max, range, data, lineColor, W, H } = meta;
 
     if (mx < padL || mx > padL + cW) {
@@ -529,7 +590,6 @@ function initEquityCrosshair() {
     const dateStr = labelDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     ctx.font = '10px JetBrains Mono';
     const dtw = ctx.measureText(dateStr).width + 10;
-    const padB = meta.padB;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
     ctx.fillRect(snapX - dtw / 2, padT + cH + 2, dtw, 18);
     ctx.fillStyle = '#e2e8f0';
@@ -540,6 +600,7 @@ function initEquityCrosshair() {
   });
 
   canvas.addEventListener('mouseleave', () => {
+    _panState = null;
     if (canvas._eqMeta) drawEquityCurve();
   });
 }
@@ -699,13 +760,21 @@ function drawDrawdownChart(equityArr) {
   ctx.fillStyle = isLight ? '#fff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
   ctx.fillRect(0, 0, W, H);
 
-  // Calculate drawdown series
-  const dd = [];
+  // Calculate full drawdown series
+  const fullDD = [];
   let peak = equityArr[0];
   equityArr.forEach(v => {
     if (v > peak) peak = v;
-    dd.push(((peak - v) / peak) * 100);
+    fullDD.push(((peak - v) / peak) * 100);
   });
+
+  // Apply zoom if set
+  let dd = fullDD;
+  const ddZoom = canvas._ddZoom;
+  if (ddZoom && ddZoom.end > ddZoom.start) {
+    dd = fullDD.slice(ddZoom.start, ddZoom.end);
+    if (dd.length < 2) dd = fullDD;
+  }
 
   const maxDD = Math.max(...dd, 1);
   const padL = 55, padR = 20, padT = 10, padB = 20;
@@ -739,5 +808,140 @@ function drawDrawdownChart(equityArr) {
   // Label
   ctx.fillStyle = '#ef4444'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
   ctx.fillText('Drawdown', padL + 4, padT + 12);
+
+  // Store metadata for crosshair + zoom
+  canvas._ddMeta = { padL, padR, padT, padB, cW, cH, maxDD, dd, fullDD, W, H };
+  canvas._ddEquityArr = equityArr;
+}
+
+/* =====================================================================
+   DRAWDOWN CROSSHAIR + ZOOM
+   ===================================================================== */
+function initDrawdownCrosshair() {
+  const canvas = document.getElementById('drawdownChart');
+  if (!canvas || canvas._ddCrosshairInit) return;
+  canvas._ddCrosshairInit = true;
+  let _panState = null;
+
+  // Wheel zoom
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const meta = canvas._ddMeta;
+    if (!meta || !meta.fullDD || meta.fullDD.length < 3) return;
+    const fullLen = meta.fullDD.length;
+    const curZoom = canvas._ddZoom || { start: 0, end: fullLen };
+    const viewLen = curZoom.end - curZoom.start;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, (mx - meta.padL) / meta.cW));
+    const factor = e.deltaY > 0 ? 1.15 : 0.87;
+    const newLen = Math.round(Math.max(10, Math.min(fullLen, viewLen * factor)));
+    const anchor = curZoom.start + Math.round(pct * viewLen);
+    let ns = Math.round(anchor - pct * newLen), ne = ns + newLen;
+    if (ns < 0) { ns = 0; ne = newLen; }
+    if (ne > fullLen) { ne = fullLen; ns = fullLen - newLen; }
+    if (ne - ns >= fullLen) { delete canvas._ddZoom; } else { canvas._ddZoom = { start: Math.max(0, ns), end: Math.min(fullLen, ne) }; }
+    if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
+  }, { passive: false });
+
+  // Drag pan
+  canvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const meta = canvas._ddMeta;
+    if (!meta || !meta.fullDD) return;
+    _panState = { startX: e.clientX, zoom: { ...(canvas._ddZoom || { start: 0, end: meta.fullDD.length }) } };
+  });
+  canvas.addEventListener('mouseup', () => { _panState = null; });
+
+  // Double-click reset
+  canvas.addEventListener('dblclick', () => {
+    delete canvas._ddZoom;
+    if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    const meta = canvas._ddMeta;
+    if (!meta) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+
+    // Handle pan drag
+    if (_panState && meta.fullDD) {
+      const dataPerPx = meta.dd.length / meta.cW;
+      const shift = Math.round(-(e.clientX - _panState.startX) * dataPerPx);
+      const fullLen = meta.fullDD.length;
+      const viewLen = _panState.zoom.end - _panState.zoom.start;
+      let ns = _panState.zoom.start + shift, ne = ns + viewLen;
+      if (ns < 0) { ns = 0; ne = viewLen; }
+      if (ne > fullLen) { ne = fullLen; ns = fullLen - viewLen; }
+      canvas._ddZoom = { start: ns, end: ne };
+      if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
+      return;
+    }
+
+    const { padL, padT, cW, cH, maxDD, dd, W, H } = meta;
+
+    if (mx < padL || mx > padL + cW) {
+      if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
+      return;
+    }
+
+    // Find nearest index
+    const idx = Math.round(((mx - padL) / cW) * (dd.length - 1));
+    const clampIdx = Math.max(0, Math.min(dd.length - 1, idx));
+    const val = dd[clampIdx];
+
+    const snapX = padL + (clampIdx / (dd.length - 1)) * cW;
+    const snapY = padT + (val / maxDD) * cH;
+
+    // Redraw base
+    if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    // Crosshair lines
+    ctx.strokeStyle = 'rgba(148,163,184,0.4)'; ctx.lineWidth = 0.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(snapX, padT); ctx.lineTo(snapX, padT + cH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(padL, snapY); ctx.lineTo(padL + cW, snapY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Snap dot
+    ctx.beginPath(); ctx.arc(snapX, snapY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ef4444'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // Tooltip showing drawdown %
+    const txt = '-' + val.toFixed(2) + '%';
+    ctx.font = '11px JetBrains Mono';
+    const tw = ctx.measureText(txt).width + 16;
+    const tipX = snapX + 12 + tw > padL + cW ? snapX - tw - 12 : snapX + 12;
+    ctx.fillStyle = 'rgba(15,21,32,0.92)';
+    ctx.fillRect(tipX, snapY - 12, tw, 22);
+    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1;
+    ctx.strokeRect(tipX, snapY - 12, tw, 22);
+    ctx.fillStyle = '#ef4444'; ctx.textAlign = 'left';
+    ctx.fillText(txt, tipX + 8, snapY + 4);
+
+    // Date label at bottom
+    const now = new Date();
+    const daysBack = dd.length - 1 - clampIdx;
+    const labelDate = new Date(now.getTime() - daysBack * 86400000);
+    const dateStr = labelDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    ctx.font = '10px JetBrains Mono';
+    const dtw = ctx.measureText(dateStr).width + 10;
+    ctx.fillStyle = 'rgba(15,21,32,0.92)';
+    ctx.fillRect(snapX - dtw / 2, padT + cH + 2, dtw, 16);
+    ctx.fillStyle = '#e2e8f0'; ctx.textAlign = 'center';
+    ctx.fillText(dateStr, snapX, padT + cH + 13);
+
+    ctx.restore();
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    _panState = null;
+    if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
+  });
 }
 

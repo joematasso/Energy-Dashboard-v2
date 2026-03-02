@@ -1202,9 +1202,15 @@ function drawForwardCurveChart(canvasId, hubName) {
   const prices = fwd.map(pt => pt.price);
   const spotPrice = getPrice(hubName);
   const allPrices = [spotPrice, ...prices];
-  let pMin = Math.min(...allPrices), pMax = Math.max(...allPrices);
-  const margin = (pMax - pMin) * 0.1 || 1;
-  pMin -= margin; pMax += margin;
+  let pMin, pMax;
+  if (canvas._fwdZoomed && canvas._fwdMeta) {
+    pMin = canvas._fwdMeta.pMin;
+    pMax = canvas._fwdMeta.pMax;
+  } else {
+    pMin = Math.min(...allPrices); pMax = Math.max(...allPrices);
+    const margin = (pMax - pMin) * 0.1 || 1;
+    pMin -= margin; pMax += margin;
+  }
   const pRange = pMax - pMin;
 
   function yPos(v) { return padT + (1 - (v - pMin) / pRange) * cH; }
@@ -1316,6 +1322,129 @@ function drawForwardCurveChart(canvasId, hubName) {
   // Gray dot = synthetic
   ctx.beginPath(); ctx.arc(legX, legY, 3, 0, Math.PI * 2); ctx.fillStyle = '#64748b'; ctx.fill();
   ctx.fillStyle = textColor; ctx.fillText('Sim', legX + 6, legY + 3);
+
+  // Store metadata for crosshair
+  canvas._fwdMeta = { padL, padR, padT, padB, cW, cH, pMin, pMax, pRange, fwd, spotPrice, hubName, isContango, W, H };
+  initFwdCurveCrosshair(canvasId);
+}
+
+/* =====================================================================
+   FORWARD CURVE CROSSHAIR + ZOOM
+   ===================================================================== */
+function initFwdCurveCrosshair(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || canvas._fwdCrosshairInit) return;
+  canvas._fwdCrosshairInit = true;
+
+  // Wheel zoom (Y-axis range)
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const meta = canvas._fwdMeta;
+    if (!meta) return;
+    const factor = e.deltaY > 0 ? 1.15 : 0.87;
+    const mid = (meta.pMin + meta.pMax) / 2;
+    const halfRange = (meta.pMax - meta.pMin) / 2 * factor;
+    meta.pMin = mid - halfRange;
+    meta.pMax = mid + halfRange;
+    meta.pRange = meta.pMax - meta.pMin;
+    canvas._fwdZoomed = true;
+    drawForwardCurveChart(canvasId, meta.hubName);
+  }, { passive: false });
+
+  // Double-click reset zoom
+  canvas.addEventListener('dblclick', () => {
+    canvas._fwdZoomed = false;
+    const meta = canvas._fwdMeta;
+    if (meta) drawForwardCurveChart(canvasId, meta.hubName);
+  });
+
+  // Crosshair on mousemove
+  canvas.addEventListener('mousemove', e => {
+    const meta = canvas._fwdMeta;
+    if (!meta) return;
+    const { padL, padT, cW, cH, pMin, pMax, pRange, fwd, spotPrice, hubName, isContango, W, H } = meta;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (mx < padL || mx > padL + cW || my < padT || my > padT + cH) {
+      drawForwardCurveChart(canvasId, hubName);
+      return;
+    }
+
+    // Build all data points: spot + forward months
+    function xPos(i) { return padL + ((i + 1) / (fwd.length + 1)) * cW; }
+    function yPos(v) { return padT + (1 - (v - pMin) / pRange) * cH; }
+    const spotX = padL;
+    const pts = [{ x: spotX, y: yPos(spotPrice), price: spotPrice, label: 'Spot', src: 'spot' }];
+    const now = new Date();
+    for (let i = 0; i < fwd.length; i++) {
+      const pt = fwd[i];
+      const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 2, 1);
+      const label = mDate.toLocaleDateString('en-US', { month: 'short' }) + "'" + (mDate.getFullYear() % 100);
+      const src = pt._real === true ? 'Market' : pt._real === false ? 'Interp.' : 'Sim';
+      pts.push({ x: xPos(i), y: yPos(pt.price), price: pt.price, label, src });
+    }
+
+    // Find nearest point
+    let nearest = pts[0], minDist = Math.abs(mx - pts[0].x);
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.abs(mx - pts[i].x);
+      if (d < minDist) { minDist = d; nearest = pts[i]; }
+    }
+
+    // Redraw base
+    drawForwardCurveChart(canvasId, hubName);
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const snapX = nearest.x, snapY = nearest.y;
+
+    // Crosshair lines
+    ctx.strokeStyle = 'rgba(148,163,184,0.4)'; ctx.lineWidth = 0.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(snapX, padT); ctx.lineTo(snapX, padT + cH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(padL, snapY); ctx.lineTo(padL + cW, snapY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Snap dot
+    ctx.beginPath(); ctx.arc(snapX, snapY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = isContango ? '#ef4444' : '#10b981'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // Price tooltip
+    const decimals = spotPrice >= 100 ? 2 : spotPrice >= 10 ? 3 : 4;
+    const priceTxt = nearest.price.toFixed(decimals);
+    const srcTxt = nearest.src;
+    const tooltipTxt = nearest.label + '  ' + priceTxt + '  [' + srcTxt + ']';
+    ctx.font = '11px JetBrains Mono';
+    const tw = ctx.measureText(tooltipTxt).width + 16;
+    const tipX = snapX + 12 + tw > padL + cW ? snapX - tw - 12 : snapX + 12;
+    const tipY = snapY - 14;
+    ctx.fillStyle = 'rgba(15,21,32,0.92)';
+    ctx.fillRect(tipX, tipY, tw, 24);
+    const lineColor = isContango ? '#ef4444' : '#10b981';
+    ctx.strokeStyle = lineColor; ctx.lineWidth = 1;
+    ctx.strokeRect(tipX, tipY, tw, 24);
+    ctx.fillStyle = lineColor; ctx.textAlign = 'left';
+    ctx.fillText(tooltipTxt, tipX + 8, tipY + 16);
+
+    // Month label at bottom
+    ctx.font = '10px JetBrains Mono';
+    const dtw = ctx.measureText(nearest.label).width + 10;
+    ctx.fillStyle = 'rgba(15,21,32,0.92)';
+    ctx.fillRect(snapX - dtw / 2, padT + cH + 2, dtw, 18);
+    ctx.fillStyle = '#e2e8f0'; ctx.textAlign = 'center';
+    ctx.fillText(nearest.label, snapX, padT + cH + 14);
+
+    ctx.restore();
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    const meta = canvas._fwdMeta;
+    if (meta) drawForwardCurveChart(canvasId, meta.hubName);
+  });
 }
 
 function sparklineSVG(data, color, w, h) {
