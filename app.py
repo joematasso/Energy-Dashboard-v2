@@ -322,6 +322,67 @@ def init_db():
     except sqlite3.OperationalError:
         cur.execute("ALTER TABLE otc_proposals ADD COLUMN revision_count INTEGER DEFAULT 0")
 
+    # Migration: tournament mode columns on tournaments table
+    for col, defn in [
+        ('sector', "TEXT DEFAULT ''"),
+        ('duration_minutes', "INTEGER DEFAULT 60"),
+        ('var_limit', "REAL DEFAULT 0"),
+        ('price_snapshot', "TEXT DEFAULT '{}'"),
+        ('config', "TEXT DEFAULT '{}'"),
+    ]:
+        try:
+            cur.execute(f"SELECT {col} FROM tournaments LIMIT 1")
+        except sqlite3.OperationalError:
+            cur.execute(f"ALTER TABLE tournaments ADD COLUMN {col} {defn}")
+
+    # Migration: tournament_entries status/DQ columns
+    for col, defn in [
+        ('status', "TEXT DEFAULT 'ACTIVE'"),
+        ('disqualified_at', "TIMESTAMP"),
+        ('disqualification_reason', "TEXT DEFAULT ''"),
+        ('final_pnl', "REAL DEFAULT 0"),
+        ('final_equity', "REAL DEFAULT 0"),
+        ('trade_count', "INTEGER DEFAULT 0"),
+    ]:
+        try:
+            cur.execute(f"SELECT {col} FROM tournament_entries LIMIT 1")
+        except sqlite3.OperationalError:
+            cur.execute(f"ALTER TABLE tournament_entries ADD COLUMN {col} {defn}")
+
+    # New tables for tournament mode
+    cur.executescript("""
+        CREATE TABLE IF NOT EXISTS tournament_news_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id INTEGER NOT NULL,
+            headline TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            category TEXT DEFAULT 'general',
+            impact_type TEXT DEFAULT 'shock',
+            impact_direction TEXT DEFAULT 'neutral',
+            impact_pct REAL DEFAULT 0,
+            delay_seconds INTEGER DEFAULT 5,
+            duration_ticks INTEGER DEFAULT 5,
+            affected_hubs TEXT DEFAULT '[]',
+            is_noise INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'QUEUED',
+            queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            flashed_at TIMESTAMP,
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS tournament_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id INTEGER NOT NULL,
+            trader_name TEXT NOT NULL,
+            trade_data TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tourn_news_tid ON tournament_news_events(tournament_id);
+        CREATE INDEX IF NOT EXISTS idx_tourn_trades_tid ON tournament_trades(tournament_id, trader_name);
+    """)
+
     conn.commit()
 
     # Auto-seed traders from traders_seed.json if the traders table is empty

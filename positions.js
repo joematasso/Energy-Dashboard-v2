@@ -290,7 +290,9 @@ function toggleBlotterRow(rowId) {
 }
 
 function renderBlotterTable() {
-  let trades = [...STATE.trades, ...STATE.pendingOrders.map(o => ({...o, _pending: true}))];
+  // Include tournament trades (marked with _tournament badge)
+  var tournTrades = (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournamentTrades) ? STATE.tournamentTrades : [];
+  let trades = [...tournTrades, ...STATE.trades, ...STATE.pendingOrders.map(o => ({...o, _pending: true}))];
 
   // --- Filters ---
   const search = (document.getElementById('blotterSearch')?.value || '').toLowerCase();
@@ -428,6 +430,8 @@ function renderBlotterTable() {
     if (t._pending) statusBadge = '<span class="badge" style="background:rgba(139,92,246,0.15);color:#8b5cf6">PEND</span>';
     else if (t.status === 'OPEN') statusBadge = '<span class="badge" style="background:rgba(34,211,238,0.15);color:var(--accent)">OPEN</span>';
     else statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.15);color:var(--text-dim)">CLSD</span>';
+    // Tournament badge
+    if (t._tournament) statusBadge += ' <span class="badge" style="background:rgba(168,85,247,0.15);color:#c084fc;font-size:9px">TOURN</span>';
 
     // Age
     const created = new Date(t.timestamp || t.server_created_at || Date.now());

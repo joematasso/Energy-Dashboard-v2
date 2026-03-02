@@ -808,3 +808,217 @@ def get_snapshots(trader):
     snapshots = [dict(row) for row in rows]
     return jsonify({'success': True, 'snapshots': snapshots})
 
+
+# ---------------------------------------------------------------------------
+# Tournament Trade Submission
+# ---------------------------------------------------------------------------
+@public_bp.route('/api/tournament/<int:tid>/trade/<trader>', methods=['POST'])
+def submit_tournament_trade(tid, trader):
+    """Submit a trade within an active tournament (separate from main trades)."""
+    db = get_db()
+
+    # 1. Validate tournament is ACTIVE
+    tourn = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not tourn:
+        return jsonify({'success': False, 'error': 'Tournament not found'}), 404
+    if tourn['status'] != 'ACTIVE':
+        return jsonify({'success': False, 'error': 'Tournament is not active'}), 400
+
+    # 2. Validate trader is enrolled and not disqualified
+    entry = db.execute(
+        "SELECT * FROM tournament_entries WHERE tournament_id=? AND trader_name=?",
+        (tid, trader)
+    ).fetchone()
+    if not entry:
+        return jsonify({'success': False, 'error': 'Not enrolled in this tournament'}), 403
+    if entry['status'] == 'DISQUALIFIED':
+        return jsonify({'success': False, 'error': 'You have been disqualified from this tournament'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No trade data provided'}), 400
+
+    # 3. Validate required fields
+    required = ['type', 'direction', 'hub', 'volume', 'entryPrice']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify({'success': False, 'error': f'Missing required fields: {", ".join(missing)}'}), 400
+
+    # 4. Volume limits
+    try:
+        volume = float(data.get('volume', 0))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid volume'}), 400
+    if not math.isfinite(volume) or volume <= 0:
+        return jsonify({'success': False, 'error': 'Volume must be a positive finite number'}), 400
+    trade_type = data.get('type', '')
+    is_crude = trade_type.startswith('CRUDE') or trade_type in ('EFP', 'OPTION_CL')
+    max_volume = 50000 if is_crude else 500000
+    if volume > max_volume:
+        unit = 'BBL' if is_crude else 'MMBtu'
+        return jsonify({'success': False, 'error': f'Volume exceeds maximum of {max_volume:,.0f} {unit}'}), 400
+
+    # 5. Price validation (skip spotRef — tournament prices are simulated, server doesn't know them)
+    try:
+        entry_price = float(data.get('entryPrice', 0))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid entry price'}), 400
+    if not math.isfinite(entry_price):
+        return jsonify({'success': False, 'error': 'Entry price must be a finite number'}), 400
+    is_basis = trade_type == 'BASIS_SWAP'
+    if not is_basis and entry_price <= 0:
+        return jsonify({'success': False, 'error': 'Entry price must be positive'}), 400
+    if is_basis and abs(entry_price) > 50:
+        return jsonify({'success': False, 'error': 'Basis differential too large (max ±$50)'}), 400
+
+    # 6. Margin check using tournament starting_balance
+    starting_balance = tourn['starting_balance']
+    existing_trades = db.execute(
+        "SELECT trade_data FROM tournament_trades WHERE tournament_id=? AND trader_name=?",
+        (tid, trader)
+    ).fetchall()
+
+    used_margin = 0.0
+    realized_pnl = 0.0
+    for row in existing_trades:
+        try:
+            td = json.loads(row['trade_data'])
+        except Exception:
+            continue
+        if td.get('status') == 'CLOSED':
+            realized_pnl += float(td.get('realizedPnl', 0) or 0)
+        elif td.get('status') == 'OPEN':
+            used_margin += _calc_margin(td)
+
+    new_margin = _calc_margin(data)
+    equity = starting_balance + realized_pnl
+    buying_power = equity - used_margin
+    if new_margin > buying_power:
+        return jsonify({
+            'success': False,
+            'error': f'Insufficient buying power. Required: ${new_margin:,.0f}, Available: ${buying_power:,.0f}'
+        }), 400
+
+    # 7. Duplicate prevention (same trade within 5 seconds)
+    recent = db.execute(
+        "SELECT trade_data FROM tournament_trades WHERE tournament_id=? AND trader_name=? "
+        "AND created_at > datetime('now', '-5 seconds')",
+        (tid, trader)
+    ).fetchall()
+    for row in recent:
+        try:
+            td = json.loads(row['trade_data'])
+        except Exception:
+            continue
+        if (td.get('type') == data.get('type') and
+            td.get('direction') == data.get('direction') and
+            td.get('hub') == data.get('hub') and
+            abs(float(td.get('volume', 0)) - volume) / max(volume, 1) < 0.05 and
+            abs(float(td.get('entryPrice', 0)) - entry_price) / max(abs(entry_price), 0.01) < 0.02):
+            return jsonify({'success': False, 'error': 'Duplicate trade detected (within 5 seconds)'}), 400
+
+    # 8. Store tournament trade
+    data['status'] = 'OPEN'
+    data['timestamp'] = datetime.utcnow().isoformat()
+    data['_tournament'] = True
+    trade_json = json.dumps(data)
+
+    cur = db.execute(
+        "INSERT INTO tournament_trades (tournament_id, trader_name, trade_data) VALUES (?, ?, ?)",
+        (tid, trader, trade_json)
+    )
+    db.commit()
+    trade_id = cur.lastrowid
+
+    socketio.emit('tournament_trade', {
+        'tournament_id': tid,
+        'trader_name': trader,
+        'trade_id': trade_id,
+        'type': data.get('type'),
+        'direction': data.get('direction'),
+        'hub': data.get('hub'),
+        'volume': volume
+    })
+
+    return jsonify({'success': True, 'trade_id': trade_id})
+
+
+@public_bp.route('/api/tournament/<int:tid>/trade/<trader>/<int:trade_id>', methods=['PUT'])
+def update_tournament_trade(tid, trader, trade_id):
+    """Close or update a tournament trade."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM tournament_trades WHERE id=? AND tournament_id=? AND trader_name=?",
+        (trade_id, tid, trader)
+    ).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Tournament trade not found'}), 404
+
+    data = request.get_json()
+    td = json.loads(row['trade_data'])
+    td.update(data)
+    db.execute("UPDATE tournament_trades SET trade_data=? WHERE id=?", (json.dumps(td), trade_id))
+    db.commit()
+
+    return jsonify({'success': True, 'trade_id': trade_id})
+
+
+@public_bp.route('/api/tournament/<int:tid>/force-close/<trader>', methods=['POST'])
+def force_close_tournament_trades(tid, trader):
+    """Force-close all open tournament trades for a trader (VaR DQ or tournament end)."""
+    db = get_db()
+    data = request.get_json() or {}
+    closed_trades = data.get('trades', [])
+
+    # Bulk update: client sends array of {trade_id, closePrice, realizedPnl}
+    for ct in closed_trades:
+        trade_id = ct.get('trade_id')
+        if not trade_id:
+            continue
+        row = db.execute(
+            "SELECT * FROM tournament_trades WHERE id=? AND tournament_id=? AND trader_name=?",
+            (trade_id, tid, trader)
+        ).fetchone()
+        if not row:
+            continue
+        td = json.loads(row['trade_data'])
+        if td.get('status') != 'OPEN':
+            continue
+        td['status'] = 'CLOSED'
+        td['closePrice'] = ct.get('closePrice', 0)
+        td['realizedPnl'] = ct.get('realizedPnl', 0)
+        td['closedAt'] = datetime.utcnow().isoformat()
+        td['closeReason'] = ct.get('closeReason', 'FORCE_CLOSE')
+        db.execute("UPDATE tournament_trades SET trade_data=? WHERE id=?", (json.dumps(td), trade_id))
+
+    db.commit()
+
+    # Update entry stats
+    all_trades = db.execute(
+        "SELECT trade_data FROM tournament_trades WHERE tournament_id=? AND trader_name=?",
+        (tid, trader)
+    ).fetchall()
+    realized = 0.0
+    trade_count = 0
+    for tr in all_trades:
+        try:
+            td = json.loads(tr['trade_data'])
+        except Exception:
+            continue
+        trade_count += 1
+        if td.get('status') == 'CLOSED':
+            realized += float(td.get('realizedPnl', 0) or 0)
+
+    tourn = db.execute("SELECT starting_balance FROM tournaments WHERE id=?", (tid,)).fetchone()
+    balance = tourn['starting_balance'] if tourn else 1000000
+    equity = balance + realized
+
+    db.execute(
+        "UPDATE tournament_entries SET final_pnl=?, final_equity=?, trade_count=? "
+        "WHERE tournament_id=? AND trader_name=?",
+        (round(realized, 2), round(equity, 2), trade_count, tid, trader)
+    )
+    db.commit()
+
+    return jsonify({'success': True, 'final_pnl': round(realized, 2), 'equity': round(equity, 2)})
+

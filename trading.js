@@ -380,7 +380,12 @@ function updateDeliveryRestriction() {
 }
 
 function onTradeSectorChange() {
-  const sector = document.getElementById('tradeSector').value;
+  const sectorSel = document.getElementById('tradeSector');
+  // Tournament mode: force sector to tournament sector
+  if (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournamentSector) {
+    sectorSel.value = STATE.tournamentSector;
+  }
+  const sector = sectorSel.value;
   const typeSel = document.getElementById('tradeType');
   if (!sector) {
     typeSel.innerHTML = '<option value="">Select sector first...</option>';
@@ -397,6 +402,8 @@ function onTradeSectorChange() {
   updateVolumeField(sector);
   // Restrict delivery month for non-privileged users
   updateDeliveryRestriction();
+  // Show tournament lock indicator
+  _updateTournamentLockIndicator();
 }
 
 // Auto-incrementing confirmation reference per session
@@ -859,6 +866,26 @@ async function submitTrade() {
     } catch(e) { toast('Failed to send OTC proposal', 'error'); return; }
   }
 
+  // Tournament mode → route to tournament trade endpoint
+  if (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournament) {
+    try {
+      const tUrl = API_BASE + '/api/tournament/' + STATE.tournament.id + '/trade/' + STATE.trader.trader_name;
+      const tBody = JSON.stringify(trade);
+      const tR = await fetch(tUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: tBody });
+      const tD = await tR.json();
+      if (!tD.success) { toast(tD.error || 'Tournament trade rejected', 'error'); return; }
+      trade.id = tD.trade_id;
+      trade._tournament = true;
+      STATE.tournamentTrades.unshift(trade);
+      localStorage.setItem(traderStorageKey('tournament_trades'), JSON.stringify(STATE.tournamentTrades));
+      playSound('trade');
+      toast('Tournament trade: ' + tradeDirection + ' ' + volume + ' ' + hub, 'success');
+      resetTradeForm();
+      renderBlotterPage();
+      return;
+    } catch(e) { toast('Tournament trade failed: ' + e.message, 'error'); return; }
+  }
+
   // Exchange/non-OTC → direct submission
   if (STATE.connected && STATE.trader) {
     try {
@@ -1103,4 +1130,37 @@ function onBackdateChange() {
 function toggleBlotterHelp() {
   const panel = document.getElementById('blotterHelpPanel');
   if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+// Tournament mode: show lock indicator on trade form
+function _updateTournamentLockIndicator() {
+  var indicator = document.getElementById('tournamentLockIndicator');
+  if (!indicator) return;
+  if (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournamentSector) {
+    var sectorName = STATE.tournamentSector.toUpperCase();
+    var names = { ng:'Natural Gas', crude:'Crude Oil', power:'Power', freight:'Freight', ag:'Agriculture', metals:'Metals', ngls:'NGLs', lng:'LNG' };
+    indicator.textContent = 'TOURNAMENT MODE — ' + (names[STATE.tournamentSector] || sectorName) + ' only';
+    indicator.style.display = 'block';
+    // Disable sector selector
+    var sel = document.getElementById('tradeSector');
+    if (sel) { sel.value = STATE.tournamentSector; sel.disabled = true; }
+  } else {
+    indicator.style.display = 'none';
+    var sel2 = document.getElementById('tradeSector');
+    if (sel2) sel2.disabled = false;
+  }
+}
+
+// Show tournament disqualification overlay on trade form
+function _showTournamentDQ() {
+  var form = document.getElementById('tradeFormCard');
+  if (!form) return;
+  var existing = document.getElementById('tournamentDQOverlay');
+  if (existing) return;
+  var overlay = document.createElement('div');
+  overlay.id = 'tournamentDQOverlay';
+  overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100;border-radius:inherit';
+  overlay.innerHTML = '<div style="color:#f87171;font-weight:700;font-size:16px;text-align:center">DISQUALIFIED<br><span style="font-size:12px;color:#94a3b8;font-weight:400">VaR limit exceeded</span></div>';
+  form.style.position = 'relative';
+  form.appendChild(overlay);
 }

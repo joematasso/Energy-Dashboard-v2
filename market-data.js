@@ -75,7 +75,20 @@ let newsExpanded = {};
 function renderNews(sector, containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  const articles = liveNews[sector] || SIM_NEWS[sector] || [];
+
+  // Prepend tournament news for the tournament sector
+  var tournNews = [];
+  if (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournamentSector === sector) {
+    var pubNews = STATE.tournamentNewsPublic || [];
+    for (var ti = pubNews.length - 1; ti >= 0; ti--) {
+      var tn = pubNews[ti];
+      var ago = Math.round((Date.now() - new Date(tn.flashed_at).getTime()) / 60000);
+      var timeStr = ago <= 1 ? 'Just now' : ago + 'm ago';
+      tournNews.push({ source: 'TOURNAMENT', headline: tn.headline, description: tn.description || '', time: timeStr, _tournament: true });
+    }
+  }
+
+  const articles = tournNews.concat(liveNews[sector] || SIM_NEWS[sector] || []);
   const expanded = newsExpanded[sector] || false;
   const visible = expanded ? articles : articles.slice(0, 5);
   const remaining = articles.length - 5;
@@ -84,14 +97,15 @@ function renderNews(sector, containerId) {
   if (!window._newsArticles) window._newsArticles = {};
   window._newsArticles[sector] = articles;
 
-  let html = visible.map((a, i) =>
-    `<div class="news-card" onclick="openNewsBySector('${sector}',${i})">
+  let html = visible.map((a, i) => {
+    var extraClass = a._tournament ? ' tournament-news' : '';
+    return `<div class="news-card${extraClass}" onclick="openNewsBySector('${sector}',${i})">
       <div class="news-source">${escapeHtml(a.source)}</div>
       <div class="news-headline">${escapeHtml(a.headline)}</div>
       <div class="news-desc">${escapeHtml(a.description || '')}</div>
       <div class="news-time">${escapeHtml(a.time)}</div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 
   if (!expanded && remaining > 0) {
     html += `<button class="news-show-more" onclick="expandNews('${sector}','${containerId}')">
@@ -151,6 +165,15 @@ function renderNewsTicker() {
   // Collect headlines from all sectors
   const allItems = [];
   const sectors = ['ng','crude','power','freight','ag','metals','ngls','lng'];
+
+  // Prepend tournament news at the top of the ticker
+  if (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournamentNewsPublic) {
+    var pubNews = STATE.tournamentNewsPublic;
+    for (var ti = pubNews.length - 1; ti >= 0; ti--) {
+      allItems.push({ sector: STATE.tournamentSector || 'ng', source: 'TOURNAMENT', headline: pubNews[ti].headline, time: 'TOURNAMENT', _tournament: true });
+    }
+  }
+
   for (const sec of sectors) {
     const articles = liveNews[sec] || SIM_NEWS[sec] || [];
     for (const a of articles.slice(0, 4)) {
@@ -177,9 +200,10 @@ function renderNewsTicker() {
   window._tickerArticles = interleaved;
 
   const buildHTML = (items, offset) => items.map((item, i) => {
-    const tag = SECTOR_TAGS[item.sector] || { label:'?', cls:'' };
+    const tag = item._tournament ? { label:'⚡TOURN', cls:'tourn' } : (SECTOR_TAGS[item.sector] || { label:'?', cls:'' });
     const idx = (offset || 0) + i;
-    return `<span class="news-tick" onclick="openTickerNews(${idx % interleaved.length})"><span class="news-tick-tag ${tag.cls}">${tag.label}</span>${escapeHtml(item.headline)}<span class="news-tick-src">${escapeHtml(item.time)}</span></span><span class="news-tick-sep">◆</span>`;
+    var extraStyle = item._tournament ? ' style="color:#fbbf24;font-weight:700"' : '';
+    return `<span class="news-tick"${extraStyle} onclick="openTickerNews(${idx % interleaved.length})"><span class="news-tick-tag ${tag.cls}">${tag.label}</span>${escapeHtml(item.headline)}<span class="news-tick-src">${escapeHtml(item.time)}</span></span><span class="news-tick-sep">◆</span>`;
   }).join('');
 
   // Duplicate content for seamless looping

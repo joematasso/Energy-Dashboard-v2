@@ -43,6 +43,16 @@ const STATE = {
   weatherBias: {},
   weatherSource: 'none',
   wxHeatingSeason: false,
+  // Tournament mode
+  tournament: null,
+  tournamentMode: false,
+  tournamentSector: '',
+  tournamentPrices: {},
+  tournamentPriceHistory: {},
+  tournamentTrades: JSON.parse(localStorage.getItem(_traderPrefix + 'tournament_trades') || '[]'),
+  tournamentNews: [],
+  tournamentNewsPublic: [],
+  tournamentDisqualified: false,
 };
 
 /* =====================================================================
@@ -178,6 +188,18 @@ function cadGJtoUSDMmbtu(cadPerGJ) {
 
 const ALL_HUB_SETS = { ng: NG_HUBS, crude: CRUDE_HUBS, power: POWER_HUBS, freight: FREIGHT_HUBS, ag: AG_HUBS, metals: METALS_HUBS, ngls: NGL_HUBS, lng: LNG_HUBS };
 
+// Tournament mode helper — true when enrolled in an active sector-specific tournament
+function isTournamentMode() {
+  return STATE.tournamentMode && STATE.tournament && STATE.tournament.status === 'ACTIVE' && !STATE.tournamentDisqualified;
+}
+
+// Check if a hub belongs to the active tournament sector
+function isTournamentHub(name) {
+  if (!STATE.tournamentMode || !STATE.tournamentSector) return false;
+  const hubs = ALL_HUB_SETS[STATE.tournamentSector];
+  return hubs ? hubs.some(function(h) { return h.name === name; }) : false;
+}
+
 // Price history storage: hubName -> array of prices
 const priceHistory = {};
 const basisHistory = {};
@@ -260,6 +282,11 @@ function getHubSource(name) {
 
 // Returns a clickable LIVE/EST badge button that opens the source info popover.
 function priceBadge(name) {
+  // Tournament mode: show SIM badge for tournament sector hubs
+  if (isTournamentMode() && isTournamentHub(name)) {
+    const safeHub = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    return '<button type="button" class="price-badge sim" data-hub="' + safeHub + '" title="Tournament simulated price">SIM</button>';
+  }
   const live = isHubLive(name);
   const safeHub = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   return `<button type="button" class="price-badge ${live ? 'live' : 'est'}" data-hub="${safeHub}" onclick="showPriceSource(event,this.dataset.hub)" title="View data source">${live ? 'LIVE' : 'EST'}</button>`;
@@ -485,6 +512,10 @@ async function _fetchPriceHistory() {
 
 // Returns daily historical data for charts. Appends current tick price as latest point.
 function getChartHistory(hubName) {
+  // Tournament mode: return tournament-specific history for sector hubs
+  if (isTournamentMode() && isTournamentHub(hubName) && STATE.tournamentPriceHistory[hubName]) {
+    return STATE.tournamentPriceHistory[hubName];
+  }
   const daily = _historicalDaily[hubName];
   if (daily && daily.length > 0) {
     const current = priceHistory[hubName];
@@ -655,6 +686,10 @@ function findHub(name) {
 }
 
 function getPrice(name) {
+  // Tournament mode: return simulated price for tournament sector hubs
+  if (isTournamentMode() && isTournamentHub(name) && STATE.tournamentPrices[name] !== undefined) {
+    return STATE.tournamentPrices[name];
+  }
   const h = priceHistory[name];
   return h ? h[h.length - 1] : 0;
 }
@@ -842,6 +877,147 @@ document.addEventListener('click', function(e) {
     pop.style.display = 'none';
   }
 });
+
+/* =====================================================================
+   TOURNAMENT PRICE ENGINE
+   ===================================================================== */
+
+// Compute total news-driven price drift for a specific hub at this tick
+function getTournamentNewsDrift(hubName, currentPrice) {
+  var totalDrift = 0;
+  var now = Date.now();
+  var hasVolBurst = false;
+
+  for (var i = 0; i < STATE.tournamentNews.length; i++) {
+    var ev = STATE.tournamentNews[i];
+    if (ev.is_noise) continue;
+    var affectedHubs;
+    try {
+      affectedHubs = typeof ev.affected_hubs === 'string' ? JSON.parse(ev.affected_hubs) : (ev.affected_hubs || []);
+    } catch(e) {
+      affectedHubs = [];
+    }
+    if (affectedHubs.indexOf(hubName) === -1) continue;
+
+    var flashedAt = new Date(ev.flashed_at).getTime();
+    var delayMs = (ev.delay_seconds || 5) * 1000;
+    var elapsed = now - flashedAt - delayMs;
+    if (elapsed < 0) continue; // Still in delay period
+
+    var tickMs = 8000;
+    var ticksElapsed = Math.floor(elapsed / tickMs);
+    var duration = ev.duration_ticks || 5;
+    var pct = ev.impact_pct || 0;
+    var dir = ev.impact_direction === 'bullish' ? 1 : ev.impact_direction === 'bearish' ? -1 : 0;
+
+    switch (ev.impact_type) {
+      case 'shock':
+        // Full move in first 2 ticks then done
+        if (ticksElapsed < 2) {
+          totalDrift += currentPrice * (pct / 100) * dir * 0.5;
+        }
+        break;
+      case 'trend':
+        // Even drift spread across duration_ticks
+        if (ticksElapsed < duration) {
+          totalDrift += currentPrice * (pct / 100) * dir / duration;
+        }
+        break;
+      case 'spike_revert':
+        if (ticksElapsed < 2) {
+          // Spike phase: full magnitude in 2 ticks
+          totalDrift += currentPrice * (pct / 100) * dir * 0.5;
+        } else if (ticksElapsed < 2 + duration) {
+          // Revert phase: drift back ~65% over duration ticks
+          totalDrift += currentPrice * (pct / 100) * (-dir) * 0.65 / duration;
+        }
+        break;
+      case 'vol_burst':
+        // No directional drift — volatility multiplier handled in tickTournamentPrices
+        if (ticksElapsed < duration) {
+          hasVolBurst = true;
+        }
+        break;
+    }
+  }
+
+  return { drift: totalDrift, volBurst: hasVolBurst };
+}
+
+// Tick tournament prices — runs every 8 seconds for tournament sector hubs only
+function tickTournamentPrices() {
+  if (!isTournamentMode()) return;
+  var sector = STATE.tournamentSector;
+  var hubs = ALL_HUB_SETS[sector];
+  if (!hubs) return;
+
+  for (var i = 0; i < hubs.length; i++) {
+    var h = hubs[i];
+    var current = STATE.tournamentPrices[h.name];
+    if (current === undefined) continue;
+
+    // Base Brownian drift (same formula as tickPrices)
+    var baseDrift = (Math.random() - 0.5) * 2 * (h.base * h.vol / 100 / 15);
+
+    // Weather bias for NG/power
+    if ((sector === 'ng' || sector === 'power') && STATE.weatherBias[h.name]) {
+      baseDrift += current * STATE.weatherBias[h.name] * (0.3 + Math.random() * 0.4);
+    }
+
+    // News impact drift
+    var newsResult = getTournamentNewsDrift(h.name, current);
+    var newsDrift = newsResult.drift;
+
+    // Vol burst: multiply base drift by 4x
+    if (newsResult.volBurst) {
+      baseDrift *= 4;
+    }
+
+    var next = current + baseDrift + newsDrift;
+
+    // Power markets can go negative; others have a floor
+    var isPower = sector === 'power';
+    var priceFloor = isPower ? -h.base * 0.5 : h.base * 0.1;
+    if (next < priceFloor) next = priceFloor;
+
+    STATE.tournamentPrices[h.name] = next;
+
+    // Update history
+    var hist = STATE.tournamentPriceHistory[h.name];
+    if (hist) {
+      hist.push(next);
+      if (hist.length > 200) hist.shift();
+    }
+  }
+}
+
+// Initialize tournament prices from a snapshot (called when tournament_start is received)
+function initTournamentPrices(sector, priceSnapshot) {
+  var hubs = ALL_HUB_SETS[sector];
+  if (!hubs) return;
+  var snapshot = typeof priceSnapshot === 'string' ? JSON.parse(priceSnapshot) : (priceSnapshot || {});
+
+  for (var i = 0; i < hubs.length; i++) {
+    var h = hubs[i];
+    var seed = snapshot[h.name] || getPrice(h.name) || h.base;
+    STATE.tournamentPrices[h.name] = seed;
+    STATE.tournamentPriceHistory[h.name] = genHistory(seed, 60, h.vol * 0.3);
+  }
+}
+
+// Clean up tournament state when tournament ends
+function clearTournamentState() {
+  STATE.tournament = null;
+  STATE.tournamentMode = false;
+  STATE.tournamentSector = '';
+  STATE.tournamentPrices = {};
+  STATE.tournamentPriceHistory = {};
+  STATE.tournamentTrades = [];
+  STATE.tournamentNews = [];
+  STATE.tournamentNewsPublic = [];
+  STATE.tournamentDisqualified = false;
+  try { localStorage.removeItem(traderStorageKey('tournament_trades')); } catch(e) {}
+}
 
 function getSelectedHub(sector) { return STATE.selectedHubs[sector]; }
 function setSelectedHub(sector, name) { STATE.selectedHubs[sector] = name; renderCurrentPage(); }

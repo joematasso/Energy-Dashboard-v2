@@ -394,7 +394,7 @@ tr:hover td{background:var(--surface2)}
 <div class="section" id="sec-tournament">
   <div class="page-header">
     <h1>Tournaments</h1>
-    <p>Create time-bounded trading competitions. Standings are calculated from trades within the tournament window.</p>
+    <p>Create sector-specific trading competitions with simulated prices, timed rounds, and news events that move markets.</p>
   </div>
   <div class="summary-grid">
     <div class="summary-card"><div class="label">Active Tournament</div><div class="value green" id="tnActiveName">None</div></div>
@@ -402,38 +402,148 @@ tr:hover td{background:var(--surface2)}
     <div class="summary-card"><div class="label">Enrolled Traders</div><div class="value" id="tnEnrolled">0</div></div>
   </div>
 
+  <!-- Create Tournament -->
   <div class="card" style="margin-top:16px">
     <div class="card-header"><h3>Create Tournament</h3></div>
     <div class="card-body">
       <div class="form-row">
-        <div class="form-group"><label>Name</label><input type="text" id="tnName" placeholder="Q1 2026 Challenge"></div>
+        <div class="form-group"><label>Name</label><input type="text" id="tnName" placeholder="Q1 Crude Oil Challenge"></div>
         <div class="form-group"><label>Description</label><input type="text" id="tnDesc" placeholder="Optional description"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Start Date/Time (UTC)</label><input type="datetime-local" id="tnStart"></div>
-        <div class="form-group"><label>End Date/Time (UTC)</label><input type="datetime-local" id="tnEnd"></div>
+        <div class="form-group">
+          <label>Sector</label>
+          <select id="tnSector">
+            <option value="ng">Natural Gas</option>
+            <option value="crude" selected>Crude Oil</option>
+            <option value="power">Power</option>
+            <option value="freight">Freight</option>
+            <option value="ag">Agriculture</option>
+            <option value="metals">Metals</option>
+            <option value="ngls">NGLs</option>
+            <option value="lng">LNG</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Duration (minutes)</label><input type="number" id="tnDuration" value="60" min="5" max="480"></div>
         <div class="form-group"><label>Starting Balance ($)</label><input type="number" id="tnBalance" value="1000000" min="1000"></div>
+        <div class="form-group"><label>VaR Limit ($, 0=none)</label><input type="number" id="tnVarLimit" value="0" min="0"></div>
         <button class="btn btn-primary" onclick="createTournament()" style="height:36px;align-self:flex-end">Create</button>
       </div>
     </div>
   </div>
 
+  <!-- All Tournaments Table -->
   <div class="card" style="margin-top:16px">
     <div class="card-header"><h3>All Tournaments</h3><button class="btn btn-sm btn-ghost" onclick="loadTournaments()">↻ Refresh</button></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Name</th><th>Status</th><th>Start</th><th>End</th><th>Enrolled</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Sector</th><th>Status</th><th>Duration</th><th>Enrolled</th><th>Actions</th></tr></thead>
         <tbody id="tnTableBody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
 
+  <!-- Live Monitor (shown when tournament is ACTIVE) -->
+  <div id="tnLiveMonitor" style="display:none;margin-top:16px">
+    <div class="card" style="border:1px solid rgba(239,68,68,0.4)">
+      <div class="card-header" style="background:rgba(239,68,68,0.1)">
+        <h3 style="color:#ef4444">🔴 LIVE — <span id="tnLiveName"></span></h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="tnLiveCountdown" style="font-family:monospace;font-size:14px;color:#f59e0b"></span>
+          <button class="btn btn-sm btn-danger" onclick="endTournamentLive()">■ END NOW</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <!-- Standings -->
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-muted)">STANDINGS</h4>
+            <div id="tnLiveStandings" style="font-size:12px">Loading...</div>
+          </div>
+          <!-- Simulated Prices -->
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-muted)">NEWS EVENTS</h4>
+            <div id="tnLiveEvents" style="font-size:12px">No events yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- News Event Composer (shown for active tournament) -->
+  <div id="tnNewsComposer" style="display:none;margin-top:16px">
+    <div class="card">
+      <div class="card-header"><h3>Create News Event</h3></div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label>Quick Preset</label>
+            <select id="tnNewsPreset" onchange="applyNewsPreset()">
+              <option value="">Custom event...</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2"><label>Headline</label><input type="text" id="tnNewsHeadline" placeholder="OPEC+ Announces Emergency Cut"></div>
+          <div class="form-group" style="flex:2"><label>Details</label><input type="text" id="tnNewsDesc" placeholder="Optional description"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Impact Type</label>
+            <select id="tnNewsImpactType">
+              <option value="shock">Instant Shock</option>
+              <option value="trend">Gradual Trend</option>
+              <option value="spike_revert">Spike + Revert</option>
+              <option value="vol_burst">Volatility Burst</option>
+              <option value="none">None (Noise)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Direction</label>
+            <select id="tnNewsDirection">
+              <option value="bullish">Bullish ↑</option>
+              <option value="bearish">Bearish ↓</option>
+              <option value="neutral">Neutral</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Magnitude (%)</label><input type="number" id="tnNewsMagnitude" value="3" min="0" max="50" step="0.5"></div>
+          <div class="form-group"><label>Delay (sec)</label><input type="number" id="tnNewsDelay" value="5" min="1" max="30"></div>
+          <div class="form-group"><label>Duration (ticks)</label><input type="number" id="tnNewsDuration" value="5" min="1" max="20"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:3">
+            <label>Affected Hubs <span style="font-size:11px;color:var(--text-muted)">(check all that apply)</span></label>
+            <div id="tnNewsHubs" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+          </div>
+          <button class="btn btn-primary" onclick="createNewsEvent()" style="height:36px;align-self:flex-end">Create Event</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Queued Events -->
+  <div id="tnQueuedWrap" style="display:none;margin-top:16px">
+    <div class="card">
+      <div class="card-header"><h3>Queued Events</h3><span id="tnQueuedCount" style="font-size:12px;color:var(--text-muted)"></span></div>
+      <div class="card-body" id="tnQueuedList" style="font-size:13px">No events queued</div>
+    </div>
+  </div>
+
+  <!-- Flashed Events Log -->
+  <div id="tnFlashedWrap" style="display:none;margin-top:16px">
+    <div class="card">
+      <div class="card-header"><h3>Flashed Events</h3></div>
+      <div class="card-body" id="tnFlashedList" style="font-size:13px">No events flashed yet</div>
+    </div>
+  </div>
+
+  <!-- Standings -->
   <div id="tnStandingsWrap" style="display:none;margin-top:16px">
     <div class="card">
       <div class="card-header"><h3 id="tnStandingsTitle">Standings</h3><button class="btn btn-sm btn-ghost" onclick="document.getElementById('tnStandingsWrap').style.display='none'">✕ Close</button></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Trader</th><th>Team</th><th style="text-align:right">P&L</th><th style="text-align:right">Return</th><th style="text-align:right">Trades</th></tr></thead>
+          <thead><tr><th>#</th><th>Trader</th><th>Team</th><th style="text-align:right">P&L</th><th style="text-align:right">Return</th><th style="text-align:right">Trades</th><th>Status</th></tr></thead>
           <tbody id="tnStandingsBody"></tbody>
         </table>
       </div>
@@ -943,95 +1053,188 @@ function loadDashboard() {
 // TOURNAMENTS
 // ──────────────────────────────────────────────────────────────────
 let _tournaments = [];
+var _activeTournId = null;
+var _liveMonitorInterval = null;
+
+// Sector name map
+var SECTOR_NAMES = {ng:'Natural Gas',crude:'Crude Oil',power:'Power',freight:'Freight',ag:'Agriculture',metals:'Metals',ngls:'NGLs',lng:'LNG'};
+
+// ---- News Event Presets per Sector ----
+var NEWS_PRESETS = {
+  crude: [
+    {headline:'OPEC+ Announces Emergency Production Cut',desc:'Saudi Arabia leads coalition in surprise 1.5M bpd cut effective immediately.',type:'shock',dir:'bullish',pct:4,delay:3,dur:2,hubs_all:true},
+    {headline:'OPEC+ Agrees to Increase Output by 500K bpd',desc:'Compliance pressure leads to easing of production caps.',type:'trend',dir:'bearish',pct:3,delay:5,dur:10,hubs_all:true},
+    {headline:'Category 4 Hurricane Enters Gulf of Mexico',desc:'Refineries along the Gulf Coast begin precautionary shutdowns.',type:'spike_revert',dir:'bullish',pct:5,delay:3,dur:6,hubs:['WTI Cushing','Mars Blend','LLS']},
+    {headline:'Keystone Pipeline Shut Down After Leak',desc:'200,000 bpd of Canadian crude supply disrupted.',type:'shock',dir:'bullish',pct:2.5,delay:3,dur:2,hubs:['WTI Cushing','WTI Midland']},
+    {headline:'US Announces 50M Barrel SPR Release',desc:'Strategic Petroleum Reserve drawdown to ease market tightness.',type:'trend',dir:'bearish',pct:4,delay:5,dur:8,hubs:['WTI Cushing','WTI Midland']},
+    {headline:'China Manufacturing PMI Surges to 54.2',desc:'Stronger-than-expected industrial activity boosts demand outlook.',type:'trend',dir:'bullish',pct:1.5,delay:5,dur:10,hubs:['Brent Dated','Dubai Fateh']},
+    {headline:'US GDP Contracts -1.2% in Q1',desc:'Recession fears spike across commodity markets.',type:'shock',dir:'bearish',pct:5,delay:3,dur:2,hubs_all:true},
+    {headline:'API Reports Mixed Inventory Data',desc:'Crude builds offset by product draws; market uncertain.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+    {headline:'Red Sea Shipping Halted After Attack',desc:'Houthi strikes force vessels to divert around Cape of Good Hope.',type:'spike_revert',dir:'bullish',pct:4,delay:3,dur:6,hubs:['Brent Dated','Dubai Fateh']},
+  ],
+  ng: [
+    {headline:'Polar Vortex to Bring -30F to Northeast',desc:'NOAA issues extreme cold warning for next 10 days.',type:'shock',dir:'bullish',pct:12,delay:3,dur:2,hubs_all:true},
+    {headline:'NOAA Forecasts Above-Normal Temps Next 2 Weeks',desc:'Mild pattern expected to reduce heating demand.',type:'trend',dir:'bearish',pct:4,delay:5,dur:10,hubs_all:true},
+    {headline:'Freeport LNG Declares Force Majeure',desc:'Major export facility offline reduces domestic demand.',type:'spike_revert',dir:'bearish',pct:5,delay:3,dur:6,hubs:['Henry Hub','Waha']},
+    {headline:'EIA: Withdrawal of -200 Bcf vs -120 Expected',desc:'Massive storage surprise sends market into backwardation.',type:'shock',dir:'bullish',pct:4,delay:3,dur:2,hubs_all:true},
+    {headline:'Explosion Reported at Transco Station 65',desc:'Key pipeline infrastructure damaged, repairs estimated 2 weeks.',type:'spike_revert',dir:'bullish',pct:6,delay:3,dur:5,hubs:['Transco Zone 6','Algonquin']},
+    {headline:'Weather Models Show Normal Temps Through April',desc:'Shoulder season outlook benign for both heating and cooling.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ],
+  power: [
+    {headline:'Record Heat Wave: 115F Forecast for ERCOT',desc:'Texas grid faces highest demand ever recorded.',type:'shock',dir:'bullish',pct:15,delay:3,dur:2,hubs_all:true},
+    {headline:'CAISO Declares Stage 3 Emergency',desc:'Rolling blackouts imminent as reserve margin hits zero.',type:'spike_revert',dir:'bullish',pct:20,delay:2,dur:4,hubs:['CAISO SP15']},
+    {headline:'Wind Generation Exceeds 40GW Across ERCOT',desc:'Abundant renewable supply crashes power prices.',type:'trend',dir:'bearish',pct:8,delay:5,dur:10,hubs:['ERCOT Hub','ERCOT North']},
+    {headline:'1.1GW Nuclear Unit Trips in PJM',desc:'Unplanned outage tightens PJM supply.',type:'shock',dir:'bullish',pct:4,delay:3,dur:2,hubs:['PJM West']},
+    {headline:'Load Forecast Within 2% of Normal',desc:'Mild weather keeps power markets range-bound.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ],
+  freight: [
+    {headline:'Panama Canal Restricts Transit to 18 Vessels/Day',desc:'Drought reduces canal depth, backing up global shipping.',type:'shock',dir:'bullish',pct:6,delay:3,dur:2,hubs_all:true},
+    {headline:'China Iron Ore Imports Surge 15% YoY',desc:'Steel restocking drives dry bulk demand.',type:'trend',dir:'bullish',pct:3,delay:5,dur:10,hubs:['Baltic Dry Index','Capesize C5TC']},
+    {headline:'Global Fleet Expansion: 40 New Vessels Delivered',desc:'Supply glut pressures freight rates.',type:'trend',dir:'bearish',pct:4,delay:5,dur:10,hubs_all:true},
+    {headline:'Seasonal Grain Shipments on Schedule',desc:'Nothing unusual in agricultural freight demand.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ],
+  ag: [
+    {headline:'USDA Crop Report: Corn Yield Down 12% on Drought',desc:'Historic Midwest drought slashes corn production forecasts.',type:'shock',dir:'bullish',pct:8,delay:3,dur:2,hubs:['Corn (CBOT)']},
+    {headline:'Brazil Soybean Harvest Hits Record 170MT',desc:'Massive supply weighs on global oilseed markets.',type:'trend',dir:'bearish',pct:4,delay:5,dur:10,hubs:['Soybeans (CBOT)']},
+    {headline:'India Bans Wheat Exports Effective Immediately',desc:'Global wheat supply tightens on export restrictions.',type:'shock',dir:'bullish',pct:6,delay:3,dur:2,hubs:['Wheat (CBOT)']},
+    {headline:'WASDE Report Shows Minimal Changes',desc:'USDA monthly estimates largely in line with expectations.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ],
+  metals: [
+    {headline:'Fed Signals 50bp Emergency Rate Cut',desc:'Dovish pivot sends gold soaring on inflation expectations.',type:'shock',dir:'bullish',pct:3,delay:3,dur:2,hubs:['Gold (COMEX)','Silver (COMEX)']},
+    {headline:'Chilean Copper Mine Strike Enters Week 3',desc:'Escondida workers reject latest wage offer.',type:'trend',dir:'bullish',pct:5,delay:5,dur:10,hubs:['Copper (COMEX)']},
+    {headline:'Dollar Surges on Strong Jobs Data',desc:'Stronger dollar weighs on metals complex.',type:'trend',dir:'bearish',pct:2,delay:5,dur:8,hubs_all:true},
+    {headline:'COMEX Warehouse Stocks Steady',desc:'No notable changes in exchange inventories.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ],
+  ngls: [
+    {headline:'Mont Belvieu Ethane Surges on Cracker Restart',desc:'Major petrochemical plant returns from maintenance.',type:'shock',dir:'bullish',pct:5,delay:3,dur:2,hubs:['Ethane (C2)']},
+    {headline:'Propane Export Surge Tightens Domestic Supply',desc:'Record LPG exports to Asia draw down US inventories.',type:'trend',dir:'bullish',pct:3,delay:5,dur:8,hubs:['Propane (C3)']},
+    {headline:'EIA NGL Production Hits Record',desc:'Associated gas from Permian Basin floods NGL markets.',type:'trend',dir:'bearish',pct:4,delay:5,dur:10,hubs_all:true},
+    {headline:'Weekly NGL Storage Report In Line',desc:'No surprises in latest inventory data.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ],
+  lng: [
+    {headline:'Japan LNG Spot Tender Awarded at $18/MMBtu',desc:'Asian spot premiums surge on winter demand.',type:'shock',dir:'bullish',pct:6,delay:3,dur:2,hubs:['JKM (Platts)']},
+    {headline:'TTF Plummets as EU Storage Hits 95%',desc:'Comfortable European inventories crush near-term premiums.',type:'trend',dir:'bearish',pct:5,delay:5,dur:10,hubs:['TTF (ICE)','NBP (ICE)']},
+    {headline:'Sabine Pass Train 6 Achieves First LNG',desc:'New US export capacity adds to global supply.',type:'trend',dir:'bearish',pct:3,delay:5,dur:8,hubs:['HH Netback','JKM (Platts)']},
+    {headline:'LNG Shipping Rates Stable at $80K/day',desc:'No disruptions in global LNG tanker market.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
+  ]
+};
+
+// Hub arrays (mirrors state.js hub names)
+var ADMIN_HUB_SETS = {
+  ng:['Henry Hub','Waha','SoCal Gas','Chicago','Algonquin','Transco Zone 6','Dominion South','Dawn','Sumas'],
+  crude:['WTI Cushing','Brent Dated','Dubai Fateh','Mars Blend','WTI Midland','LLS','WCS Hardisty','Bakken Clearbrook'],
+  power:['ERCOT Hub','ERCOT North','PJM West','MISO Indiana','SPP South','CAISO SP15','NYISO Zone A','ISONE Mass'],
+  freight:['Baltic Dry Index','Capesize C5TC','Panamax P4TC','Supramax S10TC','Clean MR Atlantic','Dirty TD3 (VLCC)'],
+  ag:['Corn (CBOT)','Soybeans (CBOT)','Wheat (CBOT)','Cotton (ICE)','Coffee (ICE)','Sugar #11 (ICE)','Live Cattle (CME)','Lean Hogs (CME)'],
+  metals:['Gold (COMEX)','Silver (COMEX)','Copper (COMEX)','Platinum (NYMEX)','Palladium (NYMEX)'],
+  ngls:['Ethane (C2)','Propane (C3)','Normal Butane (C4)','Isobutane (iC4)','Natural Gasoline (C5+)','Purity Ethylene'],
+  lng:['JKM (Platts)','TTF (ICE)','NBP (ICE)','HH Netback','DES South America','Brent-Linked LNG']
+};
 
 function loadTournaments() {
   fetch('/api/admin/tournaments', {headers:{'X-Admin-Pin': adminPin}})
-    .then(r => r.json()).then(d => {
+    .then(function(r) { return r.json(); }).then(function(d) {
       if (!d.success) return;
       _tournaments = d.tournaments;
-      const active = _tournaments.find(t => t.status === 'ACTIVE');
+      var active = _tournaments.find(function(t) { return t.status === 'ACTIVE'; });
       document.getElementById('tnActiveName').textContent = active ? active.name : 'None';
       document.getElementById('tnActiveName').className = 'value ' + (active ? 'green' : '');
       document.getElementById('tnTotal').textContent = _tournaments.length;
-      const totalEnrolled = _tournaments.reduce((s, t) => s + (t.entry_count || 0), 0);
+      var totalEnrolled = _tournaments.reduce(function(s, t) { return s + (t.entry_count || 0); }, 0);
       document.getElementById('tnEnrolled').textContent = totalEnrolled;
 
-      document.getElementById('tnTableBody').innerHTML = _tournaments.map(t => {
-        const statusColor = t.status === 'ACTIVE' ? 'green' : t.status === 'ENDED' ? 'red' : '';
-        const start = t.start_time ? new Date(t.start_time + 'Z').toLocaleString() : '—';
-        const end = t.end_time ? new Date(t.end_time + 'Z').toLocaleString() : '—';
-        const canActivate = t.status === 'PENDING';
-        const canEnd = t.status === 'ACTIVE';
-        return `<tr>
-          <td style="font-weight:700">${t.name}<br><span style="font-size:11px;color:var(--text-muted)">${t.description || ''}</span></td>
-          <td><span class="badge ${statusColor}">${t.status}</span></td>
-          <td style="font-size:12px">${start}</td>
-          <td style="font-size:12px">${end}</td>
-          <td>${t.entry_count || 0}</td>
-          <td style="display:flex;gap:4px;flex-wrap:wrap">
-            ${canActivate ? `<button class="btn btn-sm btn-success" onclick="activateTournament(${t.id})">▶ Start</button>` : ''}
-            ${canEnd ? `<button class="btn btn-sm btn-warning" onclick="endTournament(${t.id})">■ End</button>` : ''}
-            <button class="btn btn-sm btn-ghost" onclick="enrollAllTraders(${t.id})">👥 Enroll All</button>
-            <button class="btn btn-sm btn-ghost" onclick="showTournamentStandings(${t.id}, '${t.name.replace(/'/g, "\'")}')">📊 Standings</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteTournament(${t.id})">✕</button>
-          </td>
-        </tr>`;
+      document.getElementById('tnTableBody').innerHTML = _tournaments.map(function(t) {
+        var statusColor = t.status === 'ACTIVE' ? 'green' : t.status === 'ENDED' ? 'red' : '';
+        var canStart = t.status === 'PENDING';
+        var canEnd = t.status === 'ACTIVE';
+        var sectorLabel = SECTOR_NAMES[t.sector] || t.sector || 'All';
+        var durLabel = (t.duration_minutes || 60) + 'min';
+        var safeName = (t.name || '').replace(/'/g, "\\'");
+        return '<tr>' +
+          '<td style="font-weight:700">' + t.name + '<br><span style="font-size:11px;color:var(--text-muted)">' + (t.description || '') + '</span></td>' +
+          '<td>' + sectorLabel + '</td>' +
+          '<td><span class="badge ' + statusColor + '">' + t.status + '</span></td>' +
+          '<td>' + durLabel + '</td>' +
+          '<td>' + (t.entry_count || 0) + '</td>' +
+          '<td style="display:flex;gap:4px;flex-wrap:wrap">' +
+            (canStart ? '<button class="btn btn-sm btn-success" onclick="startTournament(' + t.id + ')">▶ Start</button>' : '') +
+            (canEnd ? '<button class="btn btn-sm btn-warning" onclick="endTournamentById(' + t.id + ')">■ End</button>' : '') +
+            '<button class="btn btn-sm btn-ghost" onclick="enrollAllTraders(' + t.id + ')">👥 Enroll All</button>' +
+            '<button class="btn btn-sm btn-ghost" onclick="showTournamentStandings(' + t.id + ',\'' + safeName + '\')">📊 Standings</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteTournament(' + t.id + ')">✕</button>' +
+          '</td></tr>';
       }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">No tournaments yet.</td></tr>';
-    }).catch(() => {});
+
+      // Show/hide live monitor and news composer based on active tournament
+      if (active) {
+        _activeTournId = active.id;
+        showLiveMonitor(active);
+      } else {
+        _activeTournId = null;
+        hideLiveMonitor();
+      }
+    }).catch(function() {});
 }
 
 function createTournament() {
-  const name = document.getElementById('tnName').value.trim();
+  var name = document.getElementById('tnName').value.trim();
   if (!name) { showToast('Name is required', 'error'); return; }
-  const start = document.getElementById('tnStart').value;
-  const end = document.getElementById('tnEnd').value;
-  const balance = parseFloat(document.getElementById('tnBalance').value) || 1000000;
+  var balance = parseFloat(document.getElementById('tnBalance').value) || 1000000;
+  var sector = document.getElementById('tnSector').value;
+  var duration = parseInt(document.getElementById('tnDuration').value) || 60;
+  var varLimit = parseFloat(document.getElementById('tnVarLimit').value) || 0;
   fetch('/api/admin/tournaments', {
     method: 'POST', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
-    body: JSON.stringify({name, description: document.getElementById('tnDesc').value,
-      start_time: start ? start.replace('T', ' ') : null,
-      end_time: end ? end.replace('T', ' ') : null,
-      starting_balance: balance})
-  }).then(r => r.json()).then(d => {
+    body: JSON.stringify({name: name, description: document.getElementById('tnDesc').value,
+      starting_balance: balance, sector: sector, duration_minutes: duration, var_limit: varLimit})
+  }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.success) { showToast('Tournament created', 'success'); loadTournaments(); document.getElementById('tnName').value = ''; document.getElementById('tnDesc').value = ''; }
     else showToast(d.error || 'Error', 'error');
   });
 }
 
-function activateTournament(id) {
-  fetch('/api/admin/tournaments/' + id, {
-    method: 'PUT', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
-    body: JSON.stringify({status: 'ACTIVE'})
-  }).then(r => r.json()).then(d => {
-    if (d.success) { showToast('Tournament activated', 'success'); loadTournaments(); }
+function startTournament(id) {
+  // The start endpoint uses a price_snapshot from the client.
+  // Since admin.html doesn't have the price engine, send empty snapshot (server-side seeds from DB defaults).
+  // Traders' clients will seed from the tournament data.
+  fetch('/api/admin/tournaments/' + id + '/start', {
+    method: 'POST', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
+    body: JSON.stringify({price_snapshot: {}})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.success) { showToast('Tournament started! Traders will receive simulated prices.', 'success'); loadTournaments(); }
     else showToast(d.error || 'Error', 'error');
   });
 }
 
-function endTournament(id) {
-  fetch('/api/admin/tournaments/' + id, {
-    method: 'PUT', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
-    body: JSON.stringify({status: 'ENDED'})
-  }).then(r => r.json()).then(d => {
-    if (d.success) { showToast('Tournament ended', 'success'); loadTournaments(); }
+function endTournamentById(id) {
+  if (!confirm('End this tournament and finalize standings?')) return;
+  fetch('/api/admin/tournaments/' + id + '/end', {
+    method: 'POST', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
+    body: JSON.stringify({})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.success) { showToast('Tournament ended. Final standings computed.', 'success'); loadTournaments(); }
     else showToast(d.error || 'Error', 'error');
   });
+}
+
+function endTournamentLive() {
+  if (_activeTournId) endTournamentById(_activeTournId);
 }
 
 function enrollAllTraders(id) {
   fetch('/api/admin/tournaments/' + id + '/enroll-all', {
     method: 'POST', headers: {'X-Admin-Pin': adminPin}
-  }).then(r => r.json()).then(d => {
+  }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.success) { showToast('Enrolled ' + d.enrolled + ' traders', 'success'); loadTournaments(); }
     else showToast(d.error || 'Error', 'error');
   });
 }
 
 function deleteTournament(id) {
-  if (!confirm('Delete this tournament?')) return;
+  if (!confirm('Delete this tournament and all its data?')) return;
   fetch('/api/admin/tournaments/' + id, {
     method: 'DELETE', headers: {'X-Admin-Pin': adminPin}
-  }).then(r => r.json()).then(d => {
+  }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.success) { showToast('Deleted', 'success'); loadTournaments(); }
   });
 }
@@ -1039,25 +1242,246 @@ function deleteTournament(id) {
 function showTournamentStandings(id, name) {
   document.getElementById('tnStandingsTitle').textContent = '🏆 ' + name + ' — Standings';
   document.getElementById('tnStandingsWrap').style.display = 'block';
-  document.getElementById('tnStandingsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px">Loading…</td></tr>';
+  document.getElementById('tnStandingsBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px">Loading…</td></tr>';
   fetch('/api/tournament/' + id + '/standings', {headers:{'X-Admin-Pin':adminPin}})
-    .then(r => r.json()).then(d => {
+    .then(function(r) { return r.json(); }).then(function(d) {
       if (!d.success) return;
-      document.getElementById('tnStandingsBody').innerHTML = d.standings.map(s => {
-        const pnlColor = s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
-        const retStr = (s.ret_pct >= 0 ? '+' : '') + s.ret_pct.toFixed(2) + '%';
-        const pnlStr = (s.total_pnl >= 0 ? '+' : '') + '$' + Math.abs(s.total_pnl).toLocaleString('en-US', {maximumFractionDigits:0});
-        const medal = s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : s.rank;
-        return `<tr>
-          <td style="font-weight:700;font-size:16px">${medal}</td>
-          <td style="font-weight:600">${s.display_name}</td>
-          <td style="font-size:12px">${s.team_name ? '<span style="color:' + s.team_color + '">' + s.team_name + '</span>' : '—'}</td>
-          <td style="text-align:right;font-weight:700;color:${pnlColor}">${pnlStr}</td>
-          <td style="text-align:right;color:${pnlColor}">${retStr}</td>
-          <td style="text-align:right">${s.trades}</td>
-        </tr>`;
-      }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px">No standings yet.</td></tr>';
+      document.getElementById('tnStandingsBody').innerHTML = d.standings.map(function(s) {
+        var pnlColor = s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        var retStr = (s.ret_pct >= 0 ? '+' : '') + s.ret_pct.toFixed(2) + '%';
+        var pnlStr = (s.total_pnl >= 0 ? '+' : '') + '$' + Math.abs(s.total_pnl).toLocaleString('en-US', {maximumFractionDigits:0});
+        var medal = s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : s.rank;
+        var statusBadge = s.entry_status === 'DISQUALIFIED' ? '<span class="badge red" style="font-size:10px;margin-left:4px">DQ</span>' : '';
+        return '<tr>' +
+          '<td style="font-weight:700;font-size:16px">' + medal + '</td>' +
+          '<td style="font-weight:600">' + s.display_name + '</td>' +
+          '<td style="font-size:12px">' + (s.team_name ? '<span style="color:' + s.team_color + '">' + s.team_name + '</span>' : '—') + '</td>' +
+          '<td style="text-align:right;font-weight:700;color:' + pnlColor + '">' + pnlStr + '</td>' +
+          '<td style="text-align:right;color:' + pnlColor + '">' + retStr + '</td>' +
+          '<td style="text-align:right">' + s.trades + '</td>' +
+          '<td>' + (s.entry_status || 'ACTIVE') + statusBadge + '</td></tr>';
+      }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px">No standings yet.</td></tr>';
     });
+}
+
+// ---- Live Monitor ----
+function showLiveMonitor(tourn) {
+  document.getElementById('tnLiveMonitor').style.display = 'block';
+  document.getElementById('tnLiveName').textContent = tourn.name + ' (' + (SECTOR_NAMES[tourn.sector] || tourn.sector) + ')';
+  document.getElementById('tnNewsComposer').style.display = 'block';
+  document.getElementById('tnQueuedWrap').style.display = 'block';
+  document.getElementById('tnFlashedWrap').style.display = 'block';
+
+  // Populate hub checkboxes for news composer
+  populateNewsHubs(tourn.sector);
+  // Populate presets dropdown
+  populateNewsPresets(tourn.sector);
+
+  // Start countdown timer
+  if (_liveMonitorInterval) clearInterval(_liveMonitorInterval);
+  _liveMonitorInterval = setInterval(function() { updateLiveCountdown(tourn); }, 1000);
+  updateLiveCountdown(tourn);
+
+  // Load news events
+  loadNewsEvents(tourn.id);
+
+  // Auto-refresh standings every 15 seconds
+  refreshLiveStandings(tourn.id);
+  if (!_liveMonitorInterval._standings) {
+    _liveMonitorInterval._standings = setInterval(function() { refreshLiveStandings(tourn.id); }, 15000);
+  }
+}
+
+function hideLiveMonitor() {
+  document.getElementById('tnLiveMonitor').style.display = 'none';
+  document.getElementById('tnNewsComposer').style.display = 'none';
+  document.getElementById('tnQueuedWrap').style.display = 'none';
+  document.getElementById('tnFlashedWrap').style.display = 'none';
+  if (_liveMonitorInterval) { clearInterval(_liveMonitorInterval); _liveMonitorInterval = null; }
+}
+
+function updateLiveCountdown(tourn) {
+  var el = document.getElementById('tnLiveCountdown');
+  if (!el || !tourn.end_time) return;
+  var end = new Date(tourn.end_time + 'Z').getTime();
+  var remaining = Math.max(0, end - Date.now());
+  var min = Math.floor(remaining / 60000);
+  var sec = Math.floor((remaining % 60000) / 1000);
+  el.textContent = 'Time Remaining: ' + min + ':' + String(sec).padStart(2, '0');
+  if (remaining <= 0) {
+    el.textContent = 'ENDED';
+    el.style.color = '#ef4444';
+  }
+}
+
+function refreshLiveStandings(tid) {
+  fetch('/api/tournament/' + tid + '/standings', {headers:{'X-Admin-Pin':adminPin}})
+    .then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.success) return;
+      var el = document.getElementById('tnLiveStandings');
+      if (!el) return;
+      el.innerHTML = d.standings.map(function(s, i) {
+        var pnlColor = s.total_pnl >= 0 ? '#4ade80' : '#f87171';
+        var statusBadge = s.entry_status === 'DISQUALIFIED' ? ' <span style="color:#f87171">[DQ]</span>' : '';
+        return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05)">' +
+          '<span><strong>' + (i + 1) + '.</strong> ' + s.display_name + statusBadge + '</span>' +
+          '<span style="color:' + pnlColor + ';font-weight:600">' + (s.total_pnl >= 0 ? '+' : '') + '$' + Math.round(s.total_pnl).toLocaleString() + '</span></div>';
+      }).join('') || '<div style="color:var(--text-muted)">No entries yet</div>';
+    }).catch(function() {});
+}
+
+// ---- News Hub Checkboxes ----
+function populateNewsHubs(sector) {
+  var container = document.getElementById('tnNewsHubs');
+  if (!container) return;
+  var hubs = ADMIN_HUB_SETS[sector] || [];
+  container.innerHTML = hubs.map(function(h) {
+    return '<label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="tn-hub-cb" value="' + h + '" checked> ' + h + '</label>';
+  }).join('');
+}
+
+// ---- News Presets ----
+function populateNewsPresets(sector) {
+  var sel = document.getElementById('tnNewsPreset');
+  if (!sel) return;
+  var presets = NEWS_PRESETS[sector] || [];
+  sel.innerHTML = '<option value="">Custom event...</option>' +
+    presets.map(function(p, i) {
+      var tag = p.noise ? 'NOISE' : (p.type.toUpperCase() + ' ' + (p.dir === 'bullish' ? '↑' : p.dir === 'bearish' ? '↓' : '—') + ' ' + p.pct + '%');
+      return '<option value="' + i + '">[' + tag + '] ' + p.headline.substring(0, 50) + '</option>';
+    }).join('');
+}
+
+function applyNewsPreset() {
+  var sel = document.getElementById('tnNewsPreset');
+  var idx = parseInt(sel.value);
+  if (isNaN(idx)) return;
+  var active = _tournaments.find(function(t) { return t.status === 'ACTIVE'; });
+  var sector = active ? active.sector : 'crude';
+  var presets = NEWS_PRESETS[sector] || [];
+  var p = presets[idx];
+  if (!p) return;
+
+  document.getElementById('tnNewsHeadline').value = p.headline;
+  document.getElementById('tnNewsDesc').value = p.desc || '';
+  document.getElementById('tnNewsImpactType').value = p.noise ? 'none' : p.type;
+  document.getElementById('tnNewsDirection').value = p.dir;
+  document.getElementById('tnNewsMagnitude').value = p.pct;
+  document.getElementById('tnNewsDelay').value = p.delay;
+  document.getElementById('tnNewsDuration').value = p.dur;
+
+  // Check affected hubs
+  var cbs = document.querySelectorAll('#tnNewsHubs .tn-hub-cb');
+  if (p.hubs_all) {
+    cbs.forEach(function(cb) { cb.checked = true; });
+  } else if (p.hubs) {
+    cbs.forEach(function(cb) { cb.checked = p.hubs.indexOf(cb.value) !== -1; });
+  }
+}
+
+// ---- News CRUD ----
+function createNewsEvent() {
+  if (!_activeTournId) { showToast('No active tournament', 'error'); return; }
+  var headline = document.getElementById('tnNewsHeadline').value.trim();
+  if (!headline) { showToast('Headline is required', 'error'); return; }
+
+  var impactType = document.getElementById('tnNewsImpactType').value;
+  var isNoise = impactType === 'none';
+
+  var affectedHubs = [];
+  document.querySelectorAll('#tnNewsHubs .tn-hub-cb:checked').forEach(function(cb) {
+    affectedHubs.push(cb.value);
+  });
+
+  var body = {
+    headline: headline,
+    description: document.getElementById('tnNewsDesc').value || '',
+    impact_type: isNoise ? 'none' : impactType,
+    impact_direction: document.getElementById('tnNewsDirection').value,
+    impact_pct: parseFloat(document.getElementById('tnNewsMagnitude').value) || 0,
+    delay_seconds: parseInt(document.getElementById('tnNewsDelay').value) || 5,
+    duration_ticks: parseInt(document.getElementById('tnNewsDuration').value) || 5,
+    affected_hubs: JSON.stringify(affectedHubs),
+    is_noise: isNoise ? 1 : 0
+  };
+
+  fetch('/api/admin/tournaments/' + _activeTournId + '/news', {
+    method: 'POST', headers: {'Content-Type':'application/json','X-Admin-Pin':adminPin},
+    body: JSON.stringify(body)
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.success) {
+      showToast('Event queued', 'success');
+      document.getElementById('tnNewsHeadline').value = '';
+      document.getElementById('tnNewsDesc').value = '';
+      document.getElementById('tnNewsPreset').value = '';
+      loadNewsEvents(_activeTournId);
+    } else showToast(d.error || 'Error', 'error');
+  });
+}
+
+function loadNewsEvents(tid) {
+  fetch('/api/admin/tournaments/' + tid + '/news', {headers:{'X-Admin-Pin':adminPin}})
+    .then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.success) return;
+      var queued = d.events.filter(function(e) { return e.status === 'QUEUED'; });
+      var flashed = d.events.filter(function(e) { return e.status === 'FLASHED'; });
+
+      document.getElementById('tnQueuedCount').textContent = '(' + queued.length + ')';
+      var qHtml = queued.map(function(e) {
+        var affectedHubs;
+        try { affectedHubs = JSON.parse(e.affected_hubs || '[]'); } catch(x) { affectedHubs = []; }
+        var impactLabel = e.is_noise ? 'NOISE — no price impact' :
+          (e.impact_type || 'shock').toUpperCase() + ' ' +
+          (e.impact_direction === 'bullish' ? '↑' : e.impact_direction === 'bearish' ? '↓' : '—') +
+          ' ' + (e.impact_pct || 0) + '% | ' + (e.delay_seconds || 5) + 's delay | ' + (e.duration_ticks || 5) + ' ticks';
+        var hubsStr = affectedHubs.slice(0, 3).join(', ') + (affectedHubs.length > 3 ? ' +' + (affectedHubs.length - 3) + ' more' : '');
+        return '<div style="padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px">' +
+          '<div style="font-weight:700">"' + e.headline + '"</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + impactLabel + '</div>' +
+          (hubsStr ? '<div style="font-size:11px;color:var(--text-dim);margin-top:1px">' + hubsStr + '</div>' : '') +
+          '<div style="display:flex;gap:6px;margin-top:6px">' +
+            '<button class="btn btn-sm btn-warning" onclick="flashNewsEvent(' + e.id + ')" style="font-weight:700">⚡ FLASH</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteNewsEvent(' + e.id + ')">✕ Delete</button>' +
+          '</div></div>';
+      }).join('');
+      document.getElementById('tnQueuedList').innerHTML = qHtml || '<div style="color:var(--text-muted)">No events queued. Create one above.</div>';
+
+      // Update live monitor events section
+      var eventsEl = document.getElementById('tnLiveEvents');
+      if (eventsEl) {
+        eventsEl.innerHTML = '<div style="margin-bottom:4px;font-size:11px;color:var(--text-dim)">Queued: ' + queued.length + ' | Flashed: ' + flashed.length + '</div>' + qHtml;
+      }
+
+      var fHtml = flashed.map(function(e) {
+        var t = e.flashed_at ? new Date(e.flashed_at + 'Z').toLocaleTimeString() : '';
+        var impactLabel = e.is_noise ? 'NOISE' :
+          (e.impact_type || '').toUpperCase() + ' ' +
+          (e.impact_direction === 'bullish' ? '↑' : e.impact_direction === 'bearish' ? '↓' : '—') + ' ' + (e.impact_pct || 0) + '%';
+        return '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05)">' +
+          '<span style="color:#f59e0b">⚡ ' + t + '</span> — "' + e.headline + '" <span style="color:var(--text-dim);font-size:11px">' + impactLabel + '</span></div>';
+      }).join('');
+      document.getElementById('tnFlashedList').innerHTML = fHtml || '<div style="color:var(--text-muted)">No events flashed yet.</div>';
+    }).catch(function() {});
+}
+
+function flashNewsEvent(nid) {
+  if (!_activeTournId) return;
+  fetch('/api/admin/tournaments/' + _activeTournId + '/news/' + nid + '/flash', {
+    method: 'POST', headers: {'X-Admin-Pin':adminPin}
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.success) { showToast('⚡ Event FLASHED to all traders!', 'success'); loadNewsEvents(_activeTournId); }
+    else showToast(d.error || 'Error', 'error');
+  });
+}
+
+function deleteNewsEvent(nid) {
+  if (!_activeTournId) return;
+  fetch('/api/admin/tournaments/' + _activeTournId + '/news/' + nid, {
+    method: 'DELETE', headers: {'X-Admin-Pin':adminPin}
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.success) { showToast('Event deleted', 'success'); loadNewsEvents(_activeTournId); }
+    else showToast(d.error || 'Error', 'error');
+  });
 }
 
 </script>

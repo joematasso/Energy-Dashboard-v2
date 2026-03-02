@@ -592,6 +592,11 @@ function runTickEngines() {
   checkMarginLevels();
   checkAlerts();
   checkCalendarAlerts();
+  // Tournament engines
+  if (typeof tickTournamentPrices === 'function') tickTournamentPrices();
+  if (typeof checkTournamentVaR === 'function') checkTournamentVaR();
+  if (typeof checkTournamentTimer === 'function') checkTournamentTimer();
+  if (typeof processStopLossTournament === 'function') processStopLossTournament();
 }
 
 /* =====================================================================
@@ -960,5 +965,181 @@ async function loadRecentBroadcasts() {
       renderNotifPanel();
     }
   } catch(e) {}
+}
+
+/* =====================================================================
+   TOURNAMENT ENGINES — VaR check, timer, stop-loss, force-close
+   ===================================================================== */
+
+// Check tournament timer — auto-end when time expires
+function checkTournamentTimer() {
+  if (typeof isTournamentMode !== 'function' || !isTournamentMode()) return;
+  if (!STATE.tournament || !STATE.tournament.end_time) return;
+  var endTime = new Date(STATE.tournament.end_time).getTime();
+  if (Date.now() >= endTime) {
+    // Auto-end: force close positions and show results
+    forceCloseTournamentPositions('TOURNAMENT_ENDED');
+  }
+}
+
+// Check VaR against tournament limit
+function checkTournamentVaR() {
+  if (typeof isTournamentMode !== 'function' || !isTournamentMode()) return;
+  if (!STATE.tournament || !STATE.tournament.var_limit || STATE.tournament.var_limit <= 0) return;
+  if (STATE.tournamentDisqualified) return;
+
+  // Calculate parametric VaR(95%) from open tournament positions
+  var openTrades = STATE.tournamentTrades.filter(function(t) { return t.status === 'OPEN'; });
+  if (openTrades.length === 0) return;
+
+  var totalVar = 0;
+  for (var i = 0; i < openTrades.length; i++) {
+    var t = openTrades[i];
+    var price = getPrice(t.hub);
+    if (!price || price <= 0) continue;
+    var vol = parseFloat(t.volume) || 0;
+    var notional = price * vol;
+    // Simple parametric VaR: 1.65 * daily_vol * sqrt(1) * notional
+    var hub = findHub(t.hub);
+    var dailyVol = hub ? (hub.vol / 100 / Math.sqrt(252)) : 0.02;
+    var posVar = 1.65 * dailyVol * notional;
+    totalVar += posVar;
+  }
+
+  if (totalVar > STATE.tournament.var_limit) {
+    // Disqualify
+    STATE.tournamentDisqualified = true;
+    addNotification('tournament', 'DISQUALIFIED', 'VaR $' + Math.round(totalVar).toLocaleString() + ' exceeded limit $' + Math.round(STATE.tournament.var_limit).toLocaleString());
+    toast('Tournament DISQUALIFIED — VaR limit exceeded', 'error');
+    // Force close all open positions
+    forceCloseTournamentPositions('VAR_LIMIT_EXCEEDED');
+    // Notify server
+    if (STATE.trader && STATE.tournament) {
+      fetch(API_BASE + '/api/tournament/' + STATE.tournament.id + '/disqualify/' + STATE.trader.trader_name, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'VAR_LIMIT_EXCEEDED', var_amount: Math.round(totalVar) })
+      }).catch(function() {});
+    }
+    if (typeof _showTournamentDQ === 'function') _showTournamentDQ();
+  }
+}
+
+// Process stop-loss and take-profit on tournament trades
+function processStopLossTournament() {
+  if (typeof isTournamentMode !== 'function' || !isTournamentMode()) return;
+  var changed = false;
+  STATE.tournamentTrades.forEach(function(t) {
+    if (t.status !== 'OPEN') return;
+    var price = getPrice(t.hub);
+    if (!price || price <= 0) return;
+    var entry = parseFloat(t.entryPrice) || 0;
+    var vol = parseFloat(t.volume) || 0;
+
+    // Check stop-loss
+    if (t.stopLoss) {
+      var sl = parseFloat(t.stopLoss);
+      if ((t.direction === 'BUY' && price <= sl) || (t.direction === 'SELL' && price >= sl)) {
+        _closeTournamentTrade(t, price, 'STOP_LOSS');
+        changed = true;
+        return;
+      }
+    }
+    // Check take-profit
+    if (t.takeProfit) {
+      var tp = parseFloat(t.takeProfit);
+      if ((t.direction === 'BUY' && price >= tp) || (t.direction === 'SELL' && price <= tp)) {
+        _closeTournamentTrade(t, price, 'TAKE_PROFIT');
+        changed = true;
+        return;
+      }
+    }
+  });
+  if (changed) {
+    localStorage.setItem(traderStorageKey('tournament_trades'), JSON.stringify(STATE.tournamentTrades));
+  }
+}
+
+function _closeTournamentTrade(trade, closePrice, reason) {
+  trade.status = 'CLOSED';
+  trade.closePrice = closePrice;
+  trade.closedAt = new Date().toISOString();
+  trade.closeReason = reason || 'MANUAL';
+  var entry = parseFloat(trade.entryPrice) || 0;
+  var vol = parseFloat(trade.volume) || 0;
+  var mult = trade.direction === 'BUY' ? 1 : -1;
+  trade.realizedPnl = (closePrice - entry) * vol * mult;
+  // Sync to server
+  if (STATE.trader && STATE.tournament) {
+    fetch(API_BASE + '/api/tournament/' + STATE.tournament.id + '/trade/' + STATE.trader.trader_name + '/' + trade.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'CLOSED', closePrice: closePrice, realizedPnl: trade.realizedPnl, closeReason: reason })
+    }).catch(function() {});
+  }
+}
+
+// Force close ALL open tournament positions
+function forceCloseTournamentPositions(reason) {
+  var closedTrades = [];
+  STATE.tournamentTrades.forEach(function(t) {
+    if (t.status !== 'OPEN') return;
+    var price = getPrice(t.hub);
+    if (!price) price = parseFloat(t.entryPrice) || 0;
+    _closeTournamentTrade(t, price, reason);
+    closedTrades.push({ trade_id: t.id, closePrice: price, realizedPnl: t.realizedPnl, closeReason: reason });
+  });
+  localStorage.setItem(traderStorageKey('tournament_trades'), JSON.stringify(STATE.tournamentTrades));
+  // Bulk sync to server
+  if (STATE.trader && STATE.tournament && closedTrades.length > 0) {
+    fetch(API_BASE + '/api/tournament/' + STATE.tournament.id + '/force-close/' + STATE.trader.trader_name, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trades: closedTrades })
+    }).catch(function() {});
+  }
+  if (typeof renderCurrentPage === 'function') renderCurrentPage();
+}
+
+// Show tournament breaking news overlay
+function showTournamentBreakingNews(headline, description) {
+  var el = document.getElementById('tournamentBreaking');
+  if (!el) return;
+  el.innerHTML = '<span class="tb-icon">⚡</span><span class="tb-headline">BREAKING: ' +
+    headline.replace(/</g, '&lt;') + '</span>' +
+    (description ? '<div class="tb-desc">' + description.replace(/</g, '&lt;') + '</div>' : '');
+  el.classList.add('show');
+  // Auto-dismiss after 8 seconds
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(function() { el.classList.remove('show'); }, 8000);
+}
+
+// Show tournament results modal
+function showTournamentResults(data) {
+  var standings = data.standings || [];
+  var existing = document.getElementById('tournamentResultsOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'tournamentResultsOverlay';
+  overlay.className = 'tourn-results-overlay';
+  var medals = ['🥇', '🥈', '🥉'];
+  var rows = standings.map(function(s, i) {
+    var medal = i < 3 ? '<span class="tourn-medal">' + medals[i] + '</span>' : '<span style="display:inline-block;width:24px;text-align:center">' + (i + 1) + '</span>';
+    var pnlColor = s.total_pnl >= 0 ? '#4ade80' : '#f87171';
+    var statusBadge = s.entry_status === 'DISQUALIFIED' ? ' <span style="color:#f87171;font-size:10px">DQ</span>' : '';
+    return '<tr><td>' + medal + '</td><td>' + (s.trader_name || '').replace(/</g,'&lt;') + statusBadge + '</td>' +
+      '<td style="color:' + pnlColor + '">' + (s.total_pnl >= 0 ? '+' : '') + '$' + Math.round(s.total_pnl).toLocaleString() + '</td>' +
+      '<td>' + (s.trades || 0) + '</td></tr>';
+  }).join('');
+
+  overlay.innerHTML = '<div class="tourn-results-modal">' +
+    '<h2>Tournament Complete</h2>' +
+    '<table style="width:100%;border-collapse:collapse">' +
+    '<thead><tr><th>#</th><th>Trader</th><th>P&L</th><th>Trades</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>' +
+    '<div style="text-align:center;margin-top:16px"><button onclick="this.closest(\'.tourn-results-overlay\').remove()" style="padding:8px 20px;border-radius:6px;border:1px solid #475569;background:#334155;color:#e2e8f0;cursor:pointer">Close</button></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
 }
 

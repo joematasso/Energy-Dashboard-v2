@@ -1213,6 +1213,58 @@ if(typeof io !== 'undefined') {
           renderCurrentPage();
         }
       });
+      // ---- Tournament WebSocket Events ----
+      sock.on('tournament_start', function(data) {
+        STATE.tournament = data;
+        STATE.tournamentSector = data.sector || '';
+        STATE.tournamentMode = !!data.sector;
+        STATE.tournamentDisqualified = false;
+        STATE.tournamentTrades = [];
+        STATE.tournamentNews = [];
+        STATE.tournamentNewsPublic = [];
+        // Seed price engine from snapshot
+        if (data.price_snapshot && data.sector && typeof initTournamentPrices === 'function') {
+          initTournamentPrices(data.sector, data.price_snapshot);
+        }
+        if (typeof addNotification === 'function') addNotification('tournament', 'Tournament Started!', data.name + ' — ' + (data.sector || 'all').toUpperCase());
+        toast('Tournament started: ' + data.name, 'info');
+        if (typeof _updateTournamentLockIndicator === 'function') _updateTournamentLockIndicator();
+        if (typeof renderCurrentPage === 'function') renderCurrentPage();
+      });
+      sock.on('tournament_end', function(data) {
+        if (typeof showTournamentResults === 'function') showTournamentResults(data);
+        if (typeof addNotification === 'function') addNotification('tournament', 'Tournament Ended', 'Final standings available');
+        toast('Tournament ended!', 'info');
+        if (typeof clearTournamentState === 'function') clearTournamentState();
+        if (typeof _updateTournamentLockIndicator === 'function') _updateTournamentLockIndicator();
+        if (typeof renderCurrentPage === 'function') renderCurrentPage();
+      });
+      sock.on('tournament_news_flash', function(data) {
+        // Full impact params — for price engine only
+        STATE.tournamentNews.push(data);
+      });
+      sock.on('tournament_news_public', function(data) {
+        // Headline only — display to traders
+        STATE.tournamentNewsPublic.push(data);
+        if (typeof addNotification === 'function') addNotification('tournament', 'BREAKING NEWS', data.headline);
+        if (typeof showTournamentBreakingNews === 'function') showTournamentBreakingNews(data.headline, data.description || '');
+        if (typeof renderCurrentPage === 'function') renderCurrentPage();
+      });
+      sock.on('tournament_disqualify', function(data) {
+        if (STATE.trader && data.trader_name === STATE.trader.trader_name) {
+          STATE.tournamentDisqualified = true;
+          if (typeof addNotification === 'function') addNotification('tournament', 'DISQUALIFIED', data.reason || 'VaR limit exceeded');
+          toast('You have been disqualified from the tournament', 'error');
+          if (typeof _showTournamentDQ === 'function') _showTournamentDQ();
+        }
+        if (typeof renderCurrentPage === 'function') renderCurrentPage();
+      });
+      sock.on('tournament_update', function(data) {
+        // Existing handler — refresh tournament data
+        if (typeof fetchActiveTournament === 'function') fetchActiveTournament();
+      });
+      // ---- End Tournament Events ----
+
       sock.on('presence_change', function(data) {
         if (data.online) CHAT_STATE.onlineTraders.add(data.trader);
         else CHAT_STATE.onlineTraders.delete(data.trader);

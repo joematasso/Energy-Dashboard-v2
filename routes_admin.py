@@ -7,7 +7,7 @@ import io
 import random
 import sqlite3
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify, Response
 
@@ -657,9 +657,12 @@ def create_tournament():
         return jsonify({'success': False, 'error': 'Name is required'}), 400
     db = get_db()
     cur = db.execute(
-        "INSERT INTO tournaments (name, description, start_time, end_time, starting_balance) VALUES (?,?,?,?,?)",
+        "INSERT INTO tournaments (name, description, start_time, end_time, starting_balance, sector, duration_minutes, var_limit) VALUES (?,?,?,?,?,?,?,?)",
         (name, data.get('description', ''), data.get('start_time'), data.get('end_time'),
-         float(data.get('starting_balance', 1000000)))
+         float(data.get('starting_balance', 1000000)),
+         data.get('sector', ''),
+         int(data.get('duration_minutes', 60)),
+         float(data.get('var_limit', 0)))
     )
     db.commit()
     return jsonify({'success': True, 'id': cur.lastrowid})
@@ -680,14 +683,18 @@ def update_tournament(tid):
     start_time = data.get('start_time', row['start_time'])
     end_time = data.get('end_time', row['end_time'])
     balance = float(data.get('starting_balance', row['starting_balance']))
+    sector = data.get('sector', row['sector'] or '')
+    duration_minutes = int(data.get('duration_minutes', row['duration_minutes'] or 60))
+    var_limit = float(data.get('var_limit', row['var_limit'] or 0))
 
     # Auto-set start_time when activating
     if status == 'ACTIVE' and row['status'] == 'PENDING' and not start_time:
         start_time = datetime.utcnow().isoformat()
 
     db.execute(
-        "UPDATE tournaments SET name=?, description=?, status=?, start_time=?, end_time=?, starting_balance=? WHERE id=?",
-        (name, desc, status, start_time, end_time, balance, tid)
+        "UPDATE tournaments SET name=?, description=?, status=?, start_time=?, end_time=?, "
+        "starting_balance=?, sector=?, duration_minutes=?, var_limit=? WHERE id=?",
+        (name, desc, status, start_time, end_time, balance, sector, duration_minutes, var_limit, tid)
     )
     db.commit()
     socketio.emit('tournament_update', {'id': tid, 'status': status})
@@ -698,6 +705,8 @@ def update_tournament(tid):
 @admin_required
 def delete_tournament(tid):
     db = get_db()
+    db.execute("DELETE FROM tournament_news_events WHERE tournament_id=?", (tid,))
+    db.execute("DELETE FROM tournament_trades WHERE tournament_id=?", (tid,))
     db.execute("DELETE FROM tournament_entries WHERE tournament_id=?", (tid,))
     db.execute("DELETE FROM tournaments WHERE id=?", (tid,))
     db.commit()
@@ -754,7 +763,8 @@ def get_tournament_standings(tid):
         prices = {}
 
     entries = db.execute(
-        "SELECT e.trader_name, t.display_name, t.photo_url, tm.name as team_name, tm.color as team_color "
+        "SELECT e.trader_name, e.status as entry_status, t.display_name, t.photo_url, "
+        "tm.name as team_name, tm.color as team_color "
         "FROM tournament_entries e "
         "JOIN traders t ON e.trader_name = t.trader_name "
         "LEFT JOIN teams tm ON t.team_id = tm.id "
@@ -764,10 +774,16 @@ def get_tournament_standings(tid):
     start = tourn['start_time']
     end = tourn['end_time'] or datetime.utcnow().isoformat()
     balance = tourn['starting_balance']
+    use_tournament_trades = bool(tourn['sector'])
 
     standings = []
     for e in entries:
-        if start:
+        if use_tournament_trades:
+            trades = db.execute(
+                "SELECT trade_data FROM tournament_trades WHERE tournament_id=? AND trader_name=?",
+                (tid, e['trader_name'])
+            ).fetchall()
+        elif start:
             trades = db.execute(
                 "SELECT trade_data FROM trades WHERE trader_name=? AND created_at>=? AND created_at<=?",
                 (e['trader_name'], start, end)
@@ -807,6 +823,7 @@ def get_tournament_standings(tid):
             'photo_url': e['photo_url'] or '',
             'team_name': e['team_name'] or '',
             'team_color': e['team_color'] or '#888',
+            'entry_status': e['entry_status'] or 'ACTIVE',
             'equity': round(equity, 2),
             'total_pnl': round(total_pnl, 2),
             'realized_pnl': round(realized, 2),
@@ -824,6 +841,342 @@ def get_tournament_standings(tid):
         'tournament': dict(tourn),
         'standings': standings,
     })
+
+
+# ---------------------------------------------------------------------------
+# Tournament Lifecycle — Start / End
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/admin/tournaments/<int:tid>/start', methods=['POST'])
+@admin_required
+def start_tournament(tid):
+    """Start a tournament: snapshot prices, set times, activate."""
+    db = get_db()
+    row = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    if row['status'] != 'PENDING':
+        return jsonify({'success': False, 'error': 'Tournament must be PENDING to start'}), 400
+
+    data = request.get_json() or {}
+    price_snapshot = data.get('price_snapshot', '{}')
+    if isinstance(price_snapshot, dict):
+        price_snapshot = json.dumps(price_snapshot)
+
+    now = datetime.utcnow()
+    duration = row['duration_minutes'] or 60
+    start_time = now.isoformat()
+    end_time = (now + timedelta(minutes=duration)).isoformat()
+
+    db.execute(
+        "UPDATE tournaments SET status='ACTIVE', start_time=?, end_time=?, price_snapshot=? WHERE id=?",
+        (start_time, end_time, price_snapshot, tid)
+    )
+    db.commit()
+
+    tourn = dict(db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone())
+    tourn['entry_count'] = db.execute(
+        "SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id=?", (tid,)
+    ).fetchone()['c']
+
+    socketio.emit('tournament_start', tourn)
+    return jsonify({'success': True, 'tournament': tourn})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>/end', methods=['POST'])
+@admin_required
+def end_tournament(tid):
+    """End a tournament: finalize standings, update entries."""
+    db = get_db()
+    row = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    if row['status'] != 'ACTIVE':
+        return jsonify({'success': False, 'error': 'Tournament must be ACTIVE to end'}), 400
+
+    now = datetime.utcnow().isoformat()
+    db.execute("UPDATE tournaments SET status='ENDED', end_time=? WHERE id=?", (now, tid))
+
+    # Finalize entry stats from tournament_trades
+    entries = db.execute("SELECT * FROM tournament_entries WHERE tournament_id=?", (tid,)).fetchall()
+    balance = row['starting_balance']
+    standings = []
+    for e in entries:
+        trades = db.execute(
+            "SELECT trade_data FROM tournament_trades WHERE tournament_id=? AND trader_name=?",
+            (tid, e['trader_name'])
+        ).fetchall()
+        realized = 0.0
+        trade_count = 0
+        for tr in trades:
+            try:
+                td = json.loads(tr['trade_data'])
+            except Exception:
+                continue
+            trade_count += 1
+            if td.get('status') == 'CLOSED':
+                realized += float(td.get('realizedPnl', 0) or 0)
+        total_pnl = realized
+        equity = balance + total_pnl
+        entry_status = e['status'] if e['status'] == 'DISQUALIFIED' else 'COMPLETED'
+        db.execute(
+            "UPDATE tournament_entries SET final_pnl=?, final_equity=?, trade_count=?, status=? "
+            "WHERE tournament_id=? AND trader_name=?",
+            (round(total_pnl, 2), round(equity, 2), trade_count, entry_status, tid, e['trader_name'])
+        )
+        standings.append({
+            'trader_name': e['trader_name'],
+            'total_pnl': round(total_pnl, 2),
+            'equity': round(equity, 2),
+            'trades': trade_count,
+            'entry_status': entry_status,
+        })
+    db.commit()
+
+    standings.sort(key=lambda x: x['total_pnl'], reverse=True)
+    for i, s in enumerate(standings):
+        s['rank'] = i + 1
+
+    socketio.emit('tournament_end', {'id': tid, 'standings': standings, 'reason': 'admin'})
+    return jsonify({'success': True, 'standings': standings})
+
+
+# ---------------------------------------------------------------------------
+# Tournament News Events — CRUD + Flash
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/admin/tournaments/<int:tid>/news', methods=['GET'])
+@admin_required
+def list_tournament_news(tid):
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM tournament_news_events WHERE tournament_id=? ORDER BY queued_at DESC", (tid,)
+    ).fetchall()
+    events = []
+    for r in rows:
+        ev = dict(r)
+        try:
+            ev['affected_hubs'] = json.loads(ev.get('affected_hubs', '[]'))
+        except Exception:
+            ev['affected_hubs'] = []
+        events.append(ev)
+    return jsonify({'success': True, 'events': events})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>/news', methods=['POST'])
+@admin_required
+def create_tournament_news(tid):
+    db = get_db()
+    if not db.execute("SELECT id FROM tournaments WHERE id=?", (tid,)).fetchone():
+        return jsonify({'success': False, 'error': 'Tournament not found'}), 404
+
+    data = request.get_json()
+    headline = (data.get('headline') or '').strip()
+    if not headline:
+        return jsonify({'success': False, 'error': 'Headline is required'}), 400
+
+    affected_hubs = data.get('affected_hubs', [])
+    if isinstance(affected_hubs, list):
+        affected_hubs = json.dumps(affected_hubs)
+
+    cur = db.execute(
+        "INSERT INTO tournament_news_events "
+        "(tournament_id, headline, description, category, impact_type, impact_direction, "
+        "impact_pct, delay_seconds, duration_ticks, affected_hubs, is_noise) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (tid, headline, data.get('description', ''),
+         data.get('category', 'general'),
+         data.get('impact_type', 'shock'),
+         data.get('impact_direction', 'neutral'),
+         float(data.get('impact_pct', 0)),
+         int(data.get('delay_seconds', 5)),
+         int(data.get('duration_ticks', 5)),
+         affected_hubs,
+         1 if data.get('is_noise') else 0)
+    )
+    db.commit()
+    return jsonify({'success': True, 'id': cur.lastrowid})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>/news/<int:nid>', methods=['PUT'])
+@admin_required
+def update_tournament_news(tid, nid):
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM tournament_news_events WHERE id=? AND tournament_id=?", (nid, tid)
+    ).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    if row['status'] == 'FLASHED':
+        return jsonify({'success': False, 'error': 'Cannot edit flashed events'}), 400
+
+    data = request.get_json()
+    affected_hubs = data.get('affected_hubs', json.loads(row['affected_hubs'] or '[]'))
+    if isinstance(affected_hubs, list):
+        affected_hubs = json.dumps(affected_hubs)
+
+    db.execute(
+        "UPDATE tournament_news_events SET headline=?, description=?, category=?, impact_type=?, "
+        "impact_direction=?, impact_pct=?, delay_seconds=?, duration_ticks=?, affected_hubs=?, is_noise=? "
+        "WHERE id=?",
+        (data.get('headline', row['headline']),
+         data.get('description', row['description']),
+         data.get('category', row['category']),
+         data.get('impact_type', row['impact_type']),
+         data.get('impact_direction', row['impact_direction']),
+         float(data.get('impact_pct', row['impact_pct'])),
+         int(data.get('delay_seconds', row['delay_seconds'])),
+         int(data.get('duration_ticks', row['duration_ticks'])),
+         affected_hubs,
+         1 if data.get('is_noise', row['is_noise']) else 0,
+         nid)
+    )
+    db.commit()
+    return jsonify({'success': True})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>/news/<int:nid>', methods=['DELETE'])
+@admin_required
+def delete_tournament_news(tid, nid):
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM tournament_news_events WHERE id=? AND tournament_id=?", (nid, tid)
+    ).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    db.execute("DELETE FROM tournament_news_events WHERE id=?", (nid,))
+    db.commit()
+    return jsonify({'success': True})
+
+
+@admin_bp.route('/api/admin/tournaments/<int:tid>/news/<int:nid>/flash', methods=['POST'])
+@admin_required
+def flash_tournament_news(tid, nid):
+    """Flash a queued news event — sends it to all clients."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM tournament_news_events WHERE id=? AND tournament_id=?", (nid, tid)
+    ).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    if row['status'] == 'FLASHED':
+        return jsonify({'success': False, 'error': 'Already flashed'}), 400
+
+    now = datetime.utcnow().isoformat()
+    db.execute(
+        "UPDATE tournament_news_events SET status='FLASHED', flashed_at=? WHERE id=?",
+        (now, nid)
+    )
+    db.commit()
+
+    try:
+        affected_hubs = json.loads(row['affected_hubs'] or '[]')
+    except Exception:
+        affected_hubs = []
+
+    # Full event with impact params — for price engine
+    socketio.emit('tournament_news_flash', {
+        'event_id': nid,
+        'tournament_id': tid,
+        'headline': row['headline'],
+        'description': row['description'],
+        'category': row['category'],
+        'impact_type': row['impact_type'],
+        'impact_direction': row['impact_direction'],
+        'impact_pct': row['impact_pct'],
+        'delay_seconds': row['delay_seconds'],
+        'duration_ticks': row['duration_ticks'],
+        'affected_hubs': affected_hubs,
+        'is_noise': bool(row['is_noise']),
+        'flashed_at': now,
+    })
+
+    # Public event — headline only, no impact params (traders can't see signal vs noise)
+    socketio.emit('tournament_news_public', {
+        'event_id': nid,
+        'tournament_id': tid,
+        'headline': row['headline'],
+        'description': row['description'],
+        'flashed_at': now,
+    })
+
+    return jsonify({'success': True})
+
+
+# Public: flashed news feed (no admin auth)
+@admin_bp.route('/api/tournament/<int:tid>/news/feed', methods=['GET'])
+def tournament_news_feed(tid):
+    """Return flashed events for traders — headline/desc only, no impact params."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, headline, description, flashed_at FROM tournament_news_events "
+        "WHERE tournament_id=? AND status='FLASHED' ORDER BY flashed_at DESC", (tid,)
+    ).fetchall()
+    return jsonify({'success': True, 'events': [dict(r) for r in rows]})
+
+
+# ---------------------------------------------------------------------------
+# Tournament Disqualification
+# ---------------------------------------------------------------------------
+@admin_bp.route('/api/admin/tournaments/<int:tid>/disqualify/<trader>', methods=['POST'])
+@admin_required
+def disqualify_trader(tid, trader):
+    db = get_db()
+    entry = db.execute(
+        "SELECT * FROM tournament_entries WHERE tournament_id=? AND trader_name=?",
+        (tid, trader)
+    ).fetchone()
+    if not entry:
+        return jsonify({'success': False, 'error': 'Entry not found'}), 404
+
+    data = request.get_json() or {}
+    reason = data.get('reason', 'ADMIN_DISQUALIFIED')
+    now = datetime.utcnow().isoformat()
+
+    db.execute(
+        "UPDATE tournament_entries SET status='DISQUALIFIED', disqualified_at=?, disqualification_reason=? "
+        "WHERE tournament_id=? AND trader_name=?",
+        (now, reason, tid, trader)
+    )
+    db.commit()
+
+    socketio.emit('tournament_disqualify', {
+        'tournament_id': tid,
+        'trader_name': trader,
+        'reason': reason,
+    })
+    return jsonify({'success': True})
+
+
+# Also allow client-initiated DQ (VaR breach)
+@admin_bp.route('/api/tournament/<int:tid>/disqualify/<trader>', methods=['POST'])
+def self_disqualify_trader(tid, trader):
+    """Client-initiated DQ when VaR limit is breached."""
+    db = get_db()
+    entry = db.execute(
+        "SELECT * FROM tournament_entries WHERE tournament_id=? AND trader_name=?",
+        (tid, trader)
+    ).fetchone()
+    if not entry:
+        return jsonify({'success': False, 'error': 'Entry not found'}), 404
+    if entry['status'] == 'DISQUALIFIED':
+        return jsonify({'success': True})  # Already DQ'd
+
+    data = request.get_json() or {}
+    reason = data.get('reason', 'VAR_LIMIT_EXCEEDED')
+    now = datetime.utcnow().isoformat()
+
+    db.execute(
+        "UPDATE tournament_entries SET status='DISQUALIFIED', disqualified_at=?, disqualification_reason=? "
+        "WHERE tournament_id=? AND trader_name=?",
+        (now, reason, tid, trader)
+    )
+    db.commit()
+
+    socketio.emit('tournament_disqualify', {
+        'tournament_id': tid,
+        'trader_name': trader,
+        'reason': reason,
+    })
+    return jsonify({'success': True})
 
 
 # ---------------------------------------------------------------------------
