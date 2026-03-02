@@ -555,9 +555,14 @@ function updateMarginPreview() {
 // Listen for volume/type changes to update margin
 document.getElementById('tradeVolume').addEventListener('input', updateMarginPreview);
 document.getElementById('tradeHub').addEventListener('change', function() {
-  const price = getPrice(this.value);
-  document.getElementById('tradeSpot').value = price.toFixed(4);
-  document.getElementById('tradeEntry').value = price.toFixed(4);
+  const bdInput = document.getElementById('tradeBackdate');
+  if (bdInput && bdInput.value) {
+    onBackdateChange(); // re-lookup historical price for new hub
+  } else {
+    const price = getPrice(this.value);
+    document.getElementById('tradeSpot').value = price.toFixed(4);
+    document.getElementById('tradeEntry').value = price.toFixed(4);
+  }
 });
 
 // Delivery month auto-fills entry price from forward curve
@@ -847,13 +852,16 @@ function onBackdateChange() {
       return;
     }
   }
-  // Fallback: estimate from current price with random walk backwards
+  // Fallback: estimate from current price with deterministic offset based on date+hub
   const current = getPrice(hub);
   const hubObj = typeof findHub === 'function' ? findHub(hub) : null;
-  const vol = hubObj ? hubObj.vol : 0.002;
+  const vol = hubObj ? hubObj.vol : 2.0;
   const daysDiff = Math.round((new Date().getTime() - targetDate.getTime()) / 86400000);
-  const drift = (Math.random() - 0.5) * vol * Math.sqrt(daysDiff) * current;
-  const estimated = Math.max(current * 0.7, current - drift);
+  // Deterministic hash from date string + hub name so price stays stable
+  const seed = (bdInput.value + hub).split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+  const pseudoRandom = ((Math.abs(seed) % 10000) / 10000) - 0.5; // -0.5 to +0.5, stable for same inputs
+  const drift = pseudoRandom * (vol / 100) * Math.sqrt(daysDiff) * current;
+  const estimated = Math.max(current * 0.5, current - drift);
   const estPrice = estimated.toFixed(4);
   spotEl.value = estPrice;
   if (entryEl) entryEl.value = estPrice;

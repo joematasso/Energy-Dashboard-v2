@@ -232,7 +232,8 @@ async function loadOtcStatus() {
 try {
   document.getElementById('tradeVenue').addEventListener('change', function() {
     const venue = this.value;
-    if(!MARKET_OPEN && venue !== 'OTC') {
+    const isPrivileged = STATE.trader && STATE.trader.privileged;
+    if(!MARKET_OPEN && venue !== 'OTC' && !isPrivileged) {
       toast('Exchange is closed (' + MARKET_REASON + '). Switch to OTC or wait for market open.', 'error');
       this.value = 'OTC';
     }
