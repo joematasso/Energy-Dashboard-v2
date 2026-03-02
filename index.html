@@ -907,7 +907,7 @@
           <div class="form-group"><label><span id="volumeLabel">Volume</span> <span class="field-info" id="volumeFieldInfo" onclick="toggleFieldTip(this)">?<span class="field-tip" id="volumeTip">Number of units. Gas = MMBtu, Crude = BBL, Power = MWh. Larger volume = more margin required.</span></span></label><input type="number" id="tradeVolume" placeholder="10000"></div>
           <div class="form-group"><label>Entry Price <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The price you lock in. BUY must be at or above spot. SELL at or below. Leave blank for current spot.</span></span> <span style="font-size:11px;color:var(--text-muted)" id="priceHint">(at or above spot for BUY)</span></label><input type="number" id="tradeEntry" step="0.001" placeholder="Select hub"></div>
           <div class="form-group"><label>Spot Reference <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">Current live market price for this hub. Your entry price is validated against this.</span></span> <span id="tradeSpotBadge" style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle;display:none"></span></label><input id="tradeSpot" readonly style="color:var(--text-muted)"></div>
-          <div class="form-group"><label>Delivery Month <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The contract month for settlement. Optional for spot trades.</span></span></label><input type="month" id="tradeDelivery"></div>
+          <div class="form-group"><label>Delivery Month <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">The contract month for settlement. Optional for spot trades.</span></span> <button type="button" class="rollover-info-btn" onclick="showRolloverInfo(event)" title="Contract rollover dates">Roll</button></label><input type="month" id="tradeDelivery"></div>
           <div class="form-group"><label>Counterparty <span class="field-info" onclick="toggleFieldTip(this)">?<span class="field-tip">For OTC trades, select the trader on the other side. Leave as None for exchange trades.</span></span> <span id="cptyHint" style="font-size:10px;color:var(--text-muted)"></span></label><select id="tradeCpty"><option value="">None (Exchange)</option></select></div>
         </div>
 
@@ -1718,6 +1718,58 @@
   <div class="pricing-info-item">
     <div class="pricing-info-label">Index</div>
     <div class="pricing-info-desc">The monthly index price &mdash; a rolling average of daily settlements over the full contract month. Most physical gas and power deals are priced at index. Smoothest and least volatile of the three.</div>
+  </div>
+</div>
+
+<!-- Contract Rollover Info Popover -->
+<div id="rolloverInfoPop" style="display:none">
+  <div class="psp-header">
+    <span class="psp-hub">Contract Rollover & Expiry Guide</span>
+    <button type="button" class="psp-close" onclick="document.getElementById('rolloverInfoPop').style.display='none'" aria-label="Close">&times;</button>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">NYMEX WTI (CL)</div>
+    <div class="pricing-info-desc">Expires 3 business days before the 25th of the month prior to delivery. <b>Physical delivery</b> at Cushing, OK. Roll typically occurs 5-8 days before expiry.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">ICE Brent (BZ)</div>
+    <div class="pricing-info-desc">Expires last business day of the 2nd month before delivery. <b>Cash-settled</b> against ICE Brent Index. Brent prompt is always ~2 months ahead.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">NYMEX Natural Gas (NG)</div>
+    <div class="pricing-info-desc">Expires 3 business days before the 1st of the delivery month. <b>Physical delivery</b> at Sabine Pipe Line's Henry Hub.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">Power (ERCOT/PJM/ISO)</div>
+    <div class="pricing-info-desc">Expires last business day before delivery month. <b>Financial settlement</b> against real-time or day-ahead index.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">Petroleum Products</div>
+    <div class="pricing-info-desc">RBOB/ULSD/Jet: last biz day of month before delivery. <b>Physical delivery</b> on NYMEX, financial on ICE.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">Agriculture (CBOT)</div>
+    <div class="pricing-info-desc">Expires business day before the 15th of delivery month. <b>Physical delivery</b> for futures. Options expire ~1 month before underlying.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">Metals (COMEX/LME)</div>
+    <div class="pricing-info-desc">COMEX: 3rd-to-last biz day of delivery month. <b>Physical delivery</b>. LME uses prompt-date system with 3-month rolling.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">Freight (FFA)</div>
+    <div class="pricing-info-desc">Last biz day of delivery month. <b>Cash-settled</b> against Baltic Exchange route assessments.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">LNG (JKM/TTF)</div>
+    <div class="pricing-info-desc">~15th of month before delivery. <b>Cash-settled</b> swaps. DES/FOB cargoes are physical.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">NGLs (OPIS/CME)</div>
+    <div class="pricing-info-desc">Last biz day of month before delivery. Physical or <b>financially settled</b> against OPIS Mont Belvieu index.</div>
+  </div>
+  <div class="pricing-info-item">
+    <div class="pricing-info-label">Options (all sectors)</div>
+    <div class="pricing-info-desc">Typically expire 1 month before the underlying futures contract. American-style (exercisable any time before expiry) on most exchanges.</div>
   </div>
 </div>
 

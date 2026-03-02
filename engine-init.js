@@ -58,7 +58,9 @@ function processPendingOrders() {
   let filled = false;
 
   STATE.pendingOrders = STATE.pendingOrders.filter(order => {
-    const spot = getPrice(order.hub);
+    const spot = (order.deliveryMonth && typeof _getContractPrice === 'function')
+      ? _getContractPrice(order.hub, order.deliveryMonth)
+      : getPrice(order.hub);
     if (!spot) return true;
 
     // Check TIF expiry: DAY orders expire at 17:00 CT (simulated as 8 hours from creation)
@@ -155,7 +157,7 @@ function processStopLossTargets() {
   let changed = false;
   STATE.trades.forEach(t => {
     if (t.status !== 'OPEN') return;
-    const spot = getPrice(t.hub);
+    const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
     if (!spot) return;
     const dir = t.direction === 'BUY' ? 1 : -1;
 
@@ -294,7 +296,7 @@ function checkAlerts() {
   let totalUnrealized = 0;
   STATE.trades.forEach(t => {
     if (t.status !== 'OPEN') return;
-    const spot = getPrice(t.hub);
+    const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
     if (!spot) return;
     const dir = t.direction === 'BUY' ? 1 : -1;
     totalUnrealized += (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;

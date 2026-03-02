@@ -112,6 +112,7 @@ function renderBlotterPage() {
   updateAccountBar();
   populateHubDropdown();
   updateMarginPreview();
+  updateDeliveryRestriction();
   renderBlotterTable();
   renderNetPositions();
   // Load OTC proposals
@@ -134,7 +135,11 @@ function renderBlotterPage() {
   if (!bdActive || !bdActive.value) {
     const hub = document.getElementById('tradeHub').value;
     if (hub) {
-      document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+      const delMonth = document.getElementById('tradeDelivery')?.value;
+      const spotRef = (delMonth && typeof _getContractPrice === 'function')
+        ? _getContractPrice(hub, delMonth)
+        : getPrice(hub);
+      document.getElementById('tradeSpot').value = spotRef.toFixed(4);
       _updateSpotBadge(hub);
     }
   }
@@ -354,6 +359,24 @@ function populateVenueDropdown(sector) {
   sel.innerHTML = venues.map(v => `<option value="${v.value}" ${v.value===curVal?'selected':''}>${v.label}</option>`).join('');
 }
 
+function updateDeliveryRestriction() {
+  const delInput = document.getElementById('tradeDelivery');
+  if (!delInput) return;
+  const isPrivileged = STATE.trader && STATE.trader.privileged;
+  if (isPrivileged) {
+    delInput.removeAttribute('min');
+    return;
+  }
+  const sector = document.getElementById('tradeSector')?.value || 'ng';
+  const minMonth = typeof getPromptMonthMin === 'function' ? getPromptMonthMin(sector) : '';
+  if (minMonth) {
+    delInput.setAttribute('min', minMonth);
+    if (delInput.value && delInput.value < minMonth) {
+      delInput.value = minMonth;
+    }
+  }
+}
+
 function onTradeSectorChange() {
   const sector = document.getElementById('tradeSector').value;
   const typeSel = document.getElementById('tradeType');
@@ -370,6 +393,8 @@ function onTradeSectorChange() {
   populateVenueDropdown(sector);
   // Update volume field units for this sector
   updateVolumeField(sector);
+  // Restrict delivery month for non-privileged users
+  updateDeliveryRestriction();
 }
 
 // Auto-incrementing confirmation reference per session
@@ -574,10 +599,18 @@ document.getElementById('tradeDelivery').addEventListener('change', function() {
   const now = new Date();
   const target = new Date(this.value + '-01');
   const monthsAhead = (target.getFullYear() - now.getFullYear()) * 12 + target.getMonth() - now.getMonth();
-  if (monthsAhead >= 1 && monthsAhead <= fwd.length) {
-    const fwdPrice = fwd[monthsAhead - 1].price;
-    document.getElementById('tradeEntry').value = fwdPrice.toFixed(4);
-    document.getElementById('tradeFormHint').textContent = 'Forward price for ' + target.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) + ': $' + fwdPrice.toFixed(4);
+
+  // Try exact delivery match first (real forward curve data)
+  const exactMatch = fwd.find(pt => pt.delivery === this.value);
+  if (exactMatch) {
+    const src = exactMatch._real ? 'LIVE' : 'estimated';
+    document.getElementById('tradeEntry').value = exactMatch.price.toFixed(4);
+    document.getElementById('tradeFormHint').textContent = target.toLocaleDateString('en-US', { month:'short', year:'numeric' }) + ' contract: $' + exactMatch.price.toFixed(4) + ' (' + src + ')';
+  } else if (monthsAhead >= 1 && monthsAhead <= fwd.length) {
+    const fwdPt = fwd[monthsAhead - 1];
+    const src = fwdPt._real ? 'LIVE' : 'estimated';
+    document.getElementById('tradeEntry').value = fwdPt.price.toFixed(4);
+    document.getElementById('tradeFormHint').textContent = target.toLocaleDateString('en-US', { month:'short', year:'numeric' }) + ' contract: $' + fwdPt.price.toFixed(4) + ' (' + src + ')';
   } else if (monthsAhead === 0) {
     const price = getPrice(hub);
     document.getElementById('tradeEntry').value = price.toFixed(4);
@@ -605,7 +638,10 @@ async function submitTrade() {
     const displayedSpot = parseFloat(document.getElementById('tradeSpot').value);
     spotPrice = displayedSpot > 0 ? displayedSpot : getPrice(hub);
   } else {
-    spotPrice = getPrice(hub);
+    const delMonth = document.getElementById('tradeDelivery')?.value;
+    spotPrice = (delMonth && typeof _getContractPrice === 'function')
+      ? _getContractPrice(hub, delMonth)
+      : getPrice(hub);
   }
   const isBasisType = type === 'BASIS_SWAP';
   if (!isBasisType && (!spotPrice || spotPrice <= 0)) return toast('No market price available', 'error');
@@ -668,10 +704,19 @@ async function submitTrade() {
     incoterms: document.getElementById('tradeIncoterms')?.value || '',
   };
 
+  // Delivery month restriction for non-privileged users
+  const isPrivileged = STATE.trader && STATE.trader.privileged;
+  if (!isPrivileged && trade.deliveryMonth && typeof getPromptMonthMin === 'function') {
+    const sector = document.getElementById('tradeSector')?.value || '';
+    const minMonth = getPromptMonthMin(sector);
+    if (trade.deliveryMonth < minMonth) {
+      return toast('Cannot trade expired contracts. Earliest allowed: ' + new Date(minMonth + '-01').toLocaleDateString('en-US', { month:'long', year:'numeric' }), 'error');
+    }
+  }
+
   // Market hours check for exchange trades (privileged traders bypass)
   const venue = trade.venue;
   const isExchange = venue && venue !== 'OTC';
-  const isPrivileged = STATE.trader && STATE.trader.privileged;
   if (isExchange && !MARKET_OPEN && !isPrivileged) {
     return toast('Exchange is closed (' + MARKET_REASON + '). Use OTC or wait for market open.', 'error');
   }

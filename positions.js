@@ -1,3 +1,160 @@
+/* =====================================================================
+   CONTRACT EXPIRY & ROLLOVER LOGIC
+   ===================================================================== */
+
+function _expIsWeekend(d) { const day = d.getDay(); return day === 0 || day === 6; }
+
+function _expAdjustBizDays(date, n) {
+  const d = new Date(date);
+  const step = n > 0 ? 1 : -1;
+  let remaining = Math.abs(n);
+  while (remaining > 0) {
+    d.setDate(d.getDate() + step);
+    if (!_expIsWeekend(d)) remaining--;
+  }
+  return d;
+}
+
+function _expLastBizDay(date) {
+  const d = new Date(date);
+  while (_expIsWeekend(d)) d.setDate(d.getDate() - 1);
+  return d;
+}
+
+// Returns the last trading day (Date) for a given hub + delivery month + sector
+function getContractExpiry(hubName, deliveryMonth, sector) {
+  if (!deliveryMonth) return null;
+  const delivery = new Date(deliveryMonth + '-01');
+  const y = delivery.getFullYear();
+  const m = delivery.getMonth();
+  let expiry;
+
+  switch (sector) {
+    case 'crude':
+      if (hubName === 'Brent Dated') {
+        // ICE Brent: last biz day of 2nd month before delivery
+        expiry = _expLastBizDay(new Date(y, m - 1, 0));
+      } else if (['RBOB Gasoline','ULSD Diesel','Jet Fuel'].includes(hubName)) {
+        // Products: last biz day of month before delivery
+        expiry = _expLastBizDay(new Date(y, m, 0));
+      } else {
+        // WTI & others: 3 biz days before 25th of prior month
+        expiry = _expAdjustBizDays(new Date(y, m - 1, 25), -3);
+      }
+      break;
+    case 'ng':
+      // NYMEX NG: 3 biz days before 1st of delivery month
+      expiry = _expAdjustBizDays(new Date(y, m, 1), -3);
+      break;
+    case 'power':
+      // Power: last biz day before delivery month
+      expiry = _expLastBizDay(new Date(y, m, 0));
+      break;
+    case 'ag':
+      // CBOT: biz day before 15th of delivery month
+      expiry = _expAdjustBizDays(new Date(y, m, 15), -1);
+      break;
+    case 'metals':
+      // COMEX: 3rd-to-last biz day of delivery month
+      expiry = _expAdjustBizDays(_expLastBizDay(new Date(y, m + 1, 0)), -2);
+      break;
+    case 'freight':
+      // FFA: last biz day of delivery month (cash-settled)
+      expiry = _expLastBizDay(new Date(y, m + 1, 0));
+      break;
+    case 'lng':
+      // JKM/TTF: ~15th of month before delivery
+      var mid = new Date(y, m - 1, 15);
+      expiry = _expIsWeekend(mid) ? _expAdjustBizDays(mid, 1) : mid;
+      break;
+    case 'ngls':
+      // Last biz day of month before delivery
+      expiry = _expLastBizDay(new Date(y, m, 0));
+      break;
+    default:
+      return null;
+  }
+  return expiry;
+}
+
+// Returns true if this trade type settles with physical delivery
+function isPhysicalSettlement(tradeType) {
+  const physTypes = new Set(['CRUDE_PHYS','PHYS_FIXED','PHYS_INDEX','LNG_FOB','LNG_DES',
+    'NGL_PHYS','FREIGHT_PHYS','AG_FUTURES','METALS_FUTURES','EFP']);
+  return physTypes.has(tradeType);
+}
+
+// Formatted expiry info for display
+function formatExpiryInfo(hubName, deliveryMonth, sector) {
+  const expiry = getContractExpiry(hubName, deliveryMonth, sector);
+  if (!expiry) return null;
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const daysToExpiry = Math.ceil((expiry.getTime() - now.getTime()) / 86400000);
+  const dateStr = expiry.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  let badge;
+  if (daysToExpiry < 0) {
+    badge = '<span style="color:var(--red);font-weight:600">EXPIRED</span>';
+  } else if (daysToExpiry === 0) {
+    badge = '<span style="color:var(--red);font-weight:600">EXPIRY DAY</span>';
+  } else if (daysToExpiry <= 7) {
+    badge = '<span style="color:#f59e0b;font-weight:600">' + daysToExpiry + 'd left</span>';
+  } else {
+    badge = '<span style="color:var(--text-dim)">' + daysToExpiry + 'd</span>';
+  }
+  return dateStr + ' ' + badge;
+}
+
+// Prompt month calculation per sector — returns YYYY-MM string for earliest tradeable month
+function getPromptMonthMin(sector) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+  let promptM;
+
+  if (sector === 'crude' || sector === 'ng') {
+    // WTI/NG expire around 20th-25th of the month before delivery
+    promptM = d > 22 ? m + 2 : m + 1;
+  } else if (sector === 'lng') {
+    // LNG swaps expire ~15th of 2 months before delivery
+    promptM = d > 15 ? m + 3 : m + 2;
+  } else {
+    // Default: prompt = next month
+    promptM = m + 1;
+  }
+
+  let promptY = y;
+  while (promptM > 11) { promptY++; promptM -= 12; }
+  return promptY + '-' + String(promptM + 1).padStart(2, '0');
+}
+
+// Contract rollover info popup
+function showRolloverInfo(event) {
+  event.stopPropagation();
+  const pop = document.getElementById('rolloverInfoPop');
+  if (!pop) return;
+  const isVisible = pop.style.display !== 'none';
+  pop.style.display = isVisible ? 'none' : 'block';
+  if (isVisible) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const pw = pop.offsetWidth || 360;
+  let left = rect.left + window.scrollX;
+  let top = rect.bottom + window.scrollY + 6;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (left < 8) left = 8;
+  if (top + 400 > window.scrollY + window.innerHeight) top = rect.top + window.scrollY - 420;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+
+document.addEventListener('click', function(e) {
+  const pop = document.getElementById('rolloverInfoPop');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.classList.contains('rollover-info-btn')) {
+    pop.style.display = 'none';
+  }
+});
+
 /* --- Blotter sort state --- */
 let _blotterSortCol = '';
 let _blotterSortAsc = true;
@@ -83,6 +240,12 @@ function _getContractPrice(hub, deliveryMonth) {
   if (!deliveryMonth || !hub) return getPrice(hub);
   const fwd = STATE.forwardCurves[hub];
   if (!fwd || !fwd.length) return getPrice(hub);
+
+  // First try exact delivery month match (real forward curve data has delivery strings)
+  const match = fwd.find(pt => pt.delivery === deliveryMonth);
+  if (match) return match.price;
+
+  // Fallback: index-based lookup
   const now = new Date();
   const target = new Date(deliveryMonth + '-01');
   const monthsAhead = (target.getFullYear() - now.getFullYear()) * 12 + target.getMonth() - now.getMonth();
@@ -271,7 +434,11 @@ function renderBlotterTable() {
     const rowId = t._pending ? t._pendingId : t.id;
     const dateStr = created.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
     const refLabel = t.confirmRef || '—';
-    const settleBadge = t.settlementType === 'PHYSICAL' ? 'Physical' : 'Financial';
+    const isPhys = t.settlementType === 'PHYSICAL' || isPhysicalSettlement(t.type);
+    const settleBadge = isPhys
+      ? '<span style="color:#f59e0b;font-weight:600">Physical Delivery</span>'
+      : '<span style="color:#60a5fa;font-weight:600">Financial (Cash Settled)</span>';
+    const expiryHtml = t.deliveryMonth ? (formatExpiryInfo(t.hub, t.deliveryMonth, sector) || '—') : '—';
     const brokerLabel = t.broker || 'Direct';
     const cptyLabel = t.counterparty || t.counterpartyTrader || '—';
     const stopLoss = t.stopLoss ? '$' + parseFloat(t.stopLoss).toFixed(3) : '—';
@@ -321,6 +488,7 @@ function renderBlotterTable() {
       <div class="bdet-item"><span class="bdet-label">Date</span><span>${dateStr}</span></div>
       <div class="bdet-item"><span class="bdet-label">Full Type</span><span>${t.type}</span></div>
       <div class="bdet-item"><span class="bdet-label">Settlement</span><span>${settleBadge}</span></div>
+      <div class="bdet-item"><span class="bdet-label">Contract Expiry</span><span>${expiryHtml}</span></div>
       <div class="bdet-item"><span class="bdet-label">Broker</span><span>${brokerLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Counterparty</span><span>${cptyLabel}</span></div>
       <div class="bdet-item"><span class="bdet-label">Venue</span><span>${venue}</span></div>
@@ -352,7 +520,7 @@ function closeTrade(id) {
   const t = STATE.trades.find(x => x.id === id);
   if (!t || t.status !== 'OPEN') return;
   const isMultiLeg = SPREAD_TYPES.has(t.type) || BASIS_TYPES.has(t.type) || (t.type === 'MULTILEG' && t.legs && t.legs.length);
-  const cp = isMultiLeg ? getTradeSpot(t) : getPrice(t.hub);
+  const cp = getTradeSpot(t);
   if (!cp && cp !== 0) return toast('No market price available for ' + t.hub, 'error');
   if (!isMultiLeg && cp <= 0) return toast('No market price available for ' + t.hub, 'error');
   const isOtc = t.venue === 'OTC' && (t.counterpartyTrader || t.otcMirrorOf);
@@ -431,7 +599,8 @@ function cloneTrade(id) {
     document.getElementById('tradeEntry').value = t.entryPrice || '';
     document.getElementById('tradeCpty').value = t.counterparty || '';
     document.getElementById('tradeNotes').value = t.notes || '';
-    document.getElementById('tradeSpot').value = getPrice(t.hub).toFixed(4);
+    const cloneSpot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
+    document.getElementById('tradeSpot').value = cloneSpot.toFixed(4);
     updateMarginPreview();
   }, 50);
   toast('Trade cloned — review and submit', 'info');
@@ -648,7 +817,7 @@ async function shareTradeToChat(tradeId) {
   if (!t) return;
 
   // Build formatted trade message
-  const spot = getPrice(t.hub);
+  const spot = getTradeSpot(t);
   const dir = t.direction === 'BUY' ? 1 : -1;
   const mtm = t.status === 'OPEN' ? ((spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir) : parseFloat(t.realizedPnl || 0);
   const mtmStr = (mtm >= 0 ? '+' : '') + '$' + Math.abs(mtm).toLocaleString(undefined, {maximumFractionDigits: 0});
@@ -717,7 +886,7 @@ function flatAll() {
   if (!confirm(`Close all ${open.length} open position(s) at market price?`)) return;
   let totalPnl = 0;
   open.forEach(t => {
-    const cp = getPrice(t.hub);
+    const cp = getTradeSpot(t);
     if (!cp && cp !== 0) return;
     const dir = t.direction === 'BUY' ? 1 : -1;
     const pnl = (cp - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
@@ -744,7 +913,7 @@ function exportTradesCSV() {
   if (!trades.length) return toast('No trades to export', 'info');
   const headers = ['Date','Type','Direction','Hub','Volume','Entry Price','Close Price','Status','Realized P&L','MTM P&L','Sector','Delivery','Counterparty','Venue','Notes'];
   const rows = trades.map(t => {
-    const spot = getPrice(t.hub);
+    const spot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
     const dir = t.direction === 'BUY' ? 1 : -1;
     const mtm = t.status === 'OPEN' ? ((spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir) : '';
     return [

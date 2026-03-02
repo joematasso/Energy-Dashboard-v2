@@ -68,12 +68,13 @@ function renderNGPage() {
   }).join('');
 
   // Forward curve
-  document.getElementById('ngFwdTitle').textContent = selHub;
+  const _ngFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+  document.getElementById('ngFwdTitle').innerHTML = selHub + (_ngFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#ngFwdTable tbody');
   const now = new Date();
   fwdTbody.innerHTML = fwd.map((pt, i) => {
-    const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
     const mLabel = mDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
@@ -167,7 +168,7 @@ function renderCrudePage() {
   const fwdTbody = document.querySelector('#crudeFwdTable tbody');
   const now = new Date();
   fwdTbody.innerHTML = fwd.map((pt, i) => {
-    const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
@@ -257,7 +258,7 @@ function renderPowerPage() {
   const fwdTbody = document.querySelector('#powerFwdTable tbody');
   const now = new Date();
   fwdTbody.innerHTML = fwd.map((pt, i) => {
-    const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
@@ -336,7 +337,7 @@ function renderFreightPage() {
   const now = new Date();
   const isIdx = findHub(selHub) && findHub(selHub).base > 100;
   fwdTbody.innerHTML = fwd.map((pt, i) => {
-    const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
@@ -411,7 +412,7 @@ function renderAgPage() {
   const now = new Date();
   const selHubData = AG_HUBS.find(h=>h.name===selHub);
   fwdTbody.innerHTML = fwd.map((pt, i) => {
-    const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
@@ -486,7 +487,7 @@ function renderMetalsPage() {
   const now = new Date();
   const selHubData = METALS_HUBS.find(h=>h.name===selHub);
   fwdTbody.innerHTML = fwd.map((pt, i) => {
-    const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
     const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
@@ -595,7 +596,7 @@ function renderNGLsPage() {
   if (fwdTbody) {
     const now = new Date();
     fwdTbody.innerHTML = fwd.map((pt, i) => {
-      const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+      const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
       const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
       const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
       const change = pt.price - prevPrice;
@@ -722,7 +723,7 @@ function renderLNGPage() {
   if (fwdTbody) {
     const now = new Date();
     fwdTbody.innerHTML = fwd.map((pt, i) => {
-      const mDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+      const mDate = pt.delivery ? new Date(pt.delivery + '-01') : new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
       const mLabel = mDate.toLocaleDateString('en-US', { month:'short', year:'numeric' });
       const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
       const change = pt.price - prevPrice;

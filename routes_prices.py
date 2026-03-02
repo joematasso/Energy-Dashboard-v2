@@ -800,3 +800,189 @@ def get_price_history():
         _hist_cache['ts'] = time.time()
 
     return jsonify({'success': True, 'history': data, 'hub_count': len(data)})
+
+
+# ---------------------------------------------------------------------------
+# Forward Curve — Real deferred-month prices from yfinance
+# ---------------------------------------------------------------------------
+_fwd_cache = {'data': None, 'ts': 0}
+_fwd_lock = threading.Lock()
+FWD_TTL = 1800  # cache for 30 minutes
+
+MONTH_CODES = {1:'F', 2:'G', 3:'H', 4:'J', 5:'K', 6:'M',
+               7:'N', 8:'Q', 9:'U', 10:'V', 11:'X', 12:'Z'}
+
+# Commodity roots: root symbol, hub name, exchange suffix, listed months, is_cents
+FORWARD_CURVE_SPECS = {
+    'NG':  {'hub': 'Henry Hub',       'suffix': '.NYM', 'months': list(range(1,13)), 'cents': False},
+    'CL':  {'hub': 'WTI Cushing',     'suffix': '.NYM', 'months': list(range(1,13)), 'cents': False},
+    'BZ':  {'hub': 'Brent Dated',     'suffix': '.NYM', 'months': list(range(1,13)), 'cents': False},
+    'HO':  {'hub': 'ULSD Diesel',     'suffix': '.NYM', 'months': list(range(1,13)), 'cents': False},
+    'RB':  {'hub': 'RBOB Gasoline',   'suffix': '.NYM', 'months': list(range(1,13)), 'cents': False},
+    'GC':  {'hub': 'Gold (COMEX)',     'suffix': '.CMX', 'months': [2,4,6,8,10,12],  'cents': False},
+    'SI':  {'hub': 'Silver (COMEX)',   'suffix': '.CMX', 'months': [3,5,7,9,12],     'cents': False},
+    'HG':  {'hub': 'Copper (COMEX)',   'suffix': '.CMX', 'months': list(range(1,13)), 'cents': False},
+    'ZC':  {'hub': 'Corn (CBOT)',      'suffix': '.CBT', 'months': [3,5,7,9,12],     'cents': True},
+    'ZW':  {'hub': 'Wheat (CBOT)',     'suffix': '.CBT', 'months': [3,5,7,9,12],     'cents': True},
+    'ZS':  {'hub': 'Soybeans (CBOT)',  'suffix': '.CBT', 'months': [1,3,5,7,8,9,11], 'cents': True},
+}
+
+
+def _generate_forward_tickers():
+    """Generate specific contract tickers for the next 12 months."""
+    now = datetime.now()
+    all_tickers = []
+    ticker_meta = {}  # ticker -> {hub, delivery, root, cents}
+
+    for root, spec in FORWARD_CURVE_SPECS.items():
+        for offset in range(1, 14):  # up to 13 months out
+            target_month = now.month + offset
+            target_year = now.year + (target_month - 1) // 12
+            target_month = ((target_month - 1) % 12) + 1
+
+            if target_month not in spec['months']:
+                continue
+
+            mc = MONTH_CODES[target_month]
+            y2 = str(target_year)[-2:]
+            delivery = f'{target_year}-{target_month:02d}'
+
+            # Try ticker with exchange suffix
+            ticker = f'{root}{mc}{y2}{spec["suffix"]}'
+            all_tickers.append(ticker)
+            ticker_meta[ticker] = {
+                'hub': spec['hub'], 'delivery': delivery,
+                'root': root, 'cents': spec['cents'],
+            }
+
+    return all_tickers, ticker_meta
+
+
+def _fetch_forward_curve():
+    """Fetch deferred month contract prices via yfinance."""
+    try:
+        import yfinance as yf
+
+        all_tickers, ticker_meta = _generate_forward_tickers()
+        if not all_tickers:
+            return {}
+
+        # Fetch in batches to avoid overwhelming yfinance
+        BATCH = 30
+        raw_prices = {}
+        for i in range(0, len(all_tickers), BATCH):
+            batch = all_tickers[i:i+BATCH]
+            result = _fetch_yfinance(batch)
+            # For cents tickers, the conversion is based on the root
+            for tk, price in result.items():
+                meta = ticker_meta.get(tk)
+                if meta and meta['cents'] and tk not in CENTS_TICKERS:
+                    price = price / 100.0
+                raw_prices[tk] = price
+
+        # Also try without exchange suffix for any that failed
+        missing = [tk for tk in all_tickers if tk not in raw_prices]
+        if missing:
+            alt_tickers = []
+            alt_map = {}
+            for tk in missing:
+                # Strip suffix: 'NGJ26.NYM' -> 'NGJ26'
+                alt = tk.split('.')[0]
+                alt_tickers.append(alt)
+                alt_map[alt] = tk
+            if alt_tickers:
+                alt_result = _fetch_yfinance(alt_tickers)
+                for alt_tk, price in alt_result.items():
+                    orig_tk = alt_map.get(alt_tk, alt_tk)
+                    meta = ticker_meta.get(orig_tk)
+                    if meta and meta['cents']:
+                        price = price / 100.0
+                    raw_prices[orig_tk] = price
+
+        # Build per-hub forward curves: hub -> [{delivery, price}]
+        curves = {}
+        for tk, price in raw_prices.items():
+            meta = ticker_meta.get(tk)
+            if not meta:
+                continue
+            hub = meta['hub']
+            if hub not in curves:
+                curves[hub] = []
+            curves[hub].append({
+                'delivery': meta['delivery'],
+                'price': round(price, 6),
+            })
+
+        # Sort each curve by delivery month
+        for hub in curves:
+            curves[hub].sort(key=lambda x: x['delivery'])
+
+        # Derive spread-based forward curves for secondary hubs
+        if 'Henry Hub' in curves:
+            hh_curve = {pt['delivery']: pt['price'] for pt in curves['Henry Hub']}
+            for hub_name, spread in _NG_SPREADS.items():
+                curves[hub_name] = [
+                    {'delivery': d, 'price': round(p + spread, 4)}
+                    for d, p in sorted(hh_curve.items())
+                ]
+            # Power hubs from gas
+            for hub_name, (gas_hub, heat_rate, adder) in _POWER_HEAT.items():
+                gas_curve = None
+                if gas_hub == 'Henry Hub':
+                    gas_curve = hh_curve
+                elif gas_hub in _NG_SPREADS:
+                    sp = _NG_SPREADS[gas_hub]
+                    gas_curve = {d: p + sp for d, p in hh_curve.items()}
+                if gas_curve:
+                    curves[hub_name] = [
+                        {'delivery': d, 'price': round(p * heat_rate + adder, 2)}
+                        for d, p in sorted(gas_curve.items())
+                    ]
+
+        if 'WTI Cushing' in curves:
+            wti_curve = {pt['delivery']: pt['price'] for pt in curves['WTI Cushing']}
+            for hub_name, diff in _CRUDE_DIFFS.items():
+                curves[hub_name] = [
+                    {'delivery': d, 'price': round(p + diff, 2)}
+                    for d, p in sorted(wti_curve.items())
+                ]
+            # NGL hubs from anchor
+            for hub_name, (anchor, ratio) in _NGL_RATIOS.items():
+                anchor_curve = None
+                if anchor == 'WTI Cushing':
+                    anchor_curve = wti_curve
+                elif anchor == 'Henry Hub' and 'Henry Hub' in curves:
+                    anchor_curve = {pt['delivery']: pt['price'] for pt in curves['Henry Hub']}
+                if anchor_curve:
+                    curves[hub_name] = [
+                        {'delivery': d, 'price': round(p * ratio, 2)}
+                        for d, p in sorted(anchor_curve.items())
+                    ]
+
+        logger.info(f'Forward curve fetched: {len(curves)} hubs, {sum(len(v) for v in curves.values())} total points')
+        return curves
+    except Exception as e:
+        logger.error(f'Forward curve fetch error: {e}')
+        return {}
+
+
+@prices_bp.route('/api/forward-curve', methods=['GET'])
+def get_forward_curve():
+    """Return real deferred-month futures prices for all major hubs."""
+    now = time.time()
+    with _fwd_lock:
+        if _fwd_cache['data'] and (now - _fwd_cache['ts']) < FWD_TTL:
+            return jsonify({'success': True, 'curves': _fwd_cache['data'],
+                            'hub_count': len(_fwd_cache['data']),
+                            'cache_age_seconds': int(now - _fwd_cache['ts'])})
+
+    data = _fetch_forward_curve()
+    with _fwd_lock:
+        _fwd_cache['data'] = data
+        _fwd_cache['ts'] = time.time()
+
+    return jsonify({
+        'success': True, 'curves': data,
+        'hub_count': len(data),
+        'cache_age_seconds': 0,
+    })

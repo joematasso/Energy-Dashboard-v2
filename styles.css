@@ -453,6 +453,10 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .pricing-info-label{font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:2px}
 .pricing-info-desc{color:#94a3b8;font-size:11px;line-height:1.5}
 @media(max-width:600px){#pricingInfoPop{width:calc(100vw - 24px);left:12px!important}}
+.rollover-info-btn{background:none;border:1px solid rgba(148,163,184,0.2);color:#64748b;font-size:9px;padding:1px 5px;border-radius:3px;cursor:pointer;font-weight:600;letter-spacing:0.3px;transition:all .15s;vertical-align:middle;margin-left:4px}
+.rollover-info-btn:hover{color:#e2e8f0;border-color:rgba(148,163,184,0.5);background:rgba(148,163,184,0.1)}
+#rolloverInfoPop{position:absolute;z-index:9000;width:360px;max-height:70vh;overflow-y:auto;background:#1e293b;border:1px solid rgba(148,163,184,0.2);border-radius:8px;padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);font-size:12px;line-height:1.5;color:#cbd5e1}
+@media(max-width:600px){#rolloverInfoPop{width:calc(100vw - 24px);left:12px!important}}
 .spread-chart-section{margin-top:12px}
 .spread-controls{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .spread-hub-sel{

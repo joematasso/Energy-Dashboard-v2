@@ -407,8 +407,8 @@ function initPrices() {
   }
   initForwardCurves();
 
-  // Fetch real prices and real history in parallel (non-blocking)
-  Promise.all([fetchLivePrices(), _fetchPriceHistory()]).then(([liveOk, histOk]) => {
+  // Fetch real prices, history, and forward curves in parallel (non-blocking)
+  Promise.all([fetchLivePrices(), _fetchPriceHistory(), _fetchForwardCurve()]).then(([liveOk, histOk, fwdOk]) => {
     if (liveOk) {
       // Re-seed ENTIRE tick history for live hubs centered on the real price
       // so that Index/Balmo averages start from reality, not static base prices
@@ -430,6 +430,9 @@ function initPrices() {
     const ok = await fetchLivePrices();
     if (ok) _rebaseToLivePrices();
   }, LIVE_PRICE_REFRESH);
+
+  // Refresh forward curves every 30 minutes
+  setInterval(() => { _fetchForwardCurve(); }, 1800000);
 
   // Keep the "fetched Xm ago" text current every minute
   setInterval(_updateRefreshBar, 60000);
@@ -530,7 +533,11 @@ function tickPrices() {
   renderCurrentPage();
 }
 
+// Track which hubs have real forward curve data (vs synthetic)
+let _realFwdHubs = new Set();
+
 function initForwardCurves() {
+  // Seed with synthetic curves initially; real data replaces them once fetched
   for (const [sector, hubs] of Object.entries(ALL_HUB_SETS)) {
     hubs.forEach(h => {
       const curve = [];
@@ -538,10 +545,81 @@ function initForwardCurves() {
       for (let m = 0; m < 12; m++) {
         const seasonal = Math.sin((m + 1) / 12 * Math.PI * 2) * (h.base * 0.03);
         const contango = m * (h.base * 0.002);
-        curve.push({ price: spot + seasonal + contango + (Math.random()-0.5)*h.base*0.01, oi: Math.floor(5000 + Math.random()*50000) });
+        curve.push({ price: spot + seasonal + contango + (Math.random()-0.5)*h.base*0.01, oi: Math.floor(5000 + Math.random()*50000), delivery: null });
       }
       STATE.forwardCurves[h.name] = curve;
     });
+  }
+}
+
+async function _fetchForwardCurve() {
+  try {
+    const r = await fetch(API_BASE + '/api/forward-curve');
+    const d = await r.json();
+    if (!d.success || !d.curves) return false;
+
+    const now = new Date();
+    let loaded = 0;
+
+    for (const [hub, points] of Object.entries(d.curves)) {
+      if (!points || !points.length) continue;
+
+      // Map API points to 12-month forward curve slots
+      const curve = [];
+      for (let m = 0; m < 12; m++) {
+        const targetMonth = now.getMonth() + m + 2;
+        const targetYear = now.getFullYear() + Math.floor(targetMonth / 12);
+        const targetM = ((targetMonth - 1) % 12) + 1;
+        const deliveryKey = targetYear + '-' + String(targetM).padStart(2, '0');
+
+        // Find matching real price for this delivery month
+        const real = points.find(p => p.delivery === deliveryKey);
+        if (real) {
+          curve.push({ price: real.price, oi: Math.floor(5000 + Math.random()*50000), delivery: deliveryKey, _real: true });
+        } else {
+          // Interpolate from nearest known points or use synthetic fallback
+          const existing = STATE.forwardCurves[hub];
+          const fallbackPrice = existing && existing[m] ? existing[m].price : 0;
+          curve.push({ price: fallbackPrice, oi: Math.floor(5000 + Math.random()*50000), delivery: deliveryKey, _real: false });
+        }
+      }
+
+      if (curve.some(pt => pt._real)) {
+        // Fill gaps by interpolating between real points
+        const realIndices = curve.map((pt, i) => pt._real ? i : -1).filter(i => i >= 0);
+        for (let i = 0; i < curve.length; i++) {
+          if (curve[i]._real) continue;
+          // Find nearest real points before and after
+          let before = -1, after = -1;
+          for (const ri of realIndices) {
+            if (ri < i) before = ri;
+            if (ri > i && after < 0) after = ri;
+          }
+          if (before >= 0 && after >= 0) {
+            // Linear interpolate
+            const frac = (i - before) / (after - before);
+            curve[i].price = curve[before].price + (curve[after].price - curve[before].price) * frac;
+          } else if (before >= 0) {
+            // Extrapolate from last known point
+            const lastReal = curve[before];
+            curve[i].price = lastReal.price + (i - before) * (lastReal.price * 0.002);
+          } else if (after >= 0) {
+            // Extrapolate backward
+            const nextReal = curve[after];
+            curve[i].price = nextReal.price - (after - i) * (nextReal.price * 0.002);
+          }
+        }
+        STATE.forwardCurves[hub] = curve;
+        _realFwdHubs.add(hub);
+        loaded++;
+      }
+    }
+
+    console.log(`Real forward curves loaded: ${loaded} hubs`);
+    return loaded > 0;
+  } catch (e) {
+    console.warn('Forward curve fetch failed, using synthetic data:', e);
+    return false;
   }
 }
 
@@ -549,11 +627,13 @@ function tickForwardCurves() {
   for (const name in STATE.forwardCurves) {
     const hub = findHub(name);
     if (!hub) continue;
-    // Determine if this hub can go negative (power markets)
     const isPower = POWER_HUBS.some(h => h.name === name);
     const priceFloor = isPower ? -hub.base * 0.5 : hub.base * 0.3;
+    // Real curve points: minimal drift (0.1x). Synthetic: normal drift.
+    const isReal = _realFwdHubs.has(name);
+    const driftScale = isReal ? 0.1 : 1.0;
     STATE.forwardCurves[name].forEach(pt => {
-      pt.price += (Math.random()-0.5) * 2 * (hub.base * hub.vol/100 / 50);
+      pt.price += (Math.random()-0.5) * 2 * (hub.base * hub.vol/100 / 50) * driftScale;
       if (pt.price < priceFloor) pt.price = priceFloor;
       pt.oi += Math.floor((Math.random()-0.5) * 200);
       if (pt.oi < 100) pt.oi = 100;
