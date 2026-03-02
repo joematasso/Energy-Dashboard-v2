@@ -446,6 +446,13 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
   font-family:inherit;transition:all var(--transition);
 }
 .pricing-btn:hover{border-color:var(--text-dim)}.pricing-btn.active{background:rgba(96,165,250,0.15);color:#60a5fa;border-color:rgba(96,165,250,0.4)}
+.pricing-info-btn{background:none;border:1px solid rgba(148,163,184,0.2);color:#64748b;font-size:10px;width:18px;height:18px;border-radius:50%;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:4px;padding:0;font-weight:700;line-height:1;transition:all .15s}
+.pricing-info-btn:hover{color:#e2e8f0;border-color:rgba(148,163,184,0.5);background:rgba(148,163,184,0.1)}
+#pricingInfoPop{position:absolute;z-index:9000;width:300px;background:#1e293b;border:1px solid rgba(148,163,184,0.2);border-radius:8px;padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);font-size:12px;line-height:1.5;color:#cbd5e1}
+.pricing-info-item{margin-bottom:10px}.pricing-info-item:last-child{margin-bottom:0}
+.pricing-info-label{font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:2px}
+.pricing-info-desc{color:#94a3b8;font-size:11px;line-height:1.5}
+@media(max-width:600px){#pricingInfoPop{width:calc(100vw - 24px);left:12px!important}}
 .spread-chart-section{margin-top:12px}
 .spread-controls{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .spread-hub-sel{

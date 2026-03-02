@@ -23,7 +23,7 @@ const STATE = {
   chartRanges: { ng: 30, crude: 30, power: 30, freight: 30, ag: 30, metals: 30, ngls: 30, lng: 30 },
   chartTypes: { ng:'line', crude:'line', power:'line', freight:'line', ag:'line', metals:'line', ngls:'line', lng:'line' },
   chartZoom: {},
-  pricingType: { ng:'cash', crude:'cash', power:'cash', freight:'cash', ag:'cash', metals:'cash', ngls:'cash', lng:'cash' },
+  pricingType: { ng:'index', crude:'index', power:'index', freight:'index', ag:'index', metals:'index', ngls:'index', lng:'index' },
   visibleHubs: {},
   forwardCurves: {},
   clickedPrice: null,
@@ -598,12 +598,14 @@ function getDisplayPrice(hubName, sector) {
   if (pt === 'balmo') {
     const now = new Date();
     const dayOfMonth = now.getDate();
-    const elapsed = Math.max(1, Math.min(hist.length, dayOfMonth));
-    const slice = hist.slice(-elapsed);
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const elapsed = Math.max(6, Math.round(dayOfMonth / daysInMonth * 90));
+    const n = Math.min(elapsed, hist.length);
+    const slice = hist.slice(-n);
     return slice.reduce((s, v) => s + v, 0) / slice.length;
   }
   if (pt === 'index') {
-    const n = Math.min(30, hist.length);
+    const n = Math.min(90, hist.length);
     const slice = hist.slice(-n);
     return slice.reduce((s, v) => s + v, 0) / slice.length;
   }
@@ -618,6 +620,31 @@ function setPricingType(sector, type, btn) {
   }
   renderCurrentPage();
 }
+
+function showPricingInfo(event) {
+  event.stopPropagation();
+  const pop = document.getElementById('pricingInfoPop');
+  if (!pop) return;
+  const isVisible = pop.style.display !== 'none';
+  pop.style.display = isVisible ? 'none' : 'block';
+  if (isVisible) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const pw = pop.offsetWidth || 300;
+  let left = rect.left + window.scrollX;
+  let top = rect.bottom + window.scrollY + 6;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (left < 8) left = 8;
+  if (top + 200 > window.scrollY + window.innerHeight) top = rect.top + window.scrollY - 210;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+
+document.addEventListener('click', function(e) {
+  const pop = document.getElementById('pricingInfoPop');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.classList.contains('pricing-info-btn')) {
+    pop.style.display = 'none';
+  }
+});
 
 function getSelectedHub(sector) { return STATE.selectedHubs[sector]; }
 function setSelectedHub(sector, name) { STATE.selectedHubs[sector] = name; renderCurrentPage(); }

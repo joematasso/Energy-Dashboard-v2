@@ -32,7 +32,7 @@ function renderNGPage() {
     const cadPrice = isAECO ? mmbtuToCADGJ(p) : 0;
     const priceDisplay = isAECO
       ? `<div class="hub-price">C$${cadPrice.toFixed(2)}<span style="font-size:11px;color:var(--text-muted)"> /GJ</span></div><div style="font-size:11px;color:var(--text-dim)">US$${p.toFixed(3)}/MMBtu</div>`
-      : `<div class="hub-price">$${p.toFixed(2)}</div>`;
+      : `<div class="hub-price">$${p.toFixed(3)}</div>`;
     return `<div class="bench-card ${sel}" onclick="setSelectedHub('ng','${h.name}')">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px"><div class="hub-name" style="color:${h.color};margin-bottom:0;min-width:0">${h.name}${isAECO?' 🇨🇦':''} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${promptLabel}</span></div>${priceBadge(h.name)}</div>
       ${priceDisplay}
