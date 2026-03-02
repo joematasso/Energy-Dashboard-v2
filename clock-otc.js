@@ -91,51 +91,39 @@ async function fetchMarketStatus() {
     const badge = document.getElementById('mktBadge');
     if(badge) {
       if(MARKET_OPEN) {
+        badge.className = 'mkt-badge mkt-open';
+        badge.style.animation = '';
         const ctTime = d.ct_time || '';
         const parts = ctTime.split(':');
         if (parts.length >= 2) {
           const nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-          const closeMin = 17 * 60;
-          const remain = closeMin - nowMin;
+          // Next break is 4PM CT (16:00) daily
+          const breakMin = 16 * 60;
+          const remain = breakMin - nowMin;
           if (remain > 0 && remain <= 15) {
             badge.className = 'mkt-badge mkt-closed';
-            badge.textContent = 'CLOSES ' + remain + 'm';
+            badge.textContent = 'BREAK ' + remain + 'm';
             badge.style.animation = 'pulse 1s infinite';
-          } else if (remain > 0) {
-            const h = Math.floor(remain / 60), m = remain % 60;
-            badge.className = 'mkt-badge mkt-open';
-            badge.textContent = 'OPEN ' + (h > 0 ? h + 'h ' : '') + m + 'm';
-            badge.style.animation = '';
           } else {
-            badge.className = 'mkt-badge mkt-open';
             badge.textContent = 'MARKET OPEN';
-            badge.style.animation = '';
           }
         } else {
-          badge.className = 'mkt-badge mkt-open';
           badge.textContent = 'MARKET OPEN';
-          badge.style.animation = '';
         }
       } else {
         badge.className = 'mkt-badge mkt-closed';
         badge.style.animation = '';
-        const ctTime = d.ct_time || '', dow = d.ct_dow || '';
-        const parts = ctTime.split(':');
-        if (parts.length >= 2 && MARKET_REASON !== 'Holiday') {
-          const nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-          if (MARKET_REASON === 'Pre-Market') {
-            const remain = 8 * 60 - nowMin;
-            const h = Math.floor(remain / 60), m = remain % 60;
-            badge.textContent = 'OPENS ' + (h > 0 ? h + 'h ' : '') + m + 'm';
-          } else if (MARKET_REASON === 'After Hours') {
-            badge.textContent = 'OPENS 8:00 CT';
-          } else if (MARKET_REASON === 'Weekend') {
-            badge.textContent = dow === 'Saturday' ? 'OPENS MON 8AM' : 'OPENS TOM 8AM';
-          } else {
-            badge.textContent = 'MKT CLOSED';
-          }
+        const dow = d.ct_dow || '';
+        if (MARKET_REASON === 'Holiday') {
+          badge.textContent = 'HOLIDAY';
+        } else if (MARKET_REASON === 'Maintenance Break') {
+          badge.textContent = 'BREAK · OPENS 5PM CT';
+        } else if (MARKET_REASON === 'Weekend') {
+          if (dow === 'Friday') badge.textContent = 'OPENS SUN 5PM CT';
+          else if (dow === 'Saturday') badge.textContent = 'OPENS SUN 5PM CT';
+          else badge.textContent = 'OPENS 5PM CT';
         } else {
-          badge.textContent = MARKET_REASON === 'Holiday' ? 'HOLIDAY' : 'MKT CLOSED';
+          badge.textContent = 'MKT CLOSED';
         }
       }
     }

@@ -375,7 +375,16 @@ def submit_trade(trader):
     if not data:
         return jsonify({'success': False, 'error': 'No trade data provided'}), 400
 
-    # 1b. Market hours — display only, no trade blocking (simulation platform)
+    # 1b. Market hours enforcement (OTC bypass allowed)
+    venue = data.get('venue', '')
+    if venue and venue != 'OTC':
+        try:
+            from routes_market import is_market_open
+            mkt_open, mkt_reason, _ = is_market_open()
+            if not mkt_open:
+                return jsonify({'success': False, 'error': f'Exchange closed ({mkt_reason}). Use OTC or wait for market open.'}), 400
+        except ImportError:
+            pass  # If market module unavailable, allow trade
 
     # 2. Validate required fields
     required = ['type', 'direction', 'hub', 'volume', 'entryPrice']

@@ -402,7 +402,7 @@ NYMEX_HOLIDAYS = {
 }
 
 def is_market_open():
-    """Check if market is open. Business hours: 8AM-5PM CT, Mon-Fri. Closed holidays."""
+    """Check if market is open. CME Globex energy: Sun 5PM - Fri 5PM CT (1hr break 4-5PM CT daily)."""
     try:
         from zoneinfo import ZoneInfo
         ct = datetime.now(ZoneInfo('America/Chicago'))
@@ -415,14 +415,23 @@ def is_market_open():
     date_str = ct.strftime('%Y-%m-%d')
     if date_str in NYMEX_HOLIDAYS:
         return False, 'Holiday', ct
-    dow = ct.weekday()
-    t = ct.hour * 60 + ct.minute
-    if dow >= 5:  # Saturday=5, Sunday=6
+    dow = ct.weekday()  # 0=Mon .. 6=Sun
+    t = ct.hour * 60 + ct.minute  # minutes since midnight
+
+    # Saturday: always closed
+    if dow == 5:
         return False, 'Weekend', ct
-    if t < 8*60:  # Before 8AM CT
-        return False, 'Pre-Market', ct
-    if t >= 17*60:  # After 5PM CT
-        return False, 'After Hours', ct
+    # Sunday: closed until 5PM CT (17:00), open after
+    if dow == 6:
+        if t < 17 * 60:
+            return False, 'Weekend', ct
+        return True, 'Open', ct
+    # Monday-Friday: open except daily maintenance break 4-5PM CT (16:00-17:00)
+    # Friday: closes at 4PM CT for the weekend
+    if dow == 4 and t >= 16 * 60:  # Friday after 4PM
+        return False, 'Weekend', ct
+    if 16 * 60 <= t < 17 * 60:  # Daily 4-5PM CT maintenance
+        return False, 'Maintenance Break', ct
     return True, 'Open', ct
 
 
