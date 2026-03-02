@@ -537,6 +537,7 @@ async function checkStatus(){
         (b.commit_short||'')+' \u00b7 '+(b.commit_message||'No description')+
         (ago?' \u00b7 '+ago:'');
       // Modal detail
+      const s=d.system||null;
       const env=location.hostname==='localhost'||location.hostname==='127.0.0.1'?'Development':'Production';
       const envColor=env==='Production'?'var(--green)':'var(--amber)';
       const statusColor=serverOnline?'var(--green)':'var(--red)';
@@ -558,8 +559,14 @@ async function checkStatus(){
           '<span style="color:var(--text)">'+tsStr+'</span>'+
           '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">FULL COMMIT'+_i('The full SHA-1 hash uniquely identifying this exact version of the codebase')+'</span>'+
           '<span style="color:var(--text);font-size:11px;word-break:break-all">'+(b.commit||'—')+'</span>'+
-          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">TECH STACK'+_i('Flask 2.3 handles HTTP routing, REST APIs, WebSocket events, and database access. Vanilla JavaScript (no React/Vue) renders all UI, charts, and real-time updates. SQLite in WAL mode stores traders, trades, chat, and leaderboard data. Socket.IO provides real-time push for trade feeds and chat.')+'</span>'+
-          '<span style="color:var(--text)">Flask 2.3 + Vanilla JS + SQLite</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">TECH STACK'+_i('Flask handles HTTP routing, REST APIs, WebSocket events, and database access. Vanilla JavaScript (no React/Vue) renders all UI, charts, and real-time updates. SQLite in WAL mode stores traders, trades, chat, and leaderboard data. Socket.IO provides real-time push for trade feeds and chat.')+'</span>'+
+          '<span style="color:var(--text)">'+(s?('Python '+s.python+' / Flask '+s.flask+' / SQLite '+s.sqlite):'Flask 2.3 + Vanilla JS + SQLite')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">SERVER OS'+_i('The operating system and kernel version running on the deployment server')+'</span>'+
+          '<span style="color:var(--text)">'+(s?s.os:'—')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">DATABASE'+_i('SQLite database file size on disk. Stores all traders, trades (as JSON blobs), chat messages, leaderboard snapshots, and admin config.')+'</span>'+
+          '<span style="color:var(--text)">'+(s?s.db_size_mb+' MB \u00b7 '+s.total_trades.toLocaleString()+' trades':'—')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">UPTIME'+_i('How long the server process has been running since last restart. Resets on each deploy.')+'</span>'+
+          '<span style="color:var(--text)">'+(s?_formatUptime(s.uptime_seconds):'—')+'</span>'+
           '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">ENVIRONMENT'+_i('Development: running on localhost or a codespace for testing — uses simulated prices, debug logging enabled, no impact on live traders. Production: deployed on the public server (Render), real API keys active, all trader data is persistent, changes affect everyone.')+'</span>'+
           '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+envColor+'"></span><span style="color:'+envColor+'">'+env+'</span></span>'+
           '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">STATUS'+_i('Server health check: tests the /api/status endpoint every 30 seconds. Green = Flask is responding, database is accessible, WebSocket connections active. Red = server unreachable — traders cannot log in, submit trades, or sync data until restored.')+'</span>'+
@@ -576,6 +583,15 @@ function _timeAgo(date){
   const s=Math.floor((Date.now()-date.getTime())/1000);
   if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';
   if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';
+}
+function _formatUptime(sec){
+  if(!sec&&sec!==0)return '—';
+  const d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60);
+  const parts=[];
+  if(d>0)parts.push(d+'d');
+  if(h>0)parts.push(h+'h');
+  parts.push(m+'m');
+  return parts.join(' ');
 }
 
 async function loadTraders(){try{const d=await api('/api/admin/traders');if(!d.success)return;traders=d.traders;renderTraders()}catch(e){console.error('Load traders error:',e)}}

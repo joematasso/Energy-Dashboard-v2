@@ -1,8 +1,8 @@
 {
-  "commit": "c8b0e63be8757cd803a6a2be18519f62bb9ca3f3",
-  "commit_short": "c8b0e63",
-  "last_updated": "2026-03-02 17:54:20 +0000",
-  "commit_message": "Expand info tooltips for Tech Stack, Environment, and Status",
-  "commit_count": 128,
-  "version": "3.0.128"
+  "commit": "c261603f2f2a19ed4aa6a1718b51e0a6c3b7fab2",
+  "commit_short": "c261603",
+  "last_updated": "2026-03-02 17:55:40 +0000",
+  "commit_message": "Add real system info to version modal: Python/Flask/SQLite versions, OS, DB size, uptime",
+  "commit_count": 129,
+  "version": "3.0.129"
 }

@@ -59,12 +59,28 @@ _BUILD_INFO = _read_git_info()
 # ---------------------------------------------------------------------------
 # Public API Endpoints
 # ---------------------------------------------------------------------------
+import sys as _sys
+import platform as _platform
+import flask as _flask
+_server_start_time = datetime.utcnow()
+
 @public_bp.route('/api/status')
 def api_status():
     db = get_db()
     active = db.execute("SELECT COUNT(*) as c FROM traders WHERE status='ACTIVE'").fetchone()['c']
+    total_trades = db.execute("SELECT COUNT(*) as c FROM trades").fetchone()['c']
     with connections_lock:
         ws_count = len(active_connections)
+
+    # Database file size
+    db_size_mb = 0
+    try:
+        db_size_mb = round(os.path.getsize(DATABASE) / (1024 * 1024), 2)
+    except Exception:
+        pass
+
+    uptime_seconds = int((datetime.utcnow() - _server_start_time).total_seconds())
+
     return jsonify({
         'success': True,
         'status': 'online',
@@ -73,6 +89,15 @@ def api_status():
         'server_time': datetime.utcnow().isoformat(),
         'version': _BUILD_INFO['version'],
         'build': _BUILD_INFO,
+        'system': {
+            'python': _sys.version.split()[0],
+            'flask': _flask.__version__,
+            'sqlite': db.execute("SELECT sqlite_version()").fetchone()[0],
+            'os': _platform.system() + ' ' + _platform.release(),
+            'db_size_mb': db_size_mb,
+            'total_trades': total_trades,
+            'uptime_seconds': uptime_seconds,
+        }
     })
 
 @public_bp.route('/api/traders/register', methods=['POST'])
