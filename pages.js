@@ -78,13 +78,17 @@ function renderNGPage() {
     const mLabel = mDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
+    const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
     return `<tr>
-      <td>${mLabel}</td>
+      <td>${mLabel}${src}</td>
       <td class="mono">$${pt.price.toFixed(3)}</td>
       <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(3)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
+
+  // Forward curve chart
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('ngFwdChart', selHub);
 
   // Spread chart
   _populateSpreadSelectors('ng', NG_HUBS);
@@ -163,7 +167,8 @@ function renderCrudePage() {
   }).join('');
 
   // Forward curve
-  document.getElementById('crudeFwdTitle').textContent = selHub;
+  const _crudeFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+  document.getElementById('crudeFwdTitle').innerHTML = selHub + (_crudeFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#crudeFwdTable tbody');
   const now = new Date();
@@ -179,6 +184,9 @@ function renderCrudePage() {
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
+
+  // Forward curve chart
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('crudeFwdChart', selHub);
 
   // Spread chart
   _populateSpreadSelectors('crude', CRUDE_HUBS);
@@ -253,7 +261,8 @@ function renderPowerPage() {
   }).join('');
 
   // Forward curve
-  document.getElementById('powerFwdTitle').textContent = selHub;
+  const _powerFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+  document.getElementById('powerFwdTitle').innerHTML = selHub + (_powerFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#powerFwdTable tbody');
   const now = new Date();
@@ -269,6 +278,9 @@ function renderPowerPage() {
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
+
+  // Forward curve chart
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('powerFwdChart', selHub);
 
   // Spread chart
   _populateSpreadSelectors('power', POWER_HUBS);
@@ -331,7 +343,8 @@ function renderFreightPage() {
   }).join('');
 
   // Forward curve
-  document.getElementById('freightFwdTitle').textContent = selHub;
+  const _freightFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+  document.getElementById('freightFwdTitle').innerHTML = selHub + (_freightFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#freightFwdTable tbody');
   const now = new Date();
@@ -348,6 +361,8 @@ function renderFreightPage() {
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
+
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('freightFwdChart', selHub);
 
   _populateSpreadSelectors('freight', FREIGHT_HUBS);
   renderSpreadChart('freight');
@@ -406,7 +421,8 @@ function renderAgPage() {
     </tr>`;
   }).join('');
 
-  document.getElementById('agFwdTitle').textContent = selHub;
+  const _agFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+  document.getElementById('agFwdTitle').innerHTML = selHub + (_agFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#agFwdTable tbody');
   const now = new Date();
@@ -423,6 +439,8 @@ function renderAgPage() {
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
+
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('agFwdChart', selHub);
 
   _populateSpreadSelectors('ag', AG_HUBS);
   renderSpreadChart('ag');
@@ -481,7 +499,8 @@ function renderMetalsPage() {
     </tr>`;
   }).join('');
 
-  document.getElementById('metalsFwdTitle').textContent = selHub;
+  const _metalsFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+  document.getElementById('metalsFwdTitle').innerHTML = selHub + (_metalsFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#metalsFwdTable tbody');
   const now = new Date();
@@ -498,6 +517,8 @@ function renderMetalsPage() {
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
+
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('metalsFwdChart', selHub);
 
   _populateSpreadSelectors('metals', METALS_HUBS);
   renderSpreadChart('metals');
@@ -590,7 +611,10 @@ function renderNGLsPage() {
 
   // Forward curve
   const fwdTitle = document.getElementById('nglsFwdTitle');
-  if (fwdTitle) fwdTitle.textContent = selHub;
+  if (fwdTitle) {
+    const _nglsFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+    fwdTitle.innerHTML = selHub + (_nglsFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
+  }
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#nglsFwdTable tbody');
   if (fwdTbody) {
@@ -610,6 +634,8 @@ function renderNGLsPage() {
       </tr>`;
     }).join('');
   }
+
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('nglsFwdChart', selHub);
 
   _populateSpreadSelectors('ngls', NGL_HUBS);
   renderSpreadChart('ngls');
@@ -717,7 +743,10 @@ function renderLNGPage() {
 
   // Forward curve
   const fwdTitle = document.getElementById('lngFwdTitle');
-  if (fwdTitle) fwdTitle.textContent = selHub;
+  if (fwdTitle) {
+    const _lngFwdReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(selHub);
+    fwdTitle.innerHTML = selHub + (_lngFwdReal ? ' <span class="price-badge live" style="font-size:9px;vertical-align:middle">LIVE</span>' : ' <span class="price-badge est" style="font-size:9px;vertical-align:middle">SIM</span>');
+  }
   const fwd = STATE.forwardCurves[selHub] || [];
   const fwdTbody = document.querySelector('#lngFwdTable tbody');
   if (fwdTbody) {
@@ -735,6 +764,8 @@ function renderLNGPage() {
       </tr>`;
     }).join('');
   }
+
+  if (typeof drawForwardCurveChart === 'function') drawForwardCurveChart('lngFwdChart', selHub);
 
   _populateSpreadSelectors('lng', LNG_HUBS);
   renderSpreadChart('lng');
