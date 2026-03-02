@@ -975,7 +975,10 @@ async function loadRecentBroadcasts() {
 function checkTournamentTimer() {
   if (typeof isTournamentMode !== 'function' || !isTournamentMode()) return;
   if (!STATE.tournament || !STATE.tournament.end_time) return;
-  var endTime = new Date(STATE.tournament.end_time).getTime();
+  // Server sends UTC ISO strings — ensure 'Z' suffix for correct parsing
+  var etStr = STATE.tournament.end_time;
+  if (etStr && !etStr.endsWith('Z') && !etStr.includes('+')) etStr += 'Z';
+  var endTime = new Date(etStr).getTime();
   if (Date.now() >= endTime) {
     // Auto-end: force close positions and show results
     forceCloseTournamentPositions('TOURNAMENT_ENDED');
@@ -1045,9 +1048,9 @@ function processStopLossTournament() {
         return;
       }
     }
-    // Check take-profit
-    if (t.takeProfit) {
-      var tp = parseFloat(t.takeProfit);
+    // Check take-profit (trade form uses targetExit field)
+    if (t.targetExit || t.takeProfit) {
+      var tp = parseFloat(t.targetExit || t.takeProfit);
       if ((t.direction === 'BUY' && price >= tp) || (t.direction === 'SELL' && price <= tp)) {
         _closeTournamentTrade(t, price, 'TAKE_PROFIT');
         changed = true;
@@ -1104,10 +1107,12 @@ function forceCloseTournamentPositions(reason) {
 // Show tournament breaking news overlay
 function showTournamentBreakingNews(headline, description) {
   var el = document.getElementById('tournamentBreaking');
-  if (!el) return;
+  if (!el || !headline) return;
+  var safeHeadline = String(headline).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var safeDesc = description ? String(description).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
   el.innerHTML = '<span class="tb-icon">⚡</span><span class="tb-headline">BREAKING: ' +
-    headline.replace(/</g, '&lt;') + '</span>' +
-    (description ? '<div class="tb-desc">' + description.replace(/</g, '&lt;') + '</div>' : '');
+    safeHeadline + '</span>' +
+    (safeDesc ? '<div class="tb-desc">' + safeDesc + '</div>' : '');
   el.classList.add('show');
   // Auto-dismiss after 8 seconds
   clearTimeout(el._hideTimer);

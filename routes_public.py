@@ -56,6 +56,34 @@ def _read_git_info():
 
 _BUILD_INFO = _read_git_info()
 
+def _read_git_history(limit=20):
+    """Read recent git commit history."""
+    root = os.path.dirname(os.path.abspath(__file__))
+    try:
+        # Use @@@ as delimiter to avoid collision with pipe chars in commit messages
+        delim = '@@@'
+        raw = subprocess.check_output(
+            ['git', 'log', '--format=%H' + delim + '%h' + delim + '%s' + delim + '%ci' + delim + '%an',
+             '-' + str(limit)],
+            cwd=root, stderr=subprocess.DEVNULL
+        ).decode().strip()
+        if not raw:
+            return []
+        commits = []
+        for line in raw.split('\n'):
+            parts = line.split(delim, 4)
+            if len(parts) >= 4:
+                commits.append({
+                    'hash': parts[0],
+                    'short': parts[1],
+                    'message': parts[2],
+                    'date': parts[3],
+                    'author': parts[4] if len(parts) > 4 else '',
+                })
+        return commits
+    except Exception:
+        return []
+
 # ---------------------------------------------------------------------------
 # Public API Endpoints
 # ---------------------------------------------------------------------------
@@ -81,6 +109,9 @@ def api_status():
 
     uptime_seconds = int((datetime.utcnow() - _server_start_time).total_seconds())
 
+    # Recent version history
+    history = _read_git_history(20)
+
     return jsonify({
         'success': True,
         'status': 'online',
@@ -89,6 +120,7 @@ def api_status():
         'server_time': datetime.utcnow().isoformat(),
         'version': _BUILD_INFO['version'],
         'build': _BUILD_INFO,
+        'history': history,
         'system': {
             'python': _sys.version.split()[0],
             'flask': _flask.__version__,
@@ -947,6 +979,14 @@ def submit_tournament_trade(tid, trader):
 def update_tournament_trade(tid, trader, trade_id):
     """Close or update a tournament trade."""
     db = get_db()
+
+    # Verify tournament is active
+    tourn = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not tourn:
+        return jsonify({'success': False, 'error': 'Tournament not found'}), 404
+    if tourn['status'] != 'ACTIVE':
+        return jsonify({'success': False, 'error': 'Tournament is not active'}), 400
+
     row = db.execute(
         "SELECT * FROM tournament_trades WHERE id=? AND tournament_id=? AND trader_name=?",
         (trade_id, tid, trader)
@@ -955,8 +995,31 @@ def update_tournament_trade(tid, trader, trade_id):
         return jsonify({'success': False, 'error': 'Tournament trade not found'}), 404
 
     data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+
     td = json.loads(row['trade_data'])
-    td.update(data)
+
+    # Only allow specific safe fields to be updated
+    ALLOWED_FIELDS = {'status', 'closePrice', 'closedAt', 'closeReason', 'realizedPnl',
+                      'stopLoss', 'targetExit', 'notes'}
+    for key in data:
+        if key not in ALLOWED_FIELDS:
+            continue
+        td[key] = data[key]
+
+    # Validate realizedPnl if provided — must be a finite number within reason
+    if 'realizedPnl' in data:
+        try:
+            rpnl = float(data['realizedPnl'])
+            if not math.isfinite(rpnl):
+                return jsonify({'success': False, 'error': 'realizedPnl must be finite'}), 400
+            starting_balance = tourn['starting_balance']
+            if abs(rpnl) > starting_balance * 10:
+                return jsonify({'success': False, 'error': 'realizedPnl exceeds reasonable bounds'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'Invalid realizedPnl'}), 400
+
     db.execute("UPDATE tournament_trades SET trade_data=? WHERE id=?", (json.dumps(td), trade_id))
     db.commit()
 
@@ -967,8 +1030,23 @@ def update_tournament_trade(tid, trader, trade_id):
 def force_close_tournament_trades(tid, trader):
     """Force-close all open tournament trades for a trader (VaR DQ or tournament end)."""
     db = get_db()
+
+    # Verify tournament exists
+    tourn = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not tourn:
+        return jsonify({'success': False, 'error': 'Tournament not found'}), 404
+
+    # Verify trader is enrolled
+    entry = db.execute(
+        "SELECT * FROM tournament_entries WHERE tournament_id=? AND trader_name=?",
+        (tid, trader)
+    ).fetchone()
+    if not entry:
+        return jsonify({'success': False, 'error': 'Not enrolled'}), 403
+
     data = request.get_json() or {}
     closed_trades = data.get('trades', [])
+    starting_balance = tourn['starting_balance']
 
     # Bulk update: client sends array of {trade_id, closePrice, realizedPnl}
     for ct in closed_trades:
@@ -984,9 +1062,21 @@ def force_close_tournament_trades(tid, trader):
         td = json.loads(row['trade_data'])
         if td.get('status') != 'OPEN':
             continue
+
+        # Validate closePrice and realizedPnl
+        try:
+            close_price = float(ct.get('closePrice', 0))
+            realized_pnl = float(ct.get('realizedPnl', 0))
+            if not math.isfinite(close_price) or not math.isfinite(realized_pnl):
+                continue
+            if abs(realized_pnl) > starting_balance * 10:
+                continue  # Skip unreasonable P&L
+        except (ValueError, TypeError):
+            continue
+
         td['status'] = 'CLOSED'
-        td['closePrice'] = ct.get('closePrice', 0)
-        td['realizedPnl'] = ct.get('realizedPnl', 0)
+        td['closePrice'] = close_price
+        td['realizedPnl'] = realized_pnl
         td['closedAt'] = datetime.utcnow().isoformat()
         td['closeReason'] = ct.get('closeReason', 'FORCE_CLOSE')
         db.execute("UPDATE tournament_trades SET trade_data=? WHERE id=?", (json.dumps(td), trade_id))

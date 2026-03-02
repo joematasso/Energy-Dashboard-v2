@@ -276,12 +276,16 @@ tr:hover td{background:var(--surface2)}
 
     <!-- Version Detail Modal -->
     <div class="modal-overlay" id="versionModal" onclick="if(event.target===this)this.classList.remove('active')">
-      <div class="modal" style="max-width:520px">
+      <div class="modal" style="max-width:620px;max-height:85vh;overflow-y:auto">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
           <h3 style="margin:0;font-size:18px">Platform Details</h3>
           <button onclick="document.getElementById('versionModal').classList.remove('active')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:20px;padding:4px">&times;</button>
         </div>
         <div id="versionModalBody" style="font-family:var(--font-mono);font-size:13px">Loading...</div>
+        <div id="versionHistorySection" style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px">
+          <h4 style="margin:0 0 12px;font-size:14px;color:var(--text-muted);font-family:var(--font-sans)">Recent Versions</h4>
+          <div id="versionHistoryBody" style="font-family:var(--font-mono);font-size:12px">Loading...</div>
+        </div>
       </div>
     </div>
     <div class="card"><div class="card-header"><h3>Change Admin PIN</h3></div><div class="card-body">
@@ -683,6 +687,28 @@ async function checkStatus(){
           '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+statusColor+'"></span><span style="color:'+statusColor+'">'+statusText+'</span></span>'+
         '</div>';
     }
+    // Version history
+    const history=d.history||[];
+    const currentHash=(b&&b.commit)?b.commit:'';
+    if(history.length>0){
+      document.getElementById('versionHistoryBody').innerHTML=history.map(function(h){
+        const isCurrent=h.hash===currentHash;
+        const ts=h.date?new Date(h.date.replace(/^(\d{4}-\d{2}-\d{2}) /,'$1T')):null;
+        const ago=(ts&&!isNaN(ts.getTime()))?_timeAgo(ts):'';
+        const dateStr=(ts&&!isNaN(ts.getTime()))?ts.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+ts.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'';
+        return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)'+(isCurrent?';background:rgba(212,160,83,0.06);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px':'')+'">'+
+          '<div style="flex-shrink:0;margin-top:2px">'+
+            '<span style="font-size:11px;padding:1px 5px;border-radius:3px;'+(isCurrent?'background:var(--accent);color:#000;font-weight:700':'background:var(--surface2);color:var(--text-dim)')+'">'+h.short+'</span>'+
+          '</div>'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+((h.message||'No message').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'))+(isCurrent?' <span style="color:var(--accent);font-size:10px;font-weight:700">← CURRENT</span>':'')+'</div>'+
+            '<div style="font-size:10px;color:var(--text-muted);margin-top:1px">'+dateStr+(ago?' · '+ago:'')+(h.author?' · '+((h.author||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')):'')+'</div>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    }else{
+      document.getElementById('versionHistoryBody').innerHTML='<div style="color:var(--text-muted);padding:8px 0">No version history available</div>';
+    }
   }catch{
     serverOnline=false;document.getElementById('statusDot').className='status-dot offline';
     document.getElementById('statusText').textContent='Offline';
@@ -1055,6 +1081,7 @@ function loadDashboard() {
 let _tournaments = [];
 var _activeTournId = null;
 var _liveMonitorInterval = null;
+var _standingsInterval = null;
 
 // Sector name map
 var SECTOR_NAMES = {ng:'Natural Gas',crude:'Crude Oil',power:'Power',freight:'Freight',ag:'Agriculture',metals:'Metals',ngls:'NGLs',lng:'LNG'};
@@ -1064,13 +1091,13 @@ var NEWS_PRESETS = {
   crude: [
     {headline:'OPEC+ Announces Emergency Production Cut',desc:'Saudi Arabia leads coalition in surprise 1.5M bpd cut effective immediately.',type:'shock',dir:'bullish',pct:4,delay:3,dur:2,hubs_all:true},
     {headline:'OPEC+ Agrees to Increase Output by 500K bpd',desc:'Compliance pressure leads to easing of production caps.',type:'trend',dir:'bearish',pct:3,delay:5,dur:10,hubs_all:true},
-    {headline:'Category 4 Hurricane Enters Gulf of Mexico',desc:'Refineries along the Gulf Coast begin precautionary shutdowns.',type:'spike_revert',dir:'bullish',pct:5,delay:3,dur:6,hubs:['WTI Cushing','Mars Blend','LLS']},
+    {headline:'Category 4 Hurricane Enters Gulf of Mexico',desc:'Refineries along the Gulf Coast begin precautionary shutdowns.',type:'spike_revert',dir:'bullish',pct:5,delay:3,dur:6,hubs:['WTI Cushing','Mars Sour','LLS']},
     {headline:'Keystone Pipeline Shut Down After Leak',desc:'200,000 bpd of Canadian crude supply disrupted.',type:'shock',dir:'bullish',pct:2.5,delay:3,dur:2,hubs:['WTI Cushing','WTI Midland']},
     {headline:'US Announces 50M Barrel SPR Release',desc:'Strategic Petroleum Reserve drawdown to ease market tightness.',type:'trend',dir:'bearish',pct:4,delay:5,dur:8,hubs:['WTI Cushing','WTI Midland']},
-    {headline:'China Manufacturing PMI Surges to 54.2',desc:'Stronger-than-expected industrial activity boosts demand outlook.',type:'trend',dir:'bullish',pct:1.5,delay:5,dur:10,hubs:['Brent Dated','Dubai Fateh']},
+    {headline:'China Manufacturing PMI Surges to 54.2',desc:'Stronger-than-expected industrial activity boosts demand outlook.',type:'trend',dir:'bullish',pct:1.5,delay:5,dur:10,hubs:['Brent Dated','Dubai/Oman']},
     {headline:'US GDP Contracts -1.2% in Q1',desc:'Recession fears spike across commodity markets.',type:'shock',dir:'bearish',pct:5,delay:3,dur:2,hubs_all:true},
     {headline:'API Reports Mixed Inventory Data',desc:'Crude builds offset by product draws; market uncertain.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
-    {headline:'Red Sea Shipping Halted After Attack',desc:'Houthi strikes force vessels to divert around Cape of Good Hope.',type:'spike_revert',dir:'bullish',pct:4,delay:3,dur:6,hubs:['Brent Dated','Dubai Fateh']},
+    {headline:'Red Sea Shipping Halted After Attack',desc:'Houthi strikes force vessels to divert around Cape of Good Hope.',type:'spike_revert',dir:'bullish',pct:4,delay:3,dur:6,hubs:['Brent Dated','Dubai/Oman']},
   ],
   ng: [
     {headline:'Polar Vortex to Bring -30F to Northeast',desc:'NOAA issues extreme cold warning for next 10 days.',type:'shock',dir:'bullish',pct:12,delay:3,dur:2,hubs_all:true},
@@ -1084,12 +1111,12 @@ var NEWS_PRESETS = {
     {headline:'Record Heat Wave: 115F Forecast for ERCOT',desc:'Texas grid faces highest demand ever recorded.',type:'shock',dir:'bullish',pct:15,delay:3,dur:2,hubs_all:true},
     {headline:'CAISO Declares Stage 3 Emergency',desc:'Rolling blackouts imminent as reserve margin hits zero.',type:'spike_revert',dir:'bullish',pct:20,delay:2,dur:4,hubs:['CAISO SP15']},
     {headline:'Wind Generation Exceeds 40GW Across ERCOT',desc:'Abundant renewable supply crashes power prices.',type:'trend',dir:'bearish',pct:8,delay:5,dur:10,hubs:['ERCOT Hub','ERCOT North']},
-    {headline:'1.1GW Nuclear Unit Trips in PJM',desc:'Unplanned outage tightens PJM supply.',type:'shock',dir:'bullish',pct:4,delay:3,dur:2,hubs:['PJM West']},
+    {headline:'1.1GW Nuclear Unit Trips in PJM',desc:'Unplanned outage tightens PJM supply.',type:'shock',dir:'bullish',pct:4,delay:3,dur:2,hubs:['PJM West Hub']},
     {headline:'Load Forecast Within 2% of Normal',desc:'Mild weather keeps power markets range-bound.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
   ],
   freight: [
     {headline:'Panama Canal Restricts Transit to 18 Vessels/Day',desc:'Drought reduces canal depth, backing up global shipping.',type:'shock',dir:'bullish',pct:6,delay:3,dur:2,hubs_all:true},
-    {headline:'China Iron Ore Imports Surge 15% YoY',desc:'Steel restocking drives dry bulk demand.',type:'trend',dir:'bullish',pct:3,delay:5,dur:10,hubs:['Baltic Dry Index','Capesize C5TC']},
+    {headline:'China Iron Ore Imports Surge 15% YoY',desc:'Steel restocking drives dry bulk demand.',type:'trend',dir:'bullish',pct:3,delay:5,dur:10,hubs:['Baltic Dry Index','Baltic Capesize']},
     {headline:'Global Fleet Expansion: 40 New Vessels Delivered',desc:'Supply glut pressures freight rates.',type:'trend',dir:'bearish',pct:4,delay:5,dur:10,hubs_all:true},
     {headline:'Seasonal Grain Shipments on Schedule',desc:'Nothing unusual in agricultural freight demand.',type:'none',dir:'neutral',pct:0,delay:5,dur:1,noise:true},
   ],
@@ -1121,13 +1148,13 @@ var NEWS_PRESETS = {
 
 // Hub arrays (mirrors state.js hub names)
 var ADMIN_HUB_SETS = {
-  ng:['Henry Hub','Waha','SoCal Gas','Chicago','Algonquin','Transco Zone 6','Dominion South','Dawn','Sumas'],
-  crude:['WTI Cushing','Brent Dated','Dubai Fateh','Mars Blend','WTI Midland','LLS','WCS Hardisty','Bakken Clearbrook'],
-  power:['ERCOT Hub','ERCOT North','PJM West','MISO Indiana','SPP South','CAISO SP15','NYISO Zone A','ISONE Mass'],
-  freight:['Baltic Dry Index','Capesize C5TC','Panamax P4TC','Supramax S10TC','Clean MR Atlantic','Dirty TD3 (VLCC)'],
-  ag:['Corn (CBOT)','Soybeans (CBOT)','Wheat (CBOT)','Cotton (ICE)','Coffee (ICE)','Sugar #11 (ICE)','Live Cattle (CME)','Lean Hogs (CME)'],
-  metals:['Gold (COMEX)','Silver (COMEX)','Copper (COMEX)','Platinum (NYMEX)','Palladium (NYMEX)'],
-  ngls:['Ethane (C2)','Propane (C3)','Normal Butane (C4)','Isobutane (iC4)','Natural Gasoline (C5+)','Purity Ethylene'],
+  ng:['Henry Hub','Waha','SoCal Gas','Chicago','Algonquin','Transco Zone 6','Dominion South','Dawn','Sumas','Malin','Opal','Tetco M3','Kern River','AECO','MichCon'],
+  crude:['WTI Cushing','Brent Dated','Dubai/Oman','Mars Sour','WTI Midland','LLS','ANS','Bakken','WCS','Murban','Urals','Bonny Light','Tapis','Basra Medium','Daqing','RBOB Gasoline','ULSD Diesel','Jet Fuel'],
+  power:['ERCOT Hub','ERCOT North','ERCOT South','PJM West Hub','NEPOOL Mass','MISO Illinois','CAISO NP15','CAISO SP15','NYISO Zone J','NYISO Zone A','SPP North'],
+  freight:['Baltic Dry Index','Baltic Capesize','Baltic Panamax','Baltic Supramax','TD3C VLCC AG-East','TC2 Transatlantic','TD20 Suezmax WAF','LNG Spot East'],
+  ag:['Corn (CBOT)','Soybeans (CBOT)','Wheat (CBOT)','Soybean Oil (CBOT)','Soybean Meal (CBOT)','Cotton (ICE)','Sugar #11 (ICE)','Coffee C (ICE)','Cocoa (ICE)','Live Cattle (CME)','Lean Hogs (CME)','Feeder Cattle (CME)'],
+  metals:['Gold (COMEX)','Silver (COMEX)','Copper (COMEX)','Platinum (NYMEX)','Palladium (NYMEX)','Aluminum (LME)','Nickel (LME)','Zinc (LME)','Iron Ore (SGX)','Steel HRC (CME)'],
+  ngls:['Ethane (C2)','Propane (C3)','Normal Butane (nC4)','Isobutane (iC4)','Nat Gasoline (C5+)'],
   lng:['JKM (Platts)','TTF (ICE)','NBP (ICE)','HH Netback','DES South America','Brent-Linked LNG']
 };
 
@@ -1150,8 +1177,10 @@ function loadTournaments() {
         var sectorLabel = SECTOR_NAMES[t.sector] || t.sector || 'All';
         var durLabel = (t.duration_minutes || 60) + 'min';
         var safeName = (t.name || '').replace(/'/g, "\\'");
+        var escapedName = (t.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var escapedDesc = (t.description || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         return '<tr>' +
-          '<td style="font-weight:700">' + t.name + '<br><span style="font-size:11px;color:var(--text-muted)">' + (t.description || '') + '</span></td>' +
+          '<td style="font-weight:700">' + escapedName + '<br><span style="font-size:11px;color:var(--text-muted)">' + escapedDesc + '</span></td>' +
           '<td>' + sectorLabel + '</td>' +
           '<td><span class="badge ' + statusColor + '">' + t.status + '</span></td>' +
           '<td>' + durLabel + '</td>' +
@@ -1287,9 +1316,8 @@ function showLiveMonitor(tourn) {
 
   // Auto-refresh standings every 15 seconds
   refreshLiveStandings(tourn.id);
-  if (!_liveMonitorInterval._standings) {
-    _liveMonitorInterval._standings = setInterval(function() { refreshLiveStandings(tourn.id); }, 15000);
-  }
+  if (_standingsInterval) clearInterval(_standingsInterval);
+  _standingsInterval = setInterval(function() { refreshLiveStandings(tourn.id); }, 15000);
 }
 
 function hideLiveMonitor() {
@@ -1298,6 +1326,7 @@ function hideLiveMonitor() {
   document.getElementById('tnQueuedWrap').style.display = 'none';
   document.getElementById('tnFlashedWrap').style.display = 'none';
   if (_liveMonitorInterval) { clearInterval(_liveMonitorInterval); _liveMonitorInterval = null; }
+  if (_standingsInterval) { clearInterval(_standingsInterval); _standingsInterval = null; }
 }
 
 function updateLiveCountdown(tourn) {

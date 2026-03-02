@@ -1215,6 +1215,7 @@ if(typeof io !== 'undefined') {
       });
       // ---- Tournament WebSocket Events ----
       sock.on('tournament_start', function(data) {
+        if (!data.status) data.status = 'ACTIVE';
         STATE.tournament = data;
         STATE.tournamentSector = data.sector || '';
         STATE.tournamentMode = !!data.sector;

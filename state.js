@@ -190,7 +190,9 @@ const ALL_HUB_SETS = { ng: NG_HUBS, crude: CRUDE_HUBS, power: POWER_HUBS, freigh
 
 // Tournament mode helper — true when enrolled in an active sector-specific tournament
 function isTournamentMode() {
-  return STATE.tournamentMode && STATE.tournament && STATE.tournament.status === 'ACTIVE' && !STATE.tournamentDisqualified;
+  return STATE.tournamentMode && STATE.tournament &&
+    (STATE.tournament.status === 'ACTIVE' || STATE.tournament.status === undefined) &&
+    !STATE.tournamentDisqualified;
 }
 
 // Check if a hub belongs to the active tournament sector
@@ -785,12 +787,26 @@ function getSettlementPrice(hubName, dateStr) {
 }
 
 function getPriceChange(name) {
+  // Use tournament price history for tournament hubs
+  if (typeof isTournamentMode === 'function' && isTournamentMode() &&
+      typeof isTournamentHub === 'function' && isTournamentHub(name)) {
+    const th = STATE.tournamentPriceHistory[name];
+    if (th && th.length >= 2) return th[th.length - 1] - th[th.length - 2];
+    return 0;
+  }
   const h = priceHistory[name];
   if (!h || h.length < 2) return 0;
   return h[h.length - 1] - h[h.length - 2];
 }
 
 function getPriceChangePct(name) {
+  // Use tournament price history for tournament hubs
+  if (typeof isTournamentMode === 'function' && isTournamentMode() &&
+      typeof isTournamentHub === 'function' && isTournamentHub(name)) {
+    const th = STATE.tournamentPriceHistory[name];
+    if (th && th.length >= 2) return ((th[th.length-1] - th[th.length-2]) / th[th.length-2]) * 100;
+    return 0;
+  }
   const h = priceHistory[name];
   if (!h || h.length < 2) return 0;
   return ((h[h.length-1] - h[h.length-2]) / h[h.length-2]) * 100;
@@ -823,6 +839,29 @@ function getPromptMonthLabel(sector) {
 }
 
 function getDisplayPrice(hubName, sector) {
+  // In tournament mode, use tournament prices for sector hubs
+  if (typeof isTournamentMode === 'function' && isTournamentMode() &&
+      typeof isTournamentHub === 'function' && isTournamentHub(hubName)) {
+    const tHist = STATE.tournamentPriceHistory[hubName];
+    if (!tHist || !tHist.length) return STATE.tournamentPrices[hubName] || 0;
+    const pt = (STATE.pricingType && STATE.pricingType[sector]) || 'cash';
+    if (pt === 'cash') return tHist[tHist.length - 1];
+    if (pt === 'balmo') {
+      const now = new Date();
+      const dayOfMonth = now.getDate();
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const elapsed = Math.max(6, Math.round(dayOfMonth / daysInMonth * 90));
+      const n = Math.min(elapsed, tHist.length);
+      const slice = tHist.slice(-n);
+      return slice.reduce((s, v) => s + v, 0) / slice.length;
+    }
+    if (pt === 'index') {
+      const n = Math.min(90, tHist.length);
+      const slice = tHist.slice(-n);
+      return slice.reduce((s, v) => s + v, 0) / slice.length;
+    }
+    return tHist[tHist.length - 1];
+  }
   const pt = (STATE.pricingType && STATE.pricingType[sector]) || 'cash';
   const hist = priceHistory[hubName];
   if (!hist || !hist.length) return 0;
@@ -995,7 +1034,12 @@ function tickTournamentPrices() {
 function initTournamentPrices(sector, priceSnapshot) {
   var hubs = ALL_HUB_SETS[sector];
   if (!hubs) return;
-  var snapshot = typeof priceSnapshot === 'string' ? JSON.parse(priceSnapshot) : (priceSnapshot || {});
+  var snapshot;
+  try {
+    snapshot = typeof priceSnapshot === 'string' ? JSON.parse(priceSnapshot) : (priceSnapshot || {});
+  } catch (e) {
+    snapshot = {};
+  }
 
   for (var i = 0; i < hubs.length; i++) {
     var h = hubs[i];

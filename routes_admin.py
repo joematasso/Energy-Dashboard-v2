@@ -896,6 +896,26 @@ def end_tournament(tid):
     now = datetime.utcnow().isoformat()
     db.execute("UPDATE tournaments SET status='ENDED', end_time=? WHERE id=?", (now, tid))
 
+    # Force-close any remaining OPEN trades (server can't compute P&L from simulated prices,
+    # so we mark them CLOSED with zero P&L — clients should have force-closed with actual P&L)
+    open_trades = db.execute(
+        "SELECT id, trade_data FROM tournament_trades WHERE tournament_id=?", (tid,)
+    ).fetchall()
+    for ot in open_trades:
+        try:
+            td = json.loads(ot['trade_data'])
+        except Exception:
+            continue
+        if td.get('status') == 'OPEN':
+            td['status'] = 'CLOSED'
+            td['closedAt'] = now
+            td['closeReason'] = 'TOURNAMENT_ENDED'
+            # Keep existing realizedPnl if client already synced, otherwise 0
+            if 'realizedPnl' not in td:
+                td['realizedPnl'] = 0
+            db.execute("UPDATE tournament_trades SET trade_data=? WHERE id=?",
+                       (json.dumps(td), ot['id']))
+
     # Finalize entry stats from tournament_trades
     entries = db.execute("SELECT * FROM tournament_entries WHERE tournament_id=?", (tid,)).fetchall()
     balance = row['starting_balance']
@@ -1126,6 +1146,8 @@ def disqualify_trader(tid, trader):
     ).fetchone()
     if not entry:
         return jsonify({'success': False, 'error': 'Entry not found'}), 404
+    if entry['status'] == 'DISQUALIFIED':
+        return jsonify({'success': True, 'message': 'Already disqualified'})
 
     data = request.get_json() or {}
     reason = data.get('reason', 'ADMIN_DISQUALIFIED')
@@ -1151,6 +1173,12 @@ def disqualify_trader(tid, trader):
 def self_disqualify_trader(tid, trader):
     """Client-initiated DQ when VaR limit is breached."""
     db = get_db()
+
+    # Validate tournament is active
+    tourn = db.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
+    if not tourn or tourn['status'] != 'ACTIVE':
+        return jsonify({'success': False, 'error': 'Tournament not active'}), 400
+
     entry = db.execute(
         "SELECT * FROM tournament_entries WHERE tournament_id=? AND trader_name=?",
         (tid, trader)
@@ -1162,6 +1190,9 @@ def self_disqualify_trader(tid, trader):
 
     data = request.get_json() or {}
     reason = data.get('reason', 'VAR_LIMIT_EXCEEDED')
+    # Only allow specific DQ reasons from client
+    if reason not in ('VAR_LIMIT_EXCEEDED', 'TOURNAMENT_ENDED'):
+        reason = 'VAR_LIMIT_EXCEEDED'
     now = datetime.utcnow().isoformat()
 
     db.execute(

@@ -181,34 +181,41 @@ function renderNewsTicker() {
     }
   }
 
-  // Interleave: round-robin across sectors so it doesn't cluster
+  // Separate tournament items from regular items for interleaving
+  const tournItems = allItems.filter(item => item._tournament);
+  const regularItems = allItems.filter(item => !item._tournament);
+
+  // Interleave regular items: round-robin across sectors so it doesn't cluster
   const bySector = {};
-  for (const item of allItems) {
+  for (const item of regularItems) {
     if (!bySector[item.sector]) bySector[item.sector] = [];
     bySector[item.sector].push(item);
   }
   const interleaved = [];
   const queues = sectors.map(s => bySector[s] || []);
-  let maxLen = Math.max(...queues.map(q => q.length));
+  let maxLen = Math.max(0, ...queues.map(q => q.length));
   for (let i = 0; i < maxLen; i++) {
     for (const q of queues) {
       if (i < q.length) interleaved.push(q[i]);
     }
   }
 
-  // Store interleaved for click handler
-  window._tickerArticles = interleaved;
+  // Prepend tournament items AFTER interleaving so they stay at the front
+  const finalItems = tournItems.concat(interleaved);
+
+  // Store for click handler
+  window._tickerArticles = finalItems;
 
   const buildHTML = (items, offset) => items.map((item, i) => {
     const tag = item._tournament ? { label:'⚡TOURN', cls:'tourn' } : (SECTOR_TAGS[item.sector] || { label:'?', cls:'' });
     const idx = (offset || 0) + i;
     var extraStyle = item._tournament ? ' style="color:#fbbf24;font-weight:700"' : '';
-    return `<span class="news-tick"${extraStyle} onclick="openTickerNews(${idx % interleaved.length})"><span class="news-tick-tag ${tag.cls}">${tag.label}</span>${escapeHtml(item.headline)}<span class="news-tick-src">${escapeHtml(item.time)}</span></span><span class="news-tick-sep">◆</span>`;
+    return `<span class="news-tick"${extraStyle} onclick="openTickerNews(${idx % finalItems.length})"><span class="news-tick-tag ${tag.cls}">${tag.label}</span>${escapeHtml(item.headline)}<span class="news-tick-src">${escapeHtml(item.time)}</span></span><span class="news-tick-sep">◆</span>`;
   }).join('');
 
   // Duplicate content for seamless looping
-  const segment = buildHTML(interleaved, 0);
-  inner.innerHTML = segment + buildHTML(interleaved, 0);
+  const segment = buildHTML(finalItems, 0);
+  inner.innerHTML = segment + buildHTML(finalItems, 0);
 
   // Calculate speed: measure actual content width, target ~60px/sec
   requestAnimationFrame(() => {
