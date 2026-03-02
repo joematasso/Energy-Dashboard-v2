@@ -475,6 +475,7 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
         for hub, spread in NG_SPREADS.items():
             out[hub] = round(hh + spread, 4)
             hub_srcs[hub] = 'hh_spread'
+            live_hubs.add(hub)
         hub_srcs['Henry Hub'] = hh_src
         live_hubs.add('Henry Hub')
 
@@ -501,8 +502,8 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
         for hub, diff in CRUDE_DIFFS.items():
             out[hub] = round(wti + diff, 2)
             hub_srcs[hub] = 'wti_diff'
+            live_hubs.add(hub)
         hub_srcs['WTI Cushing'] = wti_src
-        live_hubs.add('WTI Cushing')
     if brent:
         out['Brent Dated'] = round(brent, 2)
         hub_srcs['Brent Dated'] = brent_src
@@ -515,6 +516,7 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
         'Copper (COMEX)': 'HG=F',
         'Platinum (NYMEX)': 'PL=F',
         'Palladium (NYMEX)': 'PA=F',
+        'Steel HRC (CME)': 'HRC=F',
     }
     for hub, ticker in METALS_MAP.items():
         if ticker in yf_prices:

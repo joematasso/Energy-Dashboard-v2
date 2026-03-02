@@ -627,7 +627,9 @@ function processAutoRolls() {
     if (!expiry) return;
 
     const daysToExpiry = Math.ceil((expiry.getTime() - now.getTime()) / 86400000);
-    if (daysToExpiry <= threshold && daysToExpiry >= 0) {
+    // Roll if within threshold OR already expired (grace period of -7 days
+    // to catch contracts that expired while user was offline)
+    if (daysToExpiry <= threshold && daysToExpiry >= -7) {
       toRoll.push({ trade: t, sector, daysToExpiry });
     }
   });

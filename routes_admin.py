@@ -365,18 +365,34 @@ def admin_change_pin():
 @admin_bp.route('/api/admin/config', methods=['GET'])
 @admin_required
 def admin_get_config():
+    reveal = request.args.get('reveal', '').lower() == 'true'
     db = get_db()
     rows = db.execute("SELECT * FROM admin_config").fetchall()
     config = {}
     for r in rows:
         if r['key'] == 'admin_pin':
-            config['admin_pin'] = '****'
+            config['admin_pin'] = r['value'] if reveal else '****'
         else:
             config[r['key']] = r['value']
-    config['eia_api_key'] = '****' if EIA_API_KEY else 'NOT SET'
+    import app as _app
+    eia_key = _app.EIA_API_KEY
+    config['eia_api_key'] = eia_key if (reveal and eia_key) else ('****' if eia_key else 'NOT SET')
     config['database'] = DATABASE
     config['news_cache_ttl'] = NEWS_CACHE_TTL
     return jsonify({'success': True, 'config': config})
+
+
+@admin_bp.route('/api/admin/config/eia-key', methods=['PUT'])
+@admin_required
+def admin_update_eia_key():
+    import app as _app
+    data = request.get_json()
+    new_key = (data.get('eia_api_key') or '').strip()
+    if not new_key:
+        return jsonify({'success': False, 'error': 'API key cannot be empty'}), 400
+    # Update the runtime variable on the source module (persists until restart)
+    _app.EIA_API_KEY = new_key
+    return jsonify({'success': True})
 
 
 # ---------------------------------------------------------------------------

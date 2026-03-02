@@ -680,7 +680,9 @@ function drawPnlChart() {
   ctx.scale(dpr, dpr);
   const W = rect.width, H = 280;
 
-  const closed = STATE.trades.filter(t => t.status === 'CLOSED').reverse();
+  // Sort by close time (not array position) so auto-rolls/backdated trades are in order
+  const closed = STATE.trades.filter(t => t.status === 'CLOSED')
+    .sort((a, b) => new Date(a.closedAt || a.timestamp) - new Date(b.closedAt || b.timestamp));
   if (closed.length < 1) {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     ctx.fillStyle = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
@@ -692,14 +694,48 @@ function drawPnlChart() {
     return;
   }
 
+  // Build cumulative P&L with close dates
   const cumPnlAll = [];
+  const closeDatesAll = [];
   let running = 0;
-  closed.forEach(t => { running += parseFloat(t.realizedPnl || 0); cumPnlAll.push(running); });
+  closed.forEach(t => {
+    running += parseFloat(t.realizedPnl || 0);
+    cumPnlAll.push(running);
+    closeDatesAll.push(t.closedAt ? new Date(t.closedAt) : new Date());
+  });
 
-  // Range filtering
-  const rangeMap = { '1W': 7, '1M': 30, '3M': 90, 'ALL': cumPnlAll.length };
-  const sliceN = rangeMap[STATE.pnlRange] || cumPnlAll.length;
-  const cumPnl = cumPnlAll.slice(-Math.min(sliceN, cumPnlAll.length));
+  // Range filtering: date-based when trades span multiple days, count-based otherwise
+  const rangeDays = { '1W': 7, '1M': 30, '3M': 90, 'ALL': Infinity };
+  const rangeCount = { '1W': 7, '1M': 30, '3M': 90, 'ALL': cumPnlAll.length };
+  const days = rangeDays[STATE.pnlRange] || Infinity;
+  let startIdx = 0;
+  if (days !== Infinity && closeDatesAll.length > 1) {
+    const spanMs = closeDatesAll[closeDatesAll.length - 1] - closeDatesAll[0];
+    if (spanMs > 86400000) {
+      // Trades span multiple days — filter by calendar
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      startIdx = closeDatesAll.findIndex(d => d >= cutoff);
+      if (startIdx < 0) startIdx = closeDatesAll.length;
+    } else {
+      // All trades within one session — filter by count
+      const count = rangeCount[STATE.pnlRange] || cumPnlAll.length;
+      startIdx = Math.max(0, cumPnlAll.length - count);
+    }
+  }
+  const cumPnl = cumPnlAll.slice(startIdx);
+  const closeDates = closeDatesAll.slice(startIdx);
+
+  if (cumPnl.length < 1) {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    ctx.fillStyle = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = isLight ? '#94a3b8' : '#475569';
+    ctx.font = '13px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No trades in this range', W/2, H/2);
+    canvas._pnlMeta = null;
+    return;
+  }
 
   const min = Math.min(0, ...cumPnl);
   const max = Math.max(0, ...cumPnl);
@@ -759,24 +795,21 @@ function drawPnlChart() {
     ctx.fillText('$' + val.toFixed(0), padL - 8, y + 4);
   }
 
-  // X-axis date labels
+  // X-axis date labels (from actual trade close dates)
   ctx.fillStyle = textColor;
   ctx.font = '10px JetBrains Mono';
   ctx.textAlign = 'center';
-  const now = new Date();
-  const totalSpanDays = rangeMap[STATE.pnlRange] || cumPnl.length;
   const labelCount = Math.min(6, cumPnl.length);
   for (let i = 0; i < labelCount; i++) {
     const idx = cumPnl.length > 1 ? Math.floor(i * (cumPnl.length - 1) / (labelCount - 1)) : 0;
     const x = padL + (cumPnl.length > 1 ? (idx / (cumPnl.length - 1)) * cW : cW / 2);
-    const daysBack = Math.round(totalSpanDays * (1 - idx / Math.max(1, cumPnl.length - 1)));
-    const labelDate = new Date(now.getTime() - daysBack * 86400000);
+    const labelDate = closeDates[idx] || new Date();
     const label = labelDate.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     ctx.fillText(label, x, H - padB + 20);
   }
 
   // Store metadata for crosshair
-  canvas._pnlMeta = { padL, padR, padT, padB, cW, cH, min, max, range, data: cumPnl, lineColor, W, H };
+  canvas._pnlMeta = { padL, padR, padT, padB, cW, cH, min, max, range, data: cumPnl, closeDates, lineColor, W, H };
 }
 
 function initPnlCrosshair() {
@@ -792,10 +825,11 @@ function initPnlCrosshair() {
     const { padL, padT, cW, cH, min, range, data, lineColor, W, H, padB } = meta;
     if (mx < padL || mx > padL + cW) { drawPnlChart(); return; }
 
-    const idx = Math.round(((mx - padL) / cW) * (data.length - 1));
+    if (data.length < 1) return;
+    const idx = data.length > 1 ? Math.round(((mx - padL) / cW) * (data.length - 1)) : 0;
     const clampIdx = Math.max(0, Math.min(data.length - 1, idx));
     const val = data[clampIdx];
-    const snapX = padL + (clampIdx / (data.length - 1)) * cW;
+    const snapX = data.length > 1 ? padL + (clampIdx / (data.length - 1)) * cW : padL + cW / 2;
     const snapY = padT + (1 - (val - min) / range) * cH;
 
     drawPnlChart();
@@ -824,9 +858,8 @@ function initPnlCrosshair() {
     ctx.fillStyle = lineColor; ctx.textAlign = 'left';
     ctx.fillText(txt, tipX + 8, snapY + 3);
 
-    const now = new Date();
-    const daysBack = data.length - 1 - clampIdx;
-    const labelDate = new Date(now.getTime() - daysBack * 86400000);
+    const { closeDates } = meta;
+    const labelDate = closeDates && closeDates[clampIdx] ? closeDates[clampIdx] : new Date();
     const dateStr = labelDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     ctx.font = '10px JetBrains Mono';
     const dtw = ctx.measureText(dateStr).width + 10;

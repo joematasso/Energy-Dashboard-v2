@@ -88,6 +88,7 @@ tr:hover td{background:var(--surface2)}
 .toast.success{border-left:3px solid var(--green)}.toast.error{border-left:3px solid var(--red)}.toast.info{border-left:3px solid var(--accent)}
 @keyframes toastIn{from{opacity:0;transform:translateX(50px)}to{opacity:1;transform:translateX(0)}}
 .section{display:none}.section.active{display:block}
+#versionCard:hover{border-color:var(--accent);background:var(--surface2)}
 @media(max-width:768px){.sidebar{width:60px}.sidebar .nav-item span,.sidebar-header .logo,.sidebar-footer>*:not(.status-dot){display:none}.main{margin-left:60px;padding:16px}.summary-grid{grid-template-columns:repeat(2,1fr)}.form-row{flex-direction:column}}
 @media(max-width:600px){
   .sidebar{display:none;position:fixed;top:0;left:0;bottom:0;width:240px;z-index:200;flex-direction:column;transform:translateX(-100%);transition:transform 0.25s ease}
@@ -254,6 +255,34 @@ tr:hover td{background:var(--surface2)}
       <div class="summary-card"><div class="label">Server Status</div><div class="value green" id="sysServerStatus">Online</div></div>
       <div class="summary-card"><div class="label">Connected Clients</div><div class="value" id="sysConnectedClients">0</div></div>
       <div class="summary-card"><div class="label">Server Time</div><div class="value" id="sysServerTime" style="font-size:16px">—</div></div>
+    </div>
+    <div class="card" id="versionCard" onclick="document.getElementById('versionModal').classList.add('active')" style="cursor:pointer;transition:all 0.2s ease">
+      <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:36px;height:36px;border-radius:8px;background:rgba(212,160,83,0.15);display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px">
+              <span>Platform Version</span>
+              <span id="versionBadge" style="font-family:var(--font-mono);font-size:11px;font-weight:700;background:var(--accent);color:#000;padding:2px 8px;border-radius:4px">...</span>
+            </div>
+            <div id="versionOneLiner" style="font-size:12px;color:var(--text-dim);margin-top:2px;font-family:var(--font-mono)">Loading...</div>
+          </div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <!-- Version Detail Modal -->
+    <div class="modal-overlay" id="versionModal" onclick="if(event.target===this)this.classList.remove('active')">
+      <div class="modal" style="max-width:520px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <h3 style="margin:0;font-size:18px">Platform Details</h3>
+          <button onclick="document.getElementById('versionModal').classList.remove('active')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:20px;padding:4px">&times;</button>
+        </div>
+        <div id="versionModalBody" style="font-family:var(--font-mono);font-size:13px">Loading...</div>
+      </div>
     </div>
     <div class="card"><div class="card-header"><h3>Change Admin PIN</h3></div><div class="card-body">
       <div class="form-row">
@@ -495,11 +524,52 @@ async function checkStatus(){
     document.getElementById('sysServerStatus').textContent='Online';document.getElementById('sysServerStatus').className='value green';
     document.getElementById('sysConnectedClients').textContent=d.connected_clients||0;
     document.getElementById('sysServerTime').textContent=new Date(d.server_time).toLocaleString();
+    // Version info — compact card + modal
+    const b=d.build;
+    if(b){
+      const ts=b.last_updated?new Date(b.last_updated.replace(' ','T')):null;
+      const ago=ts?_timeAgo(ts):'';
+      // Compact one-liner
+      document.getElementById('versionBadge').textContent='v'+b.version;
+      document.getElementById('versionOneLiner').textContent=
+        (b.commit_short||'')+' \u00b7 '+(b.commit_message||'No description')+
+        (ago?' \u00b7 '+ago:'');
+      // Modal detail
+      const env=location.hostname==='localhost'||location.hostname==='127.0.0.1'?'Development':'Production';
+      const envColor=env==='Production'?'var(--green)':'var(--amber)';
+      document.getElementById('versionModalBody').innerHTML=
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'+
+          '<span style="background:rgba(212,160,83,0.15);color:var(--accent);padding:4px 12px;border-radius:6px;font-weight:600;font-size:14px">v'+b.version+'</span>'+
+          '<span style="background:var(--surface2);color:var(--text-dim);padding:4px 12px;border-radius:6px;font-size:12px">Build #'+b.commit_count+'</span>'+
+          '<span style="background:var(--surface2);color:var(--text-dim);padding:4px 12px;border-radius:6px;font-size:12px">'+b.commit_short+'</span>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:130px 1fr;gap:12px 16px;line-height:1.9">'+
+          '<span style="color:var(--text-muted);font-size:12px">LATEST UPDATE</span>'+
+          '<span style="color:var(--text);font-size:13px">'+(b.commit_message||'—')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px">LAST DEPLOY</span>'+
+          '<span style="color:var(--text)">'+(ago||'—')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px">DEPLOY DATE</span>'+
+          '<span style="color:var(--text)">'+(ts?ts.toLocaleString():'—')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px">FULL COMMIT</span>'+
+          '<span style="color:var(--text);font-size:11px;word-break:break-all">'+(b.commit||'—')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px">TECH STACK</span>'+
+          '<span style="color:var(--text)">Flask 2.3 + Vanilla JS + SQLite</span>'+
+          '<span style="color:var(--text-muted);font-size:12px">ENVIRONMENT</span>'+
+          '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+envColor+'"></span><span style="color:'+envColor+'">'+env+'</span></span>'+
+          '<span style="color:var(--text-muted);font-size:12px">STATUS</span>'+
+          '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span><span style="color:var(--green)">All systems operational</span></span>'+
+        '</div>';
+    }
   }catch{
     serverOnline=false;document.getElementById('statusDot').className='status-dot offline';
     document.getElementById('statusText').textContent='Offline';
     document.getElementById('sysServerStatus').textContent='Offline';document.getElementById('sysServerStatus').className='value red';
   }
+}
+function _timeAgo(date){
+  const s=Math.floor((Date.now()-date.getTime())/1000);
+  if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';
+  if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';
 }
 
 async function loadTraders(){try{const d=await api('/api/admin/traders');if(!d.success)return;traders=d.traders;renderTraders()}catch(e){console.error('Load traders error:',e)}}
@@ -607,10 +677,50 @@ function renderPins(){
 async function generatePins(){const qty=parseInt(document.getElementById('pinQuantity').value)||10;const d=await api('/api/admin/pins/generate',{method:'POST',body:JSON.stringify({quantity:qty})});if(d.success){toast('Generated '+d.count+' PINs','success');loadPins()}else toast(d.error||'Failed','error')}
 async function revokePin(pin){await api('/api/admin/pins/revoke',{method:'POST',body:JSON.stringify({pin:pin})});toast('PIN revoked','info');loadPins()}
 
-async function loadConfig(){
-  try{const d=await api('/api/admin/config');if(!d.success){document.getElementById('configDisplay').innerHTML='<p style="color:var(--red)">Failed to load: '+(d.error||'Unknown error')+'</p>';return;}const c=d.config;
-    document.getElementById('configDisplay').innerHTML='<div style="display:grid;grid-template-columns:200px 1fr;gap:8px;font-size:13px"><span style="color:var(--text-dim)">Admin PIN:</span><span style="font-family:var(--font-mono)">'+c.admin_pin+'</span><span style="color:var(--text-dim)">EIA API Key:</span><span style="font-family:var(--font-mono)">'+c.eia_api_key+'</span><span style="color:var(--text-dim)">Database:</span><span style="font-family:var(--font-mono);word-break:break-all">'+c.database+'</span><span style="color:var(--text-dim)">News Cache TTL:</span><span>'+c.news_cache_ttl+'s</span></div>';
+let _configRevealed=false;
+async function loadConfig(reveal){
+  try{
+    const url=reveal?'/api/admin/config?reveal=true':'/api/admin/config';
+    const d=await api(url);
+    if(!d.success){document.getElementById('configDisplay').innerHTML='<p style="color:var(--red)">Failed to load: '+(d.error||'Unknown error')+'</p>';return;}
+    const c=d.config;_configRevealed=!!reveal;
+    const eyeIcon=_configRevealed
+      ?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+      :'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const toggleBtn='<button onclick="loadConfig('+(!_configRevealed)+')" style="background:none;border:1px solid var(--border);color:var(--text-dim);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:5px;font-family:inherit;transition:all 0.2s" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--text)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--text-dim)\'">'
+      +eyeIcon+(_configRevealed?'Hide':'Reveal')+'</button>';
+    const editPinBtn='<button onclick="_editConfigField(\'pin\')" style="background:none;border:1px solid var(--border);color:var(--text-dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;transition:all 0.2s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">Edit</button>';
+    const editEiaBtn='<button onclick="_editConfigField(\'eia\')" style="background:none;border:1px solid var(--border);color:var(--text-dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;transition:all 0.2s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">Edit</button>';
+    document.getElementById('configDisplay').innerHTML=
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">'+toggleBtn+'</div>'+
+      '<div style="display:grid;grid-template-columns:160px 1fr auto;gap:10px 16px;font-size:13px;align-items:center">'+
+        '<span style="color:var(--text-dim)">Admin PIN</span>'+
+        '<span id="cfgPinVal" style="font-family:var(--font-mono)">'+c.admin_pin+'</span>'+
+        '<span>'+editPinBtn+'</span>'+
+        '<span style="color:var(--text-dim)">EIA API Key</span>'+
+        '<span id="cfgEiaVal" style="font-family:var(--font-mono);word-break:break-all">'+c.eia_api_key+'</span>'+
+        '<span>'+editEiaBtn+'</span>'+
+        '<span style="color:var(--text-dim)">Database</span>'+
+        '<span style="font-family:var(--font-mono);word-break:break-all" colspan="2">'+c.database+'</span><span></span>'+
+        '<span style="color:var(--text-dim)">News Cache TTL</span>'+
+        '<span>'+c.news_cache_ttl+'s</span><span></span>'+
+      '</div>';
   }catch(e){console.error('Load config error:',e);document.getElementById('configDisplay').innerHTML='<p style="color:var(--red)">Error: '+e.message+'</p>';}
+}
+function _editConfigField(field){
+  if(field==='pin'){
+    // Scroll to and highlight the Change Admin PIN card
+    const pinCard=document.getElementById('currentAdminPin');
+    if(pinCard){pinCard.closest('.card').style.borderColor='var(--accent)';pinCard.focus();setTimeout(()=>{pinCard.closest('.card').style.borderColor='';},3000);}
+  }else if(field==='eia'){
+    const cur=document.getElementById('cfgEiaVal').textContent;
+    const newKey=prompt('Enter new EIA API Key:',cur==='****'?'':cur);
+    if(newKey===null)return;
+    if(!newKey.trim()){toast('API key cannot be empty','error');return;}
+    api('/api/admin/config/eia-key',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({eia_api_key:newKey.trim()})})
+      .then(d=>{if(d.success){toast('EIA API Key updated','success');loadConfig(_configRevealed);}else toast(d.error||'Failed','error');})
+      .catch(()=>toast('Server error','error'));
+  }
 }
 async function changeAdminPin(){
   const cur=document.getElementById('currentAdminPin').value,np=document.getElementById('newAdminPin').value,cp=document.getElementById('confirmAdminPin').value;

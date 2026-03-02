@@ -222,7 +222,9 @@ function populateHubDropdown() {
     if (bdInput && bdInput.value) {
       onBackdateChange();
     } else {
-      document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+      const p = getPrice(hub).toFixed(4);
+      document.getElementById('tradeSpot').value = p;
+      document.getElementById('tradeEntry').value = p;
       _updateSpotBadge(hub);
     }
   }
@@ -878,8 +880,137 @@ async function submitTrade() {
 
   playSound('trade');
   toast('Trade submitted: ' + tradeDirection + ' ' + volume + ' ' + hub, 'success');
+
+  // Auto-roll if backdated trade has an expired delivery month
+  if (trade.deliveryMonth && trade.status === 'OPEN') {
+    _autoRollIfExpired(trade);
+  }
+
   resetTradeForm();
   renderBlotterPage();
+}
+
+/* =====================================================================
+   AUTO-ROLL BACKDATED EXPIRED TRADES
+   If a trade is submitted for a delivery month that has already expired,
+   immediately close it at the expiry-date price and open a new position
+   for the current prompt month.
+   ===================================================================== */
+function _autoRollIfExpired(trade) {
+  if (typeof _nextDeliveryMonth !== 'function') return; // engine-init.js not loaded yet
+  const sector = trade.sector || (typeof inferSectorFromType === 'function' ? inferSectorFromType(trade.type) : '');
+  if (!sector) return;
+
+  const expiry = (typeof getContractExpiry === 'function') ? getContractExpiry(trade.hub, trade.deliveryMonth, sector) : null;
+  if (!expiry) return;
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  if (expiry.getTime() >= now.getTime()) return; // Not expired — nothing to do
+
+  // Contract is expired — roll forward month by month until we reach an active month
+  let currentMonth = trade.deliveryMonth;
+  let currentEntry = parseFloat(trade.entryPrice);
+  let totalRollPnl = 0;
+  const dir = trade.direction === 'BUY' ? 1 : -1;
+  const vol = parseFloat(trade.volume);
+  const rollChain = [];
+
+  for (let safety = 0; safety < 24; safety++) {
+    const nextMonth = _nextDeliveryMonth(currentMonth);
+    const nextExpiry = getContractExpiry(trade.hub, nextMonth, sector);
+
+    // Get the close price for the expiring month (forward curve or spot)
+    const closePrice = (typeof _getContractPrice === 'function') ? _getContractPrice(trade.hub, currentMonth) : getPrice(trade.hub);
+    if (!closePrice || isNaN(closePrice)) break;
+
+    // P&L for this leg
+    const legPnl = (closePrice - currentEntry) * vol * dir;
+    totalRollPnl += legPnl;
+    rollChain.push({ month: currentMonth, entry: currentEntry, close: closePrice, pnl: legPnl });
+
+    // Get the entry price for next month
+    const nextPrice = (typeof _getContractPrice === 'function') ? _getContractPrice(trade.hub, nextMonth) : null;
+    if (!nextPrice || isNaN(nextPrice)) break;
+
+    // If next month is still active, this is our destination
+    if (!nextExpiry || nextExpiry.getTime() >= now.getTime()) {
+      // Close the original trade
+      trade.status = 'CLOSED';
+      trade.closePrice = closePrice;
+      trade.realizedPnl = totalRollPnl;
+      trade.closedAt = new Date().toISOString();
+      trade.closeReason = 'BACKDATED_ROLL';
+      trade.rollChain = rollChain;
+
+      // Create the new rolled-forward trade
+      const newId = Date.now() + Math.floor(Math.random() * 10000);
+      const rolledTrade = {
+        id: newId,
+        type: trade.type,
+        direction: trade.direction,
+        hub: trade.hub,
+        volume: vol,
+        entryPrice: nextPrice,
+        spotRef: nextPrice,
+        sector: sector,
+        deliveryMonth: nextMonth,
+        autoRoll: trade.autoRoll || false,
+        rolledFrom: trade.id,
+        venue: trade.venue || '',
+        counterparty: trade.counterparty || '',
+        notes: (trade.notes ? trade.notes + ' | ' : '') + 'Rolled from expired ' + trade.deliveryMonth + ' (backdated)',
+        orderType: 'MARKET',
+        status: 'OPEN',
+        timestamp: new Date().toISOString(),
+        stopLoss: trade.stopLoss || null,
+        targetExit: trade.targetExit || null,
+        settlementType: trade.settlementType || 'FINANCIAL',
+        confirmRef: 'BDROLL-' + Date.now(),
+        broker: trade.broker || '',
+      };
+      trade.rolledTo = newId;
+
+      STATE.trades.unshift(rolledTrade);
+      localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
+
+      // Server sync for both trades
+      if (STATE.connected && STATE.trader) {
+        const traderName = STATE.trader.trader_name;
+        if (trade.id) {
+          fetch(API_BASE + '/api/trades/' + traderName + '/' + trade.id, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'CLOSED', closePrice, realizedPnl: totalRollPnl, closeReason: 'BACKDATED_ROLL' })
+          }).catch(() => {});
+        }
+        fetch(API_BASE + '/api/trades/' + traderName, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rolledTrade)
+        }).then(r => r.json()).then(d => {
+          if (d.success && d.trade_id) rolledTrade.id = d.trade_id;
+        }).catch(() => {});
+      }
+
+      const pnlSign = totalRollPnl >= 0 ? '+' : '-';
+      const monthsRolled = rollChain.length;
+      toast(
+        'Expired contract auto-rolled: ' + trade.deliveryMonth + ' → ' + nextMonth +
+        (monthsRolled > 1 ? ' (' + monthsRolled + ' months)' : '') +
+        ' | Roll P&L: ' + pnlSign + '$' + Math.abs(totalRollPnl).toFixed(0),
+        totalRollPnl >= 0 ? 'success' : 'warning'
+      );
+
+      if (typeof addNotification === 'function') {
+        addNotification('position', 'Backdated Roll', trade.hub + ' ' + trade.deliveryMonth + ' → ' + nextMonth +
+          ' | P&L: $' + totalRollPnl.toFixed(2));
+      }
+      return;
+    }
+
+    // Next month is also expired — continue rolling
+    currentMonth = nextMonth;
+    currentEntry = nextPrice;
+  }
 }
 
 function resetTradeForm() {

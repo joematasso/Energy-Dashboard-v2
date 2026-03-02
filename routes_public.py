@@ -4,10 +4,12 @@
 import json
 import hashlib
 import math
+import os
 import random
 import re
 import sqlite3
 import string
+import subprocess
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
@@ -15,6 +17,29 @@ from flask import Blueprint, request, jsonify
 from app import get_db, active_connections, connections_lock, socketio, _calc_margin, logger
 
 public_bp = Blueprint('public', __name__)
+
+# ---------------------------------------------------------------------------
+# Build info — captured once at import time from git
+# ---------------------------------------------------------------------------
+def _read_git_info():
+    info = {'version': '3.0', 'commit': None, 'commit_short': None,
+            'last_updated': None, 'commit_message': None, 'commit_count': 0}
+    try:
+        root = os.path.dirname(os.path.abspath(__file__))
+        def _git(cmd):
+            return subprocess.check_output(cmd, cwd=root, stderr=subprocess.DEVNULL).decode().strip()
+        info['commit'] = _git(['git', 'rev-parse', 'HEAD'])
+        info['commit_short'] = info['commit'][:7]
+        info['last_updated'] = _git(['git', 'log', '-1', '--format=%ci'])
+        info['commit_message'] = _git(['git', 'log', '-1', '--format=%s'])
+        count = int(_git(['git', 'rev-list', '--count', 'HEAD']))
+        info['commit_count'] = count
+        info['version'] = f'3.0.{count}'
+    except Exception:
+        pass
+    return info
+
+_BUILD_INFO = _read_git_info()
 
 # ---------------------------------------------------------------------------
 # Public API Endpoints
@@ -31,7 +56,8 @@ def api_status():
         'active_traders': active,
         'connected_clients': ws_count,
         'server_time': datetime.utcnow().isoformat(),
-        'version': '3.0'
+        'version': _BUILD_INFO['version'],
+        'build': _BUILD_INFO,
     })
 
 @public_bp.route('/api/traders/register', methods=['POST'])
@@ -444,7 +470,7 @@ def update_trade(trader, trade_id):
 
     # Validate closeReason if provided
     if data.get('closeReason'):
-        valid_reasons = {'MANUAL', 'STOP_LOSS', 'TARGET', 'AUTO_ROLL', 'EXPIRY', 'MARGIN_CALL', 'FLAT_ALL', 'TRAILING_STOP'}
+        valid_reasons = {'MANUAL', 'STOP_LOSS', 'TARGET', 'AUTO_ROLL', 'EXPIRY', 'MARGIN_CALL', 'FLAT_ALL', 'TRAILING_STOP', 'BACKDATED_ROLL'}
         if data['closeReason'] not in valid_reasons:
             return jsonify({'success': False, 'error': f'Invalid close reason: {data["closeReason"]}'}), 400
 
