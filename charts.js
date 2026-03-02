@@ -24,7 +24,7 @@ const TA_INFO = {
     name: 'Exponential Moving Average (20)',
     desc: 'EMA gives more weight to recent prices, reacting faster to changes than SMA. EMA20 hugs price tightly.',
     usage: 'Preferred by short-term traders. When EMA20 > SMA20, momentum is accelerating. Used for fast trend detection in energy markets.',
-    color: '#22d3ee'
+    color: '#d4a053'
   },
   bb: {
     name: 'Bollinger Bands (20, 2\u03c3)',
@@ -42,7 +42,7 @@ const TA_INFO = {
     name: 'MACD (12, 26, 9)',
     desc: 'Moving Average Convergence/Divergence: MACD line = EMA12 \u2212 EMA26. Signal line = 9-EMA of MACD. Histogram = MACD \u2212 Signal.',
     usage: 'Bullish: MACD crosses above signal. Bearish: below. Histogram bars shrinking = momentum fading. Zero-line crossover = trend change. Widely used in energy trading.',
-    color: '#22d3ee'
+    color: '#d4a053'
   },
   vol: {
     name: 'Volume',
@@ -84,7 +84,7 @@ const TA_INFO = {
     name: 'On-Balance Volume (OBV)',
     desc: 'Cumulative volume indicator: adds volume on up days, subtracts on down days. Shows whether volume is flowing in or out.',
     usage: 'OBV rising + flat price = accumulation (bullish). OBV falling + flat price = distribution (bearish). OBV divergences from price are strong reversal signals.',
-    color: '#06b6d4'
+    color: '#c4933f'
   },
   vwap: {
     name: 'Volume-Weighted Average Price',
@@ -409,7 +409,7 @@ function drawChart(canvasId, hubName, range) {
   for (let i = 0; i <= 5; i++) {
     const y = padT + (cH / 5) * i;
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-    ctx.fillStyle = textColor; ctx.font = '11px IBM Plex Mono'; ctx.textAlign = 'right';
+    ctx.fillStyle = textColor; ctx.font = '11px JetBrains Mono'; ctx.textAlign = 'right';
     ctx.fillText((max - (max - min) * (i / 5)).toFixed(decimals), padL - 8, y + 4);
   }
 
@@ -520,13 +520,13 @@ function drawChart(canvasId, hubName, range) {
   const chgStr = isLargeVal
     ? pctSign + absChg.toFixed(0) + ' (' + pctSign + pctChg.toFixed(2) + '%)'
     : pctSign + absChg.toFixed(2) + ' (' + pctSign + pctChg.toFixed(2) + '%)';
-  ctx.font = 'bold 12px IBM Plex Mono';
+  ctx.font = 'bold 12px JetBrains Mono';
   const chgW = ctx.measureText(chgStr).width + 14;
   ctx.fillStyle = pctColor + '18'; ctx.fillRect(W - padR - chgW - 4, padT + 2, chgW + 4, 22);
   ctx.fillStyle = pctColor; ctx.textAlign = 'right'; ctx.fillText(chgStr, W - padR - 6, padT + 17);
 
   // X-axis time labels
-  ctx.fillStyle = textColor; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'center';
+  ctx.fillStyle = textColor; ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'center';
   const now = new Date();
   const labelCount = Math.min(6, data.length);
   for (let i = 0; i < labelCount; i++) {
@@ -540,7 +540,7 @@ function drawChart(canvasId, hubName, range) {
   if (taData.sma20) _drawLine(taData.sma20, '#f59e0b', 1.2);
   if (taData.sma50) _drawLine(taData.sma50, '#a78bfa', 1.2);
   if (taData.sma200) _drawLine(taData.sma200, '#ef4444', 1.2);
-  if (taData.ema20) _drawLine(taData.ema20, '#22d3ee', 1.2, [4, 2]);
+  if (taData.ema20) _drawLine(taData.ema20, '#d4a053', 1.2, [4, 2]);
   if (taData.vwap) _drawLine(taData.vwap, '#8b5cf6', 1.2, [6, 3]);
 
   // Bollinger Bands
@@ -570,7 +570,7 @@ function drawChart(canvasId, hubName, range) {
       const price = fibHigh - fibDiff * level, y = _yPos(price);
       ctx.strokeStyle = 'rgba(245,158,11,0.25)'; ctx.lineWidth = 0.5; ctx.setLineDash([2, 4]);
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + cW, y); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(245,158,11,0.5)'; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(245,158,11,0.5)'; ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'left';
       ctx.fillText((level * 100).toFixed(1) + '%', padL + 4, y - 3);
     });
   }
@@ -582,7 +582,7 @@ function drawChart(canvasId, hubName, range) {
     if (y < padT || y > padT + cH) return;
     ctx.strokeStyle = a.color || '#ef4444'; ctx.lineWidth = 1; ctx.setLineDash([6, 3]);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + cW, y); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = a.color || '#ef4444'; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+    ctx.fillStyle = a.color || '#ef4444'; ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'right';
     ctx.fillText('ALERT ' + a.price.toFixed(2), padL + cW - 4, y - 3);
   });
 
@@ -621,13 +621,13 @@ function drawChart(canvasId, hubName, range) {
           if (!s) { ctx.moveTo(x, y); s = true; } else ctx.lineTo(x, y);
         }
         ctx.stroke();
-        ctx.fillStyle = subTextCol; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'right';
+        ctx.fillStyle = subTextCol; ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'right';
         ctx.fillText('70', padL - 4, ob + 3); ctx.fillText('30', padL - 4, os + 3);
-        ctx.fillStyle = '#a78bfa'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#a78bfa'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('RSI(14)', padL + 4, subY + 12);
         const lastRsi = rsiD.filter(v => v !== null).slice(-1)[0];
         if (lastRsi !== undefined) {
-          ctx.textAlign = 'right'; ctx.font = 'bold 11px IBM Plex Mono';
+          ctx.textAlign = 'right'; ctx.font = 'bold 11px JetBrains Mono';
           ctx.fillStyle = lastRsi > 70 ? '#ef4444' : lastRsi < 30 ? '#10b981' : '#a78bfa';
           ctx.fillText(lastRsi.toFixed(1), padL + cW - 4, subY + 12);
         }
@@ -649,7 +649,7 @@ function drawChart(canvasId, hubName, range) {
             ctx.fillStyle = md.hist[i] >= 0 ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)';
             ctx.fillRect(x - barW / 2, Math.min(y1, zeroY), barW, Math.abs(y1 - zeroY));
           }
-          ctx.beginPath(); ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.strokeStyle = '#d4a053'; ctx.lineWidth = 1.2;
           let s = false;
           for (let i = 26; i < md.macd.length; i++) { if (!isFinite(md.macd[i])) continue; const x = _xPos(i), y = mY(md.macd[i]); if (!s) { ctx.moveTo(x, y); s = true; } else ctx.lineTo(x, y); }
           ctx.stroke();
@@ -658,7 +658,7 @@ function drawChart(canvasId, hubName, range) {
           for (let i = 26; i < md.signal.length; i++) { if (!isFinite(md.signal[i])) continue; const x = _xPos(i), y = mY(md.signal[i]); if (!s) { ctx.moveTo(x, y); s = true; } else ctx.lineTo(x, y); }
           ctx.stroke();
         }
-        ctx.fillStyle = '#22d3ee'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#d4a053'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('MACD(12,26,9)', padL + 4, subY + 12);
       }
 
@@ -689,13 +689,13 @@ function drawChart(canvasId, hubName, range) {
           if (!s) { ctx.moveTo(x, y); s = true; } else ctx.lineTo(x, y);
         }
         ctx.stroke();
-        ctx.fillStyle = subTextCol; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'right';
+        ctx.fillStyle = subTextCol; ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'right';
         ctx.fillText('80', padL - 4, ob2 + 3); ctx.fillText('20', padL - 4, os2 + 3);
-        ctx.fillStyle = '#10b981'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#10b981'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('Stoch(14,3)', padL + 4, subY + 12);
         const lastK = st.k.filter(v => v !== null).slice(-1)[0];
         if (lastK !== undefined) {
-          ctx.textAlign = 'right'; ctx.font = 'bold 11px IBM Plex Mono';
+          ctx.textAlign = 'right'; ctx.font = 'bold 11px JetBrains Mono';
           ctx.fillStyle = lastK > 80 ? '#ef4444' : lastK < 20 ? '#10b981' : '#64748b';
           ctx.fillText(lastK.toFixed(1), padL + cW - 4, subY + 12);
         }
@@ -714,11 +714,11 @@ function drawChart(canvasId, hubName, range) {
           }
           ctx.stroke();
         }
-        ctx.fillStyle = '#f97316'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#f97316'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('ATR(14)', padL + 4, subY + 12);
         const lastAtr = taData.atr.filter(v => v !== null).slice(-1)[0];
         if (lastAtr !== undefined) {
-          ctx.textAlign = 'right'; ctx.font = 'bold 11px IBM Plex Mono'; ctx.fillStyle = '#f97316';
+          ctx.textAlign = 'right'; ctx.font = 'bold 11px JetBrains Mono'; ctx.fillStyle = '#f97316';
           ctx.fillText(lastAtr.toFixed(decimals), padL + cW - 4, subY + 12);
         }
       }
@@ -731,7 +731,7 @@ function drawChart(canvasId, hubName, range) {
           const y25 = subY + (1 - 25 / aR2) * subH;
           ctx.strokeStyle = 'rgba(148,163,184,0.3)'; ctx.setLineDash([2, 3]);
           ctx.beginPath(); ctx.moveTo(padL, y25); ctx.lineTo(padL + cW, y25); ctx.stroke(); ctx.setLineDash([]);
-          ctx.fillStyle = subTextCol; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'right';
+          ctx.fillStyle = subTextCol; ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'right';
           ctx.fillText('25', padL - 4, y25 + 3);
           // ADX line
           ctx.beginPath(); ctx.strokeStyle = '#ec4899'; ctx.lineWidth = 1.5;
@@ -743,11 +743,11 @@ function drawChart(canvasId, hubName, range) {
           }
           ctx.stroke();
         }
-        ctx.fillStyle = '#ec4899'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#ec4899'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('ADX(14)', padL + 4, subY + 12);
         const lastAdx = taData.adx.filter(v => v !== null).slice(-1)[0];
         if (lastAdx !== undefined) {
-          ctx.textAlign = 'right'; ctx.font = 'bold 11px IBM Plex Mono';
+          ctx.textAlign = 'right'; ctx.font = 'bold 11px JetBrains Mono';
           ctx.fillStyle = lastAdx > 25 ? '#ec4899' : '#64748b';
           ctx.fillText(lastAdx.toFixed(1), padL + cW - 4, subY + 12);
         }
@@ -763,21 +763,21 @@ function drawChart(canvasId, hubName, range) {
           ctx.fillStyle = (i > 0 && data[i] >= data[i - 1]) ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)';
           ctx.fillRect(x - barW / 2, subY + subH - h, barW, h);
         }
-        ctx.fillStyle = subTextCol; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = subTextCol; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('Volume', padL + 4, subY + 12);
       }
 
       if (type === 'obv' && taData.obv) {
         const obvD = taData.obv;
         const oMin = Math.min(...obvD), oMax = Math.max(...obvD), oR = oMax - oMin || 1;
-        ctx.beginPath(); ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.strokeStyle = '#c4933f'; ctx.lineWidth = 1.5;
         let s = false;
         for (let i = 0; i < obvD.length; i++) {
           const x = _xPos(i), y = subY + (1 - (obvD[i] - oMin) / oR) * subH;
           if (!s) { ctx.moveTo(x, y); s = true; } else ctx.lineTo(x, y);
         }
         ctx.stroke();
-        ctx.fillStyle = '#06b6d4'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#c4933f'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
         ctx.fillText('OBV', padL + 4, subY + 12);
       }
 
@@ -886,7 +886,7 @@ function initChartCrosshair(canvasId) {
 
     // Price tooltip
     const txt = price.toFixed(decimals);
-    ctx.font = '12px IBM Plex Mono';
+    ctx.font = '12px JetBrains Mono';
     const tw = ctx.measureText(txt).width + 16;
     const tipX = snapX + 12 + tw > padL + cW ? snapX - tw - 12 : snapX + 12;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
@@ -901,7 +901,7 @@ function initChartCrosshair(canvasId) {
     const daysBack = data.length - 1 - clampIdx;
     const labelDate = new Date(now.getTime() - daysBack * 86400000);
     const dateStr = labelDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    ctx.font = '10px IBM Plex Mono';
+    ctx.font = '10px JetBrains Mono';
     const dtw = ctx.measureText(dateStr).width + 10;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
     ctx.fillRect(snapX - dtw / 2, padT + cH + 2, dtw, 18);
@@ -914,7 +914,7 @@ function initChartCrosshair(canvasId) {
       if (taData.sma20 && taData.sma20[clampIdx] !== null) lines.push({ label: 'SMA20', value: taData.sma20[clampIdx].toFixed(decimals), color: '#f59e0b' });
       if (taData.sma50 && taData.sma50[clampIdx] !== null) lines.push({ label: 'SMA50', value: taData.sma50[clampIdx].toFixed(decimals), color: '#a78bfa' });
       if (taData.sma200 && taData.sma200[clampIdx] !== null) lines.push({ label: 'SMA200', value: taData.sma200[clampIdx].toFixed(decimals), color: '#ef4444' });
-      if (taData.ema20 && taData.ema20[clampIdx] !== null) lines.push({ label: 'EMA20', value: taData.ema20[clampIdx].toFixed(decimals), color: '#22d3ee' });
+      if (taData.ema20 && taData.ema20[clampIdx] !== null) lines.push({ label: 'EMA20', value: taData.ema20[clampIdx].toFixed(decimals), color: '#d4a053' });
       if (taData.bb) {
         const bb = taData.bb;
         if (bb.upper[clampIdx] !== null) lines.push({ label: 'BB', value: bb.lower[clampIdx].toFixed(decimals) + ' / ' + bb.mid[clampIdx].toFixed(decimals) + ' / ' + bb.upper[clampIdx].toFixed(decimals), color: '#a855f7' });
@@ -928,7 +928,7 @@ function initChartCrosshair(canvasId) {
       if (taData.rsi && taData.rsi[clampIdx] !== null) lines.push({ label: 'RSI', value: taData.rsi[clampIdx].toFixed(1), color: '#a78bfa' });
       if (taData.macd && taData.macd.macd[clampIdx] !== undefined) {
         const mv = taData.macd.macd[clampIdx], sv = taData.macd.signal[clampIdx];
-        if (isFinite(mv)) lines.push({ label: 'MACD', value: mv.toFixed(3) + (isFinite(sv) ? ' / ' + sv.toFixed(3) : ''), color: '#22d3ee' });
+        if (isFinite(mv)) lines.push({ label: 'MACD', value: mv.toFixed(3) + (isFinite(sv) ? ' / ' + sv.toFixed(3) : ''), color: '#d4a053' });
       }
       if (taData.stoch && taData.stoch.k[clampIdx] !== null) {
         const kv = taData.stoch.k[clampIdx], dv = taData.stoch.d[clampIdx];
@@ -938,7 +938,7 @@ function initChartCrosshair(canvasId) {
       if (taData.adx && taData.adx[clampIdx] !== null) lines.push({ label: 'ADX', value: taData.adx[clampIdx].toFixed(1), color: '#ec4899' });
 
       if (lines.length > 0) {
-        ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'left';
+        ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'left';
         let px = padL + 6, py = padT + 4;
         lines.forEach(l => {
           const str = l.label + ': ' + l.value;
@@ -1062,7 +1062,7 @@ function renderSpreadChart(sector) {
     ctx.fillStyle = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
     ctx.fillRect(0, 0, rect.width, 180);
     ctx.fillStyle = isLight ? '#94a3b8' : '#475569';
-    ctx.font = '12px IBM Plex Mono'; ctx.textAlign = 'center';
+    ctx.font = '12px JetBrains Mono'; ctx.textAlign = 'center';
     ctx.fillText('Select two different hubs to view spread', rect.width / 2, 95);
     return;
   }
@@ -1111,7 +1111,7 @@ function renderSpreadChart(sector) {
   for (let i = 0; i <= 4; i++) {
     const y = padT + (cH / 4) * i;
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-    ctx.fillStyle = textColor; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+    ctx.fillStyle = textColor; ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'right';
     ctx.fillText((sMaxAdj - (sMaxAdj - sMinAdj) * (i / 4)).toFixed(2), padL - 6, y + 3);
   }
 
@@ -1144,12 +1144,12 @@ function renderSpreadChart(sector) {
 
   // Current spread label
   const cur = spread[spread.length - 1];
-  ctx.font = 'bold 11px IBM Plex Mono'; ctx.textAlign = 'left';
+  ctx.font = 'bold 11px JetBrains Mono'; ctx.textAlign = 'left';
   ctx.fillStyle = cur >= 0 ? '#10b981' : '#ef4444';
   ctx.fillText((cur >= 0 ? '+' : '') + cur.toFixed(3), padL + cW + 3, yPos(cur) + 4);
 
   // Title
-  ctx.font = '10px IBM Plex Mono'; ctx.fillStyle = textColor; ctx.textAlign = 'left';
+  ctx.font = '10px JetBrains Mono'; ctx.fillStyle = textColor; ctx.textAlign = 'left';
   ctx.fillText(hub1 + ' - ' + hub2, padL, padT - 6);
 }
 
@@ -1173,7 +1173,7 @@ function drawForwardCurveChart(canvasId, hubName) {
     ctx.fillStyle = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
     ctx.fillRect(0, 0, rect.width, 200);
     ctx.fillStyle = isLight ? '#94a3b8' : '#475569';
-    ctx.font = '12px IBM Plex Mono'; ctx.textAlign = 'center';
+    ctx.font = '12px JetBrains Mono'; ctx.textAlign = 'center';
     ctx.fillText('No forward curve data for ' + hubName, rect.width / 2, 105);
     return;
   }
@@ -1218,7 +1218,7 @@ function drawForwardCurveChart(canvasId, hubName) {
     const y = padT + (cH / gridSteps) * i;
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
     const val = pMax - (pMax - pMin) * (i / gridSteps);
-    ctx.fillStyle = textColor; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+    ctx.fillStyle = textColor; ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'right';
     ctx.fillText(val >= 100 ? val.toFixed(0) : val.toFixed(2), padL - 6, y + 3);
   }
 
@@ -1228,7 +1228,7 @@ function drawForwardCurveChart(canvasId, hubName) {
   ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
   ctx.beginPath(); ctx.moveTo(padL, spotY); ctx.lineTo(W - padR, spotY); ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = isLight ? '#64748b' : '#64748b'; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'left';
+  ctx.fillStyle = isLight ? '#64748b' : '#64748b'; ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'left';
   ctx.fillText('Spot', padL + 3, spotY - 5);
 
   // Gradient fill under curve
@@ -1274,7 +1274,7 @@ function drawForwardCurveChart(canvasId, hubName) {
   }
 
   // X-axis month labels
-  ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'center'; ctx.fillStyle = textColor;
+  ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'center'; ctx.fillStyle = textColor;
   const now = new Date();
   ctx.fillText('Spot', spotX, padT + cH + 14);
   for (let i = 0; i < fwd.length; i++) {
@@ -1289,23 +1289,23 @@ function drawForwardCurveChart(canvasId, hubName) {
   // Structure label (contango / backwardation)
   const structLabel = isContango ? 'CONTANGO' : 'BACKWARDATION';
   const structColor = isContango ? '#ef4444' : '#10b981';
-  ctx.font = 'bold 10px IBM Plex Mono'; ctx.textAlign = 'right';
+  ctx.font = 'bold 10px JetBrains Mono'; ctx.textAlign = 'right';
   ctx.fillStyle = structColor;
   ctx.fillText(structLabel, W - padR, padT - 8);
 
   // Hub name + LIVE/SIM label
   const isReal = typeof _realFwdHubs !== 'undefined' && _realFwdHubs.has(hubName);
-  ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'left'; ctx.fillStyle = textColor;
+  ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'left'; ctx.fillStyle = textColor;
   ctx.fillText(hubName, padL, padT - 8);
   if (isReal) {
     const tw = ctx.measureText(hubName).width;
-    ctx.fillStyle = '#22c55e'; ctx.font = 'bold 8px IBM Plex Mono';
+    ctx.fillStyle = '#22c55e'; ctx.font = 'bold 8px JetBrains Mono';
     ctx.fillText(' LIVE', padL + tw + 2, padT - 8);
   }
 
   // Legend: dot colors
   const legY = padT + cH + 26;
-  ctx.font = '8px IBM Plex Mono'; ctx.textAlign = 'left';
+  ctx.font = '8px JetBrains Mono'; ctx.textAlign = 'left';
   let legX = padL;
   // Green dot = real
   ctx.beginPath(); ctx.arc(legX, legY, 3, 0, Math.PI * 2); ctx.fillStyle = '#22c55e'; ctx.fill();

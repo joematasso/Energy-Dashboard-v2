@@ -187,7 +187,7 @@ function blotterSort(col) {
 
 /* --- Sector display helpers --- */
 const SECTOR_LABELS = { ng:'NG', crude:'CL', power:'PWR', freight:'FRT', ag:'AG', metals:'MTL', ngls:'NGL', lng:'LNG' };
-const SECTOR_COLORS = { ng:'#22d3ee', crude:'#f59e0b', power:'#a78bfa', freight:'#6366f1', ag:'#34d399', metals:'#f472b6', ngls:'#fb923c', lng:'#38bdf8' };
+const SECTOR_COLORS = { ng:'#5b9bd5', crude:'#f59e0b', power:'#a78bfa', freight:'#6366f1', ag:'#34d399', metals:'#f472b6', ngls:'#fb923c', lng:'#38bdf8' };
 function getSector(t) { return t.sector || inferSectorFromType(t.type) || ''; }
 function getVolumeUnit(sector) {
   const m = { ng:'MMBtu', crude:'BBL', power:'MWh', freight:'Lots', ag:'Bu', metals:'oz', ngls:'Gal', lng:'MMBtu' };
@@ -675,7 +675,7 @@ function drawPnlChart() {
     ctx.fillStyle = isLight ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = isLight ? '#94a3b8' : '#475569';
-    ctx.font = '13px IBM Plex Sans';
+    ctx.font = '13px Inter';
     ctx.textAlign = 'center';
     ctx.fillText('Close trades to see cumulative P&L', W/2, H/2);
     return;
@@ -740,7 +740,7 @@ function drawPnlChart() {
   // Y-axis labels
   const textColor = isLight ? '#475569' : '#94a3b8';
   ctx.fillStyle = textColor;
-  ctx.font = '11px IBM Plex Mono';
+  ctx.font = '11px JetBrains Mono';
   ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
     const val = min + (range * i / 4);
@@ -750,7 +750,7 @@ function drawPnlChart() {
 
   // X-axis date labels
   ctx.fillStyle = textColor;
-  ctx.font = '10px IBM Plex Mono';
+  ctx.font = '10px JetBrains Mono';
   ctx.textAlign = 'center';
   const now = new Date();
   const totalSpanDays = rangeMap[STATE.pnlRange] || cumPnl.length;
@@ -803,7 +803,7 @@ function initPnlCrosshair() {
 
     const sign = val >= 0 ? '+' : '-';
     const txt = sign + '$' + Math.abs(val).toLocaleString(undefined, { maximumFractionDigits: 0 });
-    ctx.font = '12px IBM Plex Mono';
+    ctx.font = '12px JetBrains Mono';
     const tw = ctx.measureText(txt).width + 16;
     const tipX = snapX + 12 + tw > padL + cW ? snapX - tw - 12 : snapX + 12;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
@@ -817,7 +817,7 @@ function initPnlCrosshair() {
     const daysBack = data.length - 1 - clampIdx;
     const labelDate = new Date(now.getTime() - daysBack * 86400000);
     const dateStr = labelDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    ctx.font = '10px IBM Plex Mono';
+    ctx.font = '10px JetBrains Mono';
     const dtw = ctx.measureText(dateStr).width + 10;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
     ctx.fillRect(snapX - dtw / 2, padT + cH + 2, dtw, 18);

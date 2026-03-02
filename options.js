@@ -267,13 +267,13 @@ function renderOiChart(sector) {
 
     // Label
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '10px IBM Plex Mono, monospace';
+    ctx.font = '10px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.fillText(labels[i], x + barW/2, H - 8);
 
     // Value on top
     ctx.fillStyle = '#e5e7eb';
-    ctx.font = '9px IBM Plex Mono, monospace';
+    ctx.font = '9px JetBrains Mono, monospace';
     ctx.fillText((pt.oi/1000).toFixed(1)+'K', x + barW/2, y - 4);
   });
 
@@ -394,8 +394,8 @@ function renderPayoff(sector) {
   ctx.lineTo(spotX, H - pad.bottom);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = '#22d3ee';
-  ctx.font = '10px IBM Plex Mono';
+  ctx.fillStyle = '#d4a053';
+  ctx.font = '10px JetBrains Mono';
   ctx.textAlign = 'center';
   ctx.fillText('Spot', spotX, pad.top - 5);
 
@@ -422,7 +422,7 @@ function renderPayoff(sector) {
     const y = toY(p.pl);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = '#22d3ee';
+  ctx.strokeStyle = '#d4a053';
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -447,7 +447,7 @@ function renderPayoff(sector) {
   ctx.textAlign = 'right';
   ctx.fillText('P&L', pad.left - 8, pad.top - 5);
   ctx.fillStyle = maxPL >= 0 ? '#10b981' : '#ef4444';
-  ctx.font = 'bold 11px IBM Plex Mono';
+  ctx.font = 'bold 11px JetBrains Mono';
   ctx.textAlign = 'left';
   ctx.fillText('Max P: $' + maxPL.toFixed(0), pad.left + 5, pad.top + 14);
   ctx.fillStyle = minPL <= 0 ? '#ef4444' : '#10b981';

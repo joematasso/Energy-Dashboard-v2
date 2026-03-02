@@ -170,7 +170,7 @@ function renderLeaderboardData(serverData, isLive) {
 }
 
 // Assign consistent colors to entries
-const CHART_COLORS = ['#22d3ee','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48','#a855f7','#eab308','#0ea5e9'];
+const CHART_COLORS = ['#d4a053','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#5b9bd5','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48','#a855f7','#eab308','#0ea5e9'];
 window._lbChartVisible = {};
 window._teamChartVisible = {};
 window._teamRankChartVisible = {};
@@ -221,10 +221,10 @@ function drawMultiLineChart(canvasId, lines, steps) {
   });
   // Y labels
   const tc=isLight?'#475569':'#94a3b8';
-  ctx.fillStyle=tc;ctx.font='11px IBM Plex Mono';ctx.textAlign='right';
+  ctx.fillStyle=tc;ctx.font='11px JetBrains Mono';ctx.textAlign='right';
   for(let i=0;i<=4;i++){const val=min+(range*i/4);const y=padT+(1-i/4)*cH;ctx.fillText('$'+(val/1000).toFixed(0)+'k',padL-8,y+4);}
   // X dates
-  ctx.font='10px IBM Plex Mono';ctx.textAlign='center';
+  ctx.font='10px JetBrains Mono';ctx.textAlign='center';
   const firstLineWithDates = activeLines.find(l => l.dates && l.dates.length >= 2);
   for(let i=0;i<6;i++){
     const frac=i/5;
@@ -279,7 +279,7 @@ function drawLbEquityCurve(entries, myEntry) {
   });
   const lines=displayed.map((e,i)=>{
     const key=e.traderName||e.name;
-    const color=e.isMe?'#22d3ee':CHART_COLORS[(i+1)%CHART_COLORS.length];
+    const color=e.isMe?'#d4a053':CHART_COLORS[(i+1)%CHART_COLORS.length];
     const eq = getEquityData(key, balance, e.equity);
     return {
       key,label:e.name,color,bold:e.isMe,dashed:false,
@@ -301,7 +301,7 @@ function drawTeamEquityChart(teamMembers) {
   const avgEquity=teamMembers.reduce((s,e)=>s+e.equity,0)/teamMembers.length;
   const lines=teamMembers.map((e,i)=>{
     const key=e.traderName||e.name;
-    const color=e.isMe?'#22d3ee':CHART_COLORS[(i+1)%CHART_COLORS.length];
+    const color=e.isMe?'#d4a053':CHART_COLORS[(i+1)%CHART_COLORS.length];
     const eq = getEquityData(key, balance, e.equity);
     return {key,label:e.name,color,bold:e.isMe,dashed:false,data:eq.data,dates:eq.dates,active:window._teamChartVisible[key]!==false};
   });
@@ -334,7 +334,7 @@ function drawTeamBarChart(teams) {
   const isLight=document.documentElement.getAttribute('data-theme')==='light';
   ctx.fillStyle=isLight?'#ffffff':getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
   ctx.fillRect(0,0,W,H);
-  if(!activeTeams.length){ctx.fillStyle='#475569';ctx.font='13px IBM Plex Sans';ctx.textAlign='center';ctx.fillText('No teams visible',W/2,H/2);return;}
+  if(!activeTeams.length){ctx.fillStyle='#475569';ctx.font='13px Inter';ctx.textAlign='center';ctx.fillText('No teams visible',W/2,H/2);return;}
   const maxVal=Math.max(...activeTeams.map(t=>Math.abs(t.totalPnl)),1);
   const cW=W-padL-padR;
   const zeroX=padL+cW/2;
@@ -351,11 +351,11 @@ function drawTeamBarChart(teams) {
     ctx.fillRect(x,y,w,barH);
     ctx.globalAlpha=1;
     // Label left
-    ctx.fillStyle=isLight?'#1e293b':'#e2e8f0';ctx.font='12px IBM Plex Sans';ctx.textAlign='right';
+    ctx.fillStyle=isLight?'#1e293b':'#e2e8f0';ctx.font='12px Inter';ctx.textAlign='right';
     ctx.fillText(t.name,padL-8,y+barH/2+4);
     // Value right
     const valColor=t.totalPnl>=0?'#10b981':'#ef4444';
-    ctx.fillStyle=valColor;ctx.font='12px IBM Plex Mono';ctx.textAlign='left';
+    ctx.fillStyle=valColor;ctx.font='12px JetBrains Mono';ctx.textAlign='left';
     const sign=t.totalPnl>=0?'+':'-';
     ctx.fillText(sign+'$'+Math.abs(t.totalPnl).toLocaleString(undefined,{maximumFractionDigits:0}),x+w+6,y+barH/2+4);
   });

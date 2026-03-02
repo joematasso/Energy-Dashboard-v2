@@ -296,7 +296,7 @@ function renderRiskMargin(openTrades, equity) {
   if (!expEl) return;
   const sectors = Object.entries(sectorMap).sort((a, b) => b[1] - a[1]);
   const totalExp = sectors.reduce((s, [, v]) => s + v, 0) || 1;
-  const colors = { NG: '#22d3ee', Crude: '#f59e0b', Power: '#a78bfa', Freight: '#fb923c', NGLs: '#34d399', LNG: '#60a5fa', Ag: '#84cc16', Metals: '#e879f9' };
+  const colors = { NG: '#5b9bd5', Crude: '#f59e0b', Power: '#a78bfa', Freight: '#fb923c', NGLs: '#34d399', LNG: '#60a5fa', Ag: '#84cc16', Metals: '#e879f9' };
 
   if (!sectors.length) {
     expEl.innerHTML = '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No open positions</div>';
@@ -363,7 +363,7 @@ function drawEquityCurve() {
   ctx.fillRect(0,0,W,H);
 
   const closed = STATE.trades.filter(t=>t.status==='CLOSED').reverse();
-  if (closed.length<1){ctx.fillStyle=isLight?'#94a3b8':'#475569';ctx.font='13px IBM Plex Sans';ctx.textAlign='center';ctx.fillText('Close trades to see equity curve',W/2,H/2);return;}
+  if (closed.length<1){ctx.fillStyle=isLight?'#94a3b8':'#475569';ctx.font='13px Inter';ctx.textAlign='center';ctx.fillText('Close trades to see equity curve',W/2,H/2);return;}
 
   // Build full equity series
   const fullPts=[balance];let run=balance;
@@ -427,12 +427,12 @@ function drawEquityCurve() {
 
   // Y labels
   const textColor = isLight?'#475569':'#94a3b8';
-  ctx.fillStyle=textColor;ctx.font='11px IBM Plex Mono';ctx.textAlign='right';
+  ctx.fillStyle=textColor;ctx.font='11px JetBrains Mono';ctx.textAlign='right';
   for(let i=0;i<=4;i++){const val=min+(rangeV*i/4);const y=padT+(1-i/4)*cH;ctx.fillText('$'+(val/1000).toFixed(0)+'k',padL-8,y+4);}
 
   // X-axis date labels
   ctx.fillStyle = textColor;
-  ctx.font = '10px IBM Plex Mono';
+  ctx.font = '10px JetBrains Mono';
   ctx.textAlign = 'center';
   const now = new Date();
   const labelCount = Math.min(6, equityPts.length);
@@ -448,11 +448,11 @@ function drawEquityCurve() {
   // Period stats overlay (top right)
   const statsX = W - padR - 10;
   ctx.textAlign = 'right';
-  ctx.font = '11px IBM Plex Mono';
+  ctx.font = '11px JetBrains Mono';
   ctx.fillStyle = lineColor;
   ctx.fillText((periodPnl>=0?'+':'-')+'$'+Math.abs(periodPnl).toLocaleString(undefined,{maximumFractionDigits:0})+' ('+periodPct.toFixed(2)+'%)', statsX, padT + 14);
   ctx.fillStyle = textColor;
-  ctx.font = '10px IBM Plex Mono';
+  ctx.font = '10px JetBrains Mono';
   ctx.fillText('DD: '+drawdown.toFixed(2)+'%  Hi: $'+(periodHigh/1000).toFixed(1)+'k  Lo: $'+(periodLow/1000).toFixed(1)+'k', statsX, padT + 28);
 
   // Store metadata for crosshair
@@ -511,7 +511,7 @@ function initEquityCrosshair() {
     const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 });
     const valStr = '$' + (val / 1000).toFixed(1) + 'k';
     const txt = valStr + ' (' + pnlStr + ')';
-    ctx.font = '11px IBM Plex Mono';
+    ctx.font = '11px JetBrains Mono';
     const tw = ctx.measureText(txt).width + 16;
     const tipX = snapX + 12 + tw > padL + cW ? snapX - tw - 12 : snapX + 12;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
@@ -527,7 +527,7 @@ function initEquityCrosshair() {
     const daysBack = data.length - 1 - clampIdx;
     const labelDate = new Date(now.getTime() - daysBack * 86400000);
     const dateStr = labelDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    ctx.font = '10px IBM Plex Mono';
+    ctx.font = '10px JetBrains Mono';
     const dtw = ctx.measureText(dateStr).width + 10;
     const padB = meta.padB;
     ctx.fillStyle = 'rgba(15,21,32,0.92)';
@@ -576,13 +576,13 @@ function renderConcentrationRisk(openTrades, equity) {
     + '<div style="display:flex;height:14px;border-radius:4px;overflow:hidden;margin-bottom:8px">'
     + entries.map(([hub, exp], i) => {
         const pct = (exp / total * 100);
-        const colors = ['#22d3ee','#f59e0b','#a78bfa','#10b981','#ef4444','#fb923c','#e879f9','#84cc16'];
+        const colors = ['#5b9bd5','#f59e0b','#a78bfa','#10b981','#ef4444','#fb923c','#e879f9','#84cc16'];
         return '<div style="width:' + pct + '%;background:' + colors[i % colors.length] + ';min-width:2px" title="' + hub + ': ' + pct.toFixed(1) + '%"></div>';
       }).join('')
     + '</div>'
     + entries.slice(0, 8).map(([hub, exp], i) => {
         const pct = (exp / total * 100).toFixed(1);
-        const colors = ['#22d3ee','#f59e0b','#a78bfa','#10b981','#ef4444','#fb923c','#e879f9','#84cc16'];
+        const colors = ['#5b9bd5','#f59e0b','#a78bfa','#10b981','#ef4444','#fb923c','#e879f9','#84cc16'];
         return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:2px"><span style="width:8px;height:8px;border-radius:2px;background:' + colors[i % colors.length] + ';flex-shrink:0"></span><span style="flex:1;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + hub + '</span><span class="mono" style="color:var(--text-muted)">' + pct + '%</span></div>';
       }).join('');
 }
@@ -732,12 +732,12 @@ function drawDrawdownChart(equityArr) {
 
   // Y labels
   ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
-  ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'right';
+  ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'right';
   ctx.fillText('0%', padL - 6, padT + 4);
   ctx.fillText('-' + maxDD.toFixed(1) + '%', padL - 6, padT + cH + 4);
 
   // Label
-  ctx.fillStyle = '#ef4444'; ctx.font = '10px IBM Plex Sans'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#ef4444'; ctx.font = '10px Inter'; ctx.textAlign = 'left';
   ctx.fillText('Drawdown', padL + 4, padT + 12);
 }
 

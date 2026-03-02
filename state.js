@@ -49,14 +49,14 @@ const STATE = {
    HUB DATA
    ===================================================================== */
 const NG_HUBS = [
-  { name:'Henry Hub', base:2.75, vol:4.5, color:'#22d3ee' },
+  { name:'Henry Hub', base:2.75, vol:4.5, color:'#5b9bd5' },
   { name:'Waha', base:2.40, vol:6.0, color:'#f59e0b' },
   { name:'SoCal Gas', base:2.90, vol:5.5, color:'#a78bfa' },
   { name:'Chicago', base:2.70, vol:4.0, color:'#10b981' },
   { name:'Algonquin', base:3.55, vol:12.0, color:'#ef4444' },
   { name:'Transco Zone 6', base:3.35, vol:10.0, color:'#ec4899' },
   { name:'Dominion South', base:2.30, vol:5.0, color:'#84cc16' },
-  { name:'Dawn', base:2.85, vol:4.5, color:'#06b6d4' },
+  { name:'Dawn', base:2.85, vol:4.5, color:'#4a8cb8' },
   { name:'Sumas', base:2.95, vol:6.0, color:'#f97316' },
   { name:'Malin', base:2.93, vol:5.5, color:'#8b5cf6' },
   { name:'Opal', base:2.67, vol:5.0, color:'#14b8a6' },
@@ -67,7 +67,7 @@ const NG_HUBS = [
 ];
 
 const CRUDE_HUBS = [
-  { name:'WTI Cushing', base:79.50, vol:1.8, color:'#22d3ee' },
+  { name:'WTI Cushing', base:79.50, vol:1.8, color:'#5b9bd5' },
   { name:'Brent Dated', base:82.70, vol:1.6, color:'#f59e0b' },
   { name:'WTI Midland', base:79.90, vol:2.0, color:'#a78bfa' },
   { name:'Mars Sour', base:77.70, vol:2.2, color:'#10b981' },
@@ -88,8 +88,8 @@ const CRUDE_HUBS = [
 ];
 
 const POWER_HUBS = [
-  { name:'ERCOT Hub', base:42.50, vol:8.0, color:'#22d3ee', gasRef:'Henry Hub' },
-  { name:'ERCOT North', base:40.80, vol:7.5, color:'#06b6d4', gasRef:'Henry Hub' },
+  { name:'ERCOT Hub', base:42.50, vol:8.0, color:'#5b9bd5', gasRef:'Henry Hub' },
+  { name:'ERCOT North', base:40.80, vol:7.5, color:'#4a8cb8', gasRef:'Henry Hub' },
   { name:'ERCOT South', base:44.10, vol:9.0, color:'#0ea5e9', gasRef:'Henry Hub' },
   { name:'PJM West Hub', base:38.20, vol:6.0, color:'#a78bfa', gasRef:'Transco Zone 6' },
   { name:'NEPOOL Mass', base:51.30, vol:10.0, color:'#ef4444', gasRef:'Algonquin' },
@@ -102,7 +102,7 @@ const POWER_HUBS = [
 ];
 
 const FREIGHT_HUBS = [
-  { name:'Baltic Dry Index', base:1650, vol:5.0, color:'#22d3ee' },
+  { name:'Baltic Dry Index', base:1650, vol:5.0, color:'#5b9bd5' },
   { name:'Baltic Capesize', base:2200, vol:7.0, color:'#f59e0b' },
   { name:'Baltic Panamax', base:1450, vol:5.5, color:'#a78bfa' },
   { name:'Baltic Supramax', base:1280, vol:5.0, color:'#10b981' },
@@ -119,10 +119,10 @@ const AG_HUBS = [
   { name:'Soybean Oil (CBOT)', base:0.445, vol:3.2, color:'#a78bfa', unit:'lb' },
   { name:'Soybean Meal (CBOT)', base:330.50, vol:2.5, color:'#84cc16', unit:'ton' },
   { name:'Cotton (ICE)', base:0.775, vol:3.5, color:'#ec4899', unit:'lb' },
-  { name:'Sugar #11 (ICE)', base:0.198, vol:4.5, color:'#22d3ee', unit:'lb' },
+  { name:'Sugar #11 (ICE)', base:0.198, vol:4.5, color:'#5b9bd5', unit:'lb' },
   { name:'Coffee C (ICE)', base:1.88, vol:5.0, color:'#f97316', unit:'lb' },
   { name:'Cocoa (ICE)', base:8450, vol:3.0, color:'#8b5cf6', unit:'MT' },
-  { name:'Live Cattle (CME)', base:1.875, vol:2.0, color:'#06b6d4', unit:'lb' },
+  { name:'Live Cattle (CME)', base:1.875, vol:2.0, color:'#4a8cb8', unit:'lb' },
   { name:'Lean Hogs (CME)', base:0.895, vol:4.0, color:'#e11d48', unit:'lb' },
   { name:'Feeder Cattle (CME)', base:2.56, vol:2.2, color:'#14b8a6', unit:'lb' }
 ];
@@ -132,10 +132,10 @@ const METALS_HUBS = [
   { name:'Silver (COMEX)', base:29.45, vol:3.0, color:'#94a3b8', unit:'oz' },
   { name:'Copper (COMEX)', base:4.42, vol:2.5, color:'#ef4444', unit:'lb' },
   { name:'Platinum (NYMEX)', base:985.00, vol:2.0, color:'#a78bfa', unit:'oz' },
-  { name:'Palladium (NYMEX)', base:1020.00, vol:3.5, color:'#22d3ee', unit:'oz' },
+  { name:'Palladium (NYMEX)', base:1020.00, vol:3.5, color:'#5b9bd5', unit:'oz' },
   { name:'Aluminum (LME)', base:2480.00, vol:2.0, color:'#84cc16', unit:'MT' },
   { name:'Nickel (LME)', base:17250.00, vol:3.0, color:'#10b981', unit:'MT' },
-  { name:'Zinc (LME)', base:2720.00, vol:2.5, color:'#06b6d4', unit:'MT' },
+  { name:'Zinc (LME)', base:2720.00, vol:2.5, color:'#4a8cb8', unit:'MT' },
   { name:'Iron Ore (SGX)', base:108.50, vol:3.5, color:'#f97316', unit:'MT' },
   { name:'Steel HRC (CME)', base:780.00, vol:2.8, color:'#ec4899', unit:'ton' }
 ];
@@ -152,7 +152,7 @@ const LNG_HUBS = [
   { name:'JKM (Platts)', base:12.80, vol:8.0, color:'#ef4444', unit:'$/MMBtu', region:'Asia' },
   { name:'TTF (ICE)', base:10.50, vol:7.0, color:'#3b82f6', unit:'$/MMBtu', region:'Europe' },
   { name:'NBP (ICE)', base:10.20, vol:7.5, color:'#8b5cf6', unit:'$/MMBtu', region:'Europe' },
-  { name:'HH Netback', base:8.90, vol:5.0, color:'#22d3ee', unit:'$/MMBtu', region:'US Export' },
+  { name:'HH Netback', base:8.90, vol:5.0, color:'#5b9bd5', unit:'$/MMBtu', region:'US Export' },
   { name:'DES South America', base:11.40, vol:6.5, color:'#10b981', unit:'$/MMBtu', region:'LatAm' },
   { name:'Brent-Linked LNG', base:13.20, vol:4.0, color:'#f59e0b', unit:'$/MMBtu', region:'Global' }
 ];
@@ -197,8 +197,8 @@ const SCENARIOS = [
   { name:'Crop Failure', ng:5, power:10, crude:0, freight:5, ag:50, metals:5, ngls:0, lng:5 }
 ];
 const SIM_PEERS = [
-  {name:'J. Martinez',realName:'Juan Martinez',firm:'Basis Capital',team:{name:'Alpha',color:'#22d3ee'},ret:6.2,winRate:58,pf:1.80,trades:42},
-  {name:'K. Thompson',realName:'Kate Thompson',firm:'Crude Trading LLC',team:{name:'Alpha',color:'#22d3ee'},ret:3.8,winRate:52,pf:1.40,trades:31},
+  {name:'J. Martinez',realName:'Juan Martinez',firm:'Basis Capital',team:{name:'Alpha',color:'#5b9bd5'},ret:6.2,winRate:58,pf:1.80,trades:42},
+  {name:'K. Thompson',realName:'Kate Thompson',firm:'Crude Trading LLC',team:{name:'Alpha',color:'#5b9bd5'},ret:3.8,winRate:52,pf:1.40,trades:31},
   {name:'A. Singh',realName:'Arun Singh',firm:'Optionality Partners',team:{name:'Beta',color:'#f59e0b'},ret:11.4,winRate:64,pf:2.30,trades:55},
   {name:'R. Chen',realName:'Robert Chen',firm:'Spread Capital',team:{name:'Beta',color:'#f59e0b'},ret:-1.2,winRate:45,pf:0.90,trades:28},
   {name:'M. Williams',realName:'Marcus Williams',firm:'Grid Power Co',team:{name:'Gamma',color:'#10b981'},ret:2.1,winRate:51,pf:1.20,trades:19},

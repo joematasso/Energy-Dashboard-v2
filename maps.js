@@ -101,18 +101,18 @@ const HUB_POSITIONS = {
 // Pipeline routes (Mercator projected from real lat/lon)
 const PIPELINES = [
   // === NG PIPELINES (routes derived from GeoJSON feature data) ===
-  { name:'Transco', points:'212,210 227,220 229,216 236,212 243,211 248,213 255,211 284,185 292,178 295,177 298,176', color:'#22d3ee', sector:'ng' },
+  { name:'Transco', points:'212,210 227,220 229,216 236,212 243,211 248,213 255,211 284,185 292,178 295,177 298,176', color:'#5b9bd5', sector:'ng' },
   { name:'Tennessee Gas', points:'241,212 250,206 257,194 262,191 267,194 272,189 280,191 297,173 303,170', color:'#ef4444', sector:'ng' },
   { name:'Kern River', points:'191,171 186,179 180,188 176,194 169,196 164,195', color:'#0ea5e9', sector:'ng' },
   { name:'Rockies Express', points:'197,178 201,172 206,175 216,175 227,177 236,180 245,181 277,178', color:'#10b981', sector:'ng' },
-  { name:'Alliance', points:'157,105 161,110 164,111 165,113 170,118 173,120 180,121 190,126 231,155 257,172', color:'#06b6d4', sector:'ng' },
+  { name:'Alliance', points:'157,105 161,110 164,111 165,113 170,118 173,120 180,121 190,126 231,155 257,172', color:'#4a8cb8', sector:'ng' },
   { name:'Texas Eastern', points:'241,212 247,208 258,201 269,193 278,186 286,178', color:'#e11d48', sector:'ng' },
   { name:'Northwest', points:'194,172 186,167 175,160 167,152 160,143', color:'#f97316', sector:'ng' },
   { name:'El Paso', points:'212,208 203,204 192,203 181,201 172,199', color:'#a78bfa', sector:'ng' },
   { name:'Algonquin Lateral', points:'294,176 299,173 303,170', color:'#ec4899', sector:'ng' },
   { name:'Dawn-Chicago', points:'274,168 267,169 257,172', color:'#84cc16', sector:'ng' },
   // === CRUDE PIPELINES (routes derived from GeoJSON feature data) ===
-  { name:'Keystone', points:'185,123 200,137 212,148 229,183 229,190 231,193 238,213', color:'#22d3ee', sector:'crude' },
+  { name:'Keystone', points:'185,123 200,137 212,148 229,183 229,190 231,193 238,213', color:'#5b9bd5', sector:'crude' },
   { name:'DAPL', points:'207,143 212,146 218,144 224,146 232,148 235,149', color:'#84cc16', sector:'crude' },
   { name:'Seaway', points:'230,195 231,200 232,208 233,213 234,216', color:'#f59e0b', sector:'crude' },
   { name:'Permian Express', points:'216,206 222,208 229,209 235,211 238,213', color:'#a78bfa', sector:'crude' },
@@ -121,7 +121,7 @@ const PIPELINES = [
   { name:'Colonial', points:'235,214 251,213 260,192 268,193 279,192 287,188 289,181 292,179 296,176', color:'#e11d48', sector:'crude' },
   { name:'Longhorn', points:'216,206 229,211', color:'#10b981', sector:'crude' },
   { name:'TAPS', points:'88,24 86,63', color:'#ef4444', sector:'crude' },
-  { name:'Trans Mountain', points:'153,141 157,142 160,138 162,133 165,130 168,124 181,122', color:'#06b6d4', sector:'crude' },
+  { name:'Trans Mountain', points:'153,141 157,142 160,138 162,133 165,130 168,124 181,122', color:'#4a8cb8', sector:'crude' },
   // === INTERNATIONAL CRUDE PIPELINES ===
   { name:'Druzhba', points:'660,126 630,128 599,129 575,128 555,126', color:'#6366f1', sector:'crude' },
   { name:'BTC', points:'659,179 651,175 644,173 632,180 618,189', color:'#fbbf24', sector:'crude' },
@@ -140,16 +140,16 @@ const PIPELINES = [
 // Pipe legend names per sector
 const PIPE_LEGENDS = {
   ng: [
-    { name:'Transco', color:'#22d3ee' }, { name:'Tennessee Gas', color:'#ef4444' },
+    { name:'Transco', color:'#5b9bd5' }, { name:'Tennessee Gas', color:'#ef4444' },
     { name:'Texas Eastern', color:'#e11d48' }, { name:'Kern River', color:'#0ea5e9' },
-    { name:'Rockies Express', color:'#10b981' }, { name:'Alliance', color:'#06b6d4' },
+    { name:'Rockies Express', color:'#10b981' }, { name:'Alliance', color:'#4a8cb8' },
     { name:'Northwest', color:'#f97316' }, { name:'El Paso', color:'#a78bfa' }
   ],
   crude: [
-    { name:'Keystone', color:'#22d3ee' }, { name:'DAPL', color:'#84cc16' },
+    { name:'Keystone', color:'#5b9bd5' }, { name:'DAPL', color:'#84cc16' },
     { name:'Seaway', color:'#f59e0b' }, { name:'Permian Express', color:'#a78bfa' },
     { name:'Alberta Clipper', color:'#ec4899' }, { name:'Capline', color:'#f97316' },
-    { name:'Colonial', color:'#e11d48' }, { name:'Trans Mountain', color:'#06b6d4' }, { name:'Druzhba', color:'#6366f1' },
+    { name:'Colonial', color:'#e11d48' }, { name:'Trans Mountain', color:'#4a8cb8' }, { name:'Druzhba', color:'#6366f1' },
     { name:'BTC', color:'#fbbf24' }, { name:'ESPO', color:'#f43f5e' },
     { name:'East-West', color:'#d97706' }, { name:'SUMED', color:'#14b8a6' }
   ],
@@ -165,8 +165,8 @@ const BASINS = [
   { name:'Permian',         points:'208.2,201.7 208.2,210.0 212.5,211.7 218.4,210.7 221.3,208.4 221.3,203.4 216.9,200.7 211.1,200.0', cx:214, cy:206, color:'#a855f7', sector:'both', info:{ type:'Shale / Tight Oil', formations:'Wolfcamp, Bone Spring, Spraberry, Delaware', production:'~6.2 MMbbl/d oil, ~25 Bcf/d gas', rigs:'~300-350 active' }},
   { name:'Eagle Ford',      points:'221.3,214.9 224.2,219.8 228.6,219.8 231.5,217.2 230.1,214.9 225.7,213.3', cx:227, cy:217, color:'#f59e0b', sector:'both', info:{ type:'Shale', formations:'Eagle Ford Shale (Upper & Lower)', production:'~1.1 MMbbl/d oil, ~7 Bcf/d gas', rigs:'~50-70 active' }},
   { name:'Haynesville',     points:'235.9,203.4 235.9,208.4 240.3,208.4 241.7,206.7 241.7,203.4 238.8,201.7', cx:239, cy:206, color:'#ef4444', sector:'ng', info:{ type:'Shale Gas', formations:'Haynesville Shale, Bossier Shale', production:'~16 Bcf/d gas', rigs:'~45-55 active' }},
-  { name:'Marcellus',       points:'276.8,171.3 276.8,180.6 281.2,184.2 288.5,182.4 291.4,178.8 292.9,173.2 289.9,169.4 282.6,169.4', cx:284, cy:177, color:'#22d3ee', sector:'ng', info:{ type:'Shale Gas', formations:'Marcellus Shale (Upper & Lower)', production:'~28 Bcf/d gas', rigs:'~25-35 active' }},
-  { name:'Utica',           points:'272.4,173.2 273.9,180.6 278.3,182.4 281.2,180.6 279.7,175.1 276.8,171.3', cx:277, cy:177, color:'#06b6d4', sector:'ng', info:{ type:'Shale Gas / Condensate', formations:'Utica / Point Pleasant', production:'~8 Bcf/d gas', rigs:'~10-15 active' }},
+  { name:'Marcellus',       points:'276.8,171.3 276.8,180.6 281.2,184.2 288.5,182.4 291.4,178.8 292.9,173.2 289.9,169.4 282.6,169.4', cx:284, cy:177, color:'#5b9bd5', sector:'ng', info:{ type:'Shale Gas', formations:'Marcellus Shale (Upper & Lower)', production:'~28 Bcf/d gas', rigs:'~25-35 active' }},
+  { name:'Utica',           points:'272.4,173.2 273.9,180.6 278.3,182.4 281.2,180.6 279.7,175.1 276.8,171.3', cx:277, cy:177, color:'#4a8cb8', sector:'ng', info:{ type:'Shale Gas / Condensate', formations:'Utica / Point Pleasant', production:'~8 Bcf/d gas', rigs:'~10-15 active' }},
   { name:'Barnett',         points:'225.7,201.7 225.7,206.7 230.1,206.7 231.5,205.0 230.1,201.7', cx:229, cy:204, color:'#84cc16', sector:'ng', info:{ type:'Shale Gas', formations:'Barnett Shale', production:'~2 Bcf/d gas (declining)', rigs:'~2-5 active' }},
   { name:'DJ / Niobrara',   points:'205.2,173.2 205.2,180.6 209.6,180.6 212.5,178.8 212.5,173.2 209.6,171.3', cx:209, cy:177, color:'#f97316', sector:'both', info:{ type:'Tight Oil / Shale', formations:'Niobrara, Codell', production:'~450 Kbbl/d oil, ~5 Bcf/d gas', rigs:'~10-15 active' }},
   { name:'San Juan',        points:'195.0,187.8 195.0,193.1 199.4,193.1 202.3,191.3 202.3,187.8 197.9,186.0', cx:199, cy:190, color:'#14b8a6', sector:'ng', info:{ type:'Conventional / CBM', formations:'Fruitland Coal, Pictured Cliffs', production:'~3 Bcf/d gas', rigs:'~5-10 active' }},

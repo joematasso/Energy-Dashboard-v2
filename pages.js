@@ -707,7 +707,7 @@ function renderLNGPage() {
   const cargoGrid = document.getElementById('cargoEconGrid');
   if (cargoGrid) {
     const cargoData = [
-      { label:'Feed Gas Cost', val: hh * cargoMMBtu, color:'#22d3ee', sub:'HH × 3.4M MMBtu' },
+      { label:'Feed Gas Cost', val: hh * cargoMMBtu, color:'#d4a053', sub:'HH × 3.4M MMBtu' },
       { label:'Liquefaction', val: LNG_SHIPPING.liquefactionFee * cargoMMBtu, color:'var(--text-dim)', sub:'$2.50/MMBtu tolling' },
       { label:'FOB Cargo Value', val: fob * cargoMMBtu, color:'var(--amber)', sub:'Feed + liquefaction' },
       { label:'Asia DES Value', val: jkm * cargoMMBtu, color:'#ef4444', sub:'JKM × 3.4M' },
