@@ -379,6 +379,19 @@ async function fetchEiaData() {
         avgEl.textContent = (diff >= 0 ? '+' : '') + pct + '%';
         avgEl.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
       }
+      // Store history for trending
+      const ngHistory = JSON.parse(localStorage.getItem('eia_ng_history') || '[]');
+      if (!ngHistory.length || ngHistory[0].period !== latest.period) {
+        ngHistory.unshift({ period: latest.period, value: val, change });
+        if (ngHistory.length > 10) ngHistory.pop();
+        localStorage.setItem('eia_ng_history', JSON.stringify(ngHistory));
+      }
+      // Show mini trend
+      const trendEl = document.getElementById('ngEiaTrend');
+      if (trendEl && ngHistory.length >= 3) {
+        const arrows = ngHistory.slice(0, 5).map(h => h.change >= 0 ? '<span style="color:var(--green)">+</span>' : '<span style="color:var(--red)">-</span>').join('');
+        trendEl.innerHTML = arrows;
+      }
       eiaLoaded.ng = true;
     } else if (ngJson.error) {
       console.warn('EIA NG error:', ngJson.error);
@@ -604,7 +617,8 @@ function _renderBiasGrid(bias, isHeatingSeason) {
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
       <div style="font-size:12px;font-weight:600;margin-bottom:3px">${hub}</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${isHeatingSeason ? 'Heating season' : 'Cooling season'}</div>
-      <div style="font-size:14px;font-weight:700;color:${color}">${isBull ? '+' : ''}${pct}%/tick <span style="font-size:11px">${label}</span></div>
+      <div style="font-size:14px;font-weight:700;color:${color}">${isBull ? '+' : ''}${(val * 100 * 10800 / 100).toFixed(2)}% est. daily <span style="font-size:11px">${label}</span></div>
+      <div style="font-size:10px;color:var(--text-muted)">${pct}%/tick (${Math.round(10800)} ticks/day)</div>
     </div>`;
   }).join('');
 }
