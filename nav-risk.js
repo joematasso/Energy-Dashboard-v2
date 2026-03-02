@@ -222,6 +222,15 @@ function renderRiskPage() {
   // Position Heatmap
   renderRiskHeatmap(open);
 
+  // Stress testing
+  renderStressTesting(open, equity);
+
+  // P&L Attribution by sector
+  renderPnlAttribution();
+
+  // Marginal VaR
+  renderMarginalVar(open, equity, dailyVol);
+
   // Check price alerts
   if (typeof checkPriceAlerts === 'function') checkPriceAlerts();
 }
@@ -755,6 +764,16 @@ function renderGreeksSummary(openTrades) {
   const opts = openTrades.filter(t => ['OPTION_NG','OPTION_CL'].includes(t.type));
   if (!opts.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:12px">No options positions</div>'; return; }
 
+  // Standard normal CDF and PDF for Black-Scholes
+  function normCdf(x) {
+    const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+    const sign = x < 0 ? -1 : 1; x = Math.abs(x) / Math.SQRT2;
+    const t = 1.0 / (1.0 + p * x);
+    const y = 1.0 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+    return 0.5 * (1.0 + sign * y);
+  }
+  function normPdf(x) { return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI); }
+
   let totalDelta = 0, totalGamma = 0, totalTheta = 0, totalVega = 0;
   opts.forEach(t => {
     const vol = parseFloat(t.volume || 0);
@@ -762,14 +781,25 @@ function renderGreeksSummary(openTrades) {
     const spot = getPrice(t.hub);
     const strike = parseFloat(t.strike || spot);
     const isCall = t.callPut !== 'PUT';
-    // Simplified Greeks estimation
-    const moneyness = spot / strike;
-    const d = isCall ? Math.max(0.1, Math.min(0.9, 0.5 + (moneyness - 1) * 2)) : Math.max(0.1, Math.min(0.9, 0.5 - (moneyness - 1) * 2));
-    const delta = d * dir * vol / 10000;
-    const gamma = 0.02 * vol / 10000;
-    const theta = -0.01 * spot * vol / 10000 * dir;
-    const vega = 0.15 * spot * vol / 10000;
-    totalDelta += delta; totalGamma += gamma; totalTheta += theta; totalVega += vega;
+    const r = 0.05; // risk-free rate
+    // Time to expiry: parse from t.expiry or default 30 days
+    let T = 30 / 365;
+    if (t.expiry) {
+      const diff = (new Date(t.expiry) - new Date()) / (365.25 * 86400000);
+      if (diff > 0) T = diff;
+    }
+    // Implied vol: use sector-specific defaults
+    const sigma = t.type === 'OPTION_CL' ? 0.30 : 0.35;
+    // Black-Scholes d1, d2
+    const d1 = (Math.log(spot / strike) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
+    const d2 = d1 - sigma * Math.sqrt(T);
+    // Greeks per contract unit
+    const delta = isCall ? normCdf(d1) : normCdf(d1) - 1;
+    const gamma = normPdf(d1) / (spot * sigma * Math.sqrt(T));
+    const theta = (-(spot * normPdf(d1) * sigma) / (2 * Math.sqrt(T)) - r * strike * Math.exp(-r * T) * (isCall ? normCdf(d2) : -normCdf(-d2))) / 365;
+    const vega = spot * normPdf(d1) * Math.sqrt(T) / 100;
+    const units = vol / 10000;
+    totalDelta += delta * dir * units; totalGamma += gamma * units; totalTheta += theta * dir * units; totalVega += vega * dir * units;
   });
 
   el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
@@ -982,5 +1012,129 @@ function initDrawdownCrosshair() {
     _panState = null;
     if (canvas._ddEquityArr) drawDrawdownChart(canvas._ddEquityArr);
   });
+}
+
+/* =====================================================================
+   STRESS TESTING
+   ===================================================================== */
+function renderStressTesting(openTrades, equity) {
+  const el = document.getElementById('riskStressBody');
+  if (!el) return;
+  if (!openTrades.length) { el.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px">No open positions to stress test</td></tr>'; return; }
+
+  const scenarios = [
+    { name: 'Oil crash -15%', shocks: { Crude: -0.15, NG: -0.08, NGLs: -0.12 } },
+    { name: 'Gas spike +25%', shocks: { NG: 0.25, Power: 0.15, LNG: 0.20 } },
+    { name: 'Power surge +40%', shocks: { Power: 0.40, NG: 0.10 } },
+    { name: 'Broad sell-off -10%', shocks: { NG: -0.10, Crude: -0.10, Power: -0.10, Freight: -0.10, Ag: -0.10, Metals: -0.10, NGLs: -0.10, LNG: -0.10 } },
+    { name: 'Rate hike (metals drop)', shocks: { Metals: -0.08, Crude: -0.03 } },
+    { name: 'Cold snap', shocks: { NG: 0.30, Power: 0.25 } },
+  ];
+
+  const sectorMap = { ng: 'NG', crude: 'Crude', power: 'Power', freight: 'Freight', ag: 'Ag', metals: 'Metals', ngls: 'NGLs', lng: 'LNG' };
+
+  el.innerHTML = scenarios.map(s => {
+    let totalImpact = 0;
+    let worstPos = '', worstAmt = 0;
+    openTrades.forEach(t => {
+      const sec = sectorMap[(t.sector || '').toLowerCase()] || '';
+      const shock = s.shocks[sec] || 0;
+      if (!shock) return;
+      const spot = getPrice(t.hub);
+      const dir = t.direction === 'BUY' ? 1 : -1;
+      const impact = spot * shock * parseFloat(t.volume) * dir;
+      totalImpact += impact;
+      if (Math.abs(impact) > Math.abs(worstAmt)) { worstAmt = impact; worstPos = t.hub; }
+    });
+    const pctImpact = equity > 0 ? (totalImpact / equity * 100).toFixed(2) : '0.00';
+    const color = totalImpact >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<tr><td style="font-weight:600">${s.name}</td><td class="mono" style="color:${color};text-align:right">${totalImpact >= 0 ? '+' : '-'}$${Math.abs(totalImpact).toLocaleString(undefined,{maximumFractionDigits:0})}</td><td class="mono" style="color:${color};text-align:right">${pctImpact}%</td><td style="font-size:10px;color:var(--text-dim)">${worstPos || '—'}</td></tr>`;
+  }).join('');
+}
+
+/* =====================================================================
+   P&L ATTRIBUTION BY SECTOR
+   ===================================================================== */
+function renderPnlAttribution() {
+  const el = document.getElementById('riskPnlAttribution');
+  if (!el) return;
+
+  const sectorPnl = {};
+  const sectorMap = { ng: 'NG', crude: 'Crude', power: 'Power', freight: 'Freight', ag: 'Ag', metals: 'Metals', ngls: 'NGLs', lng: 'LNG' };
+  const colors = { NG: '#5b9bd5', Crude: '#f59e0b', Power: '#a78bfa', Freight: '#fb923c', Ag: '#84cc16', Metals: '#e879f9', NGLs: '#34d399', LNG: '#60a5fa' };
+
+  STATE.trades.forEach(t => {
+    const sec = sectorMap[(t.sector || '').toLowerCase()] || 'Other';
+    if (!sectorPnl[sec]) sectorPnl[sec] = { realized: 0, unrealized: 0 };
+    if (t.status === 'CLOSED') {
+      sectorPnl[sec].realized += parseFloat(t.realizedPnl || 0);
+    } else if (t.status === 'OPEN') {
+      const spot = getPrice(t.hub);
+      const dir = t.direction === 'BUY' ? 1 : -1;
+      sectorPnl[sec].unrealized += (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+    }
+  });
+
+  const sectors = Object.keys(sectorPnl).sort((a, b) => {
+    const totalA = sectorPnl[a].realized + sectorPnl[a].unrealized;
+    const totalB = sectorPnl[b].realized + sectorPnl[b].unrealized;
+    return totalB - totalA;
+  });
+
+  if (!sectors.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:16px">No P&L data</div>'; return; }
+
+  const maxVal = Math.max(...sectors.map(s => Math.abs(sectorPnl[s].realized + sectorPnl[s].unrealized)), 1);
+
+  el.innerHTML = sectors.map(s => {
+    const total = sectorPnl[s].realized + sectorPnl[s].unrealized;
+    const barWidth = Math.max(2, Math.abs(total) / maxVal * 100);
+    const color = total >= 0 ? 'var(--green)' : 'var(--red)';
+    const bgColor = colors[s] || 'var(--accent)';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px">
+      <span style="width:50px;font-weight:600;color:${bgColor}">${s}</span>
+      <div style="flex:1;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden;position:relative">
+        <div style="height:100%;width:${barWidth}%;background:${bgColor};opacity:0.6;border-radius:3px"></div>
+      </div>
+      <span class="mono" style="width:80px;text-align:right;color:${color};font-weight:600">${total >= 0 ? '+' : '-'}$${Math.abs(total).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+    </div>`;
+  }).join('') + `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:10px;color:var(--text-muted)">
+    <span>Realized: $${sectors.reduce((s,k)=>s+sectorPnl[k].realized,0).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+    <span>Unrealized: $${sectors.reduce((s,k)=>s+sectorPnl[k].unrealized,0).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+  </div>`;
+}
+
+/* =====================================================================
+   MARGINAL VaR (per-position contribution)
+   ===================================================================== */
+function renderMarginalVar(openTrades, equity, dailyVol) {
+  const el = document.getElementById('riskMarginalVar');
+  if (!el) return;
+  if (!openTrades.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:16px">No open positions</div>'; return; }
+
+  const z95 = 1.645;
+  const totalVar = equity * dailyVol * z95;
+
+  // Calculate each position's marginal VaR contribution
+  const positions = openTrades.map(t => {
+    const spot = getPrice(t.hub);
+    const vol = parseFloat(t.volume);
+    const exposure = spot * vol;
+    const posVar = exposure * dailyVol * z95;
+    return { hub: t.hub, direction: t.direction, exposure, posVar, pctOfTotal: totalVar > 0 ? (posVar / totalVar * 100) : 0 };
+  }).sort((a, b) => b.posVar - a.posVar);
+
+  el.innerHTML = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px">Portfolio VaR(95%): <span class="mono" style="color:var(--red);font-weight:600">$${totalVar.toLocaleString(undefined,{maximumFractionDigits:0})}</span></div>` +
+    positions.map(p => {
+      const barWidth = Math.min(100, p.pctOfTotal);
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px">
+        <span style="width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.hub}">${p.hub}</span>
+        <span style="width:30px;color:${p.direction === 'BUY' ? 'var(--buy)' : 'var(--sell)'};font-weight:700;font-size:10px">${p.direction === 'BUY' ? 'B' : 'S'}</span>
+        <div style="flex:1;height:10px;background:var(--surface2);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${barWidth}%;background:var(--red);opacity:0.5;border-radius:3px"></div>
+        </div>
+        <span class="mono" style="width:60px;text-align:right;font-size:10px;color:var(--red)">$${p.posVar.toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+        <span class="mono" style="width:35px;text-align:right;font-size:10px;color:var(--text-muted)">${p.pctOfTotal.toFixed(0)}%</span>
+      </div>`;
+    }).join('');
 }
 

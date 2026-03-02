@@ -1261,6 +1261,24 @@
         <div class="card-body"><div id="riskGreeks"></div></div>
       </div>
     </div>
+    <!-- Stress Testing + P&L Attribution + Marginal VaR -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">Stress Testing</div>
+        <div class="card-body"><div class="table-wrap">
+          <table style="width:100%;font-size:11px"><thead><tr><th style="text-align:left">Scenario</th><th>Impact ($)</th><th>Impact (%)</th><th>Worst Position</th></tr></thead>
+          <tbody id="riskStressBody"></tbody></table>
+        </div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">P&L Attribution by Sector</div>
+        <div class="card-body"><div id="riskPnlAttribution"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">Marginal VaR</div>
+        <div class="card-body"><div id="riskMarginalVar"></div></div>
+      </div>
+    </div>
     <!-- Open Positions + Heatmap -->
     <div class="risk-positions-grid" style="display:grid;grid-template-columns:1fr 1.5fr;gap:16px;margin-bottom:16px">
       <div class="card">
