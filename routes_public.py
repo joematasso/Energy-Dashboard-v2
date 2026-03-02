@@ -22,24 +22,13 @@ public_bp = Blueprint('public', __name__)
 # Build info — captured once at import time from git
 # ---------------------------------------------------------------------------
 def _read_git_info():
+    """Read build info — always tries git first for freshest data, falls back to build_info.json."""
     info = {'version': '3.0', 'commit': None, 'commit_short': None,
             'last_updated': None, 'commit_message': None, 'commit_count': 0}
     root = os.path.dirname(os.path.abspath(__file__))
 
-    # Try reading from a pre-generated build_info.json first (works in Docker/deploy)
-    build_file = os.path.join(root, 'build_info.json')
-    if os.path.exists(build_file):
-        try:
-            with open(build_file) as f:
-                saved = json.load(f)
-            info.update(saved)
-            if info.get('commit') and not info.get('commit_short'):
-                info['commit_short'] = info['commit'][:7]
-            return info
-        except Exception:
-            pass
-
-    # Fall back to reading git directly (works in dev/codespace)
+    # Always try git first (works in dev/codespace AND on servers with git installed)
+    git_ok = False
     try:
         def _git(cmd):
             return subprocess.check_output(cmd, cwd=root, stderr=subprocess.DEVNULL).decode().strip()
@@ -50,8 +39,23 @@ def _read_git_info():
         count = int(_git(['git', 'rev-list', '--count', 'HEAD']))
         info['commit_count'] = count
         info['version'] = f'3.0.{count}'
+        git_ok = True
     except Exception:
         pass
+
+    # Fall back to build_info.json only if git failed (e.g. Docker with no .git)
+    if not git_ok:
+        build_file = os.path.join(root, 'build_info.json')
+        if os.path.exists(build_file):
+            try:
+                with open(build_file) as f:
+                    saved = json.load(f)
+                info.update(saved)
+                if info.get('commit') and not info.get('commit_short'):
+                    info['commit_short'] = info['commit'][:7]
+            except Exception:
+                pass
+
     return info
 
 _BUILD_INFO = _read_git_info()

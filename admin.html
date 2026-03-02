@@ -656,8 +656,8 @@ async function checkStatus(){
       const envColor=env==='Production'?'var(--green)':'var(--amber)';
       const statusColor=serverOnline?'var(--green)':'var(--red)';
       const statusText=serverOnline?'All systems operational':'Server offline';
-      // Info tooltip helper
-      const _i=(tip)=>'<span title="'+tip+'" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--border);color:var(--text-muted);font-size:9px;cursor:help;margin-left:6px;flex-shrink:0;font-style:normal;font-family:var(--font-sans)">i</span>';
+      // Info tooltip helper — click-to-show popover
+      const _i=(tip)=>'<span class="info-tip-btn" onclick="toggleInfoTip(this)" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--border);color:var(--text-muted);font-size:9px;cursor:pointer;margin-left:6px;flex-shrink:0;font-style:normal;font-family:var(--font-sans);position:relative;user-select:none" data-tip="'+tip.replace(/"/g,'&quot;')+'">i</span>';
       document.getElementById('versionModalBody').innerHTML=
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'+
           '<span style="background:rgba(212,160,83,0.15);color:var(--accent);padding:4px 12px;border-radius:6px;font-weight:600;font-size:14px">v'+b.version+'</span>'+
@@ -714,6 +714,43 @@ async function checkStatus(){
     document.getElementById('statusText').textContent='Offline';
     document.getElementById('sysServerStatus').textContent='Offline';document.getElementById('sysServerStatus').className='value red';
   }
+}
+function toggleInfoTip(el) {
+  // Close any existing tooltip
+  var existing = document.querySelector('.info-tip-pop');
+  if (existing) { existing.remove(); if (existing._srcBtn === el) return; }
+  var tip = el.getAttribute('data-tip');
+  if (!tip) return;
+  var pop = document.createElement('div');
+  pop.className = 'info-tip-pop';
+  pop._srcBtn = el;
+  pop.textContent = tip;
+  Object.assign(pop.style, {
+    position:'absolute', zIndex:'9999', background:'var(--surface2)', color:'var(--text)',
+    padding:'10px 14px', borderRadius:'8px', fontSize:'12px', lineHeight:'1.5',
+    maxWidth:'320px', boxShadow:'0 8px 24px rgba(0,0,0,0.5)', border:'1px solid var(--border)',
+    left:'50%', transform:'translateX(-50%)', top:'calc(100% + 8px)', whiteSpace:'normal', wordWrap:'break-word'
+  });
+  el.style.position = 'relative';
+  el.appendChild(pop);
+  // Adjust if overflows right edge
+  requestAnimationFrame(function() {
+    var rect = pop.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 12) {
+      pop.style.left = 'auto';
+      pop.style.right = '0';
+      pop.style.transform = 'none';
+    }
+    if (rect.left < 12) {
+      pop.style.left = '0';
+      pop.style.transform = 'none';
+    }
+  });
+  // Close on outside click (after a tick so this click doesn't close it)
+  setTimeout(function() {
+    function closer(e) { if (!pop.contains(e.target) && e.target !== el) { pop.remove(); document.removeEventListener('click', closer); } }
+    document.addEventListener('click', closer);
+  }, 10);
 }
 function _timeAgo(date){
   const s=Math.floor((Date.now()-date.getTime())/1000);

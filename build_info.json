@@ -1,8 +1,8 @@
 {
-  "commit": "c261603f2f2a19ed4aa6a1718b51e0a6c3b7fab2",
-  "commit_short": "c261603",
-  "last_updated": "2026-03-02 17:55:40 +0000",
-  "commit_message": "Add real system info to version modal: Python/Flask/SQLite versions, OS, DB size, uptime",
-  "commit_count": 129,
-  "version": "3.0.129"
+  "commit": "6bcfe959934a32a014c8d84b46a5bb0a120e4d1e",
+  "commit_short": "6bcfe95",
+  "last_updated": "2026-03-02 19:25:01 +0000",
+  "commit_message": "Fix tournament mode bug sweep: 20+ fixes across all severity levels",
+  "commit_count": 131,
+  "version": "3.0.131"
 }
