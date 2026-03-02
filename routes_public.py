@@ -24,8 +24,23 @@ public_bp = Blueprint('public', __name__)
 def _read_git_info():
     info = {'version': '3.0', 'commit': None, 'commit_short': None,
             'last_updated': None, 'commit_message': None, 'commit_count': 0}
+    root = os.path.dirname(os.path.abspath(__file__))
+
+    # Try reading from a pre-generated build_info.json first (works in Docker/deploy)
+    build_file = os.path.join(root, 'build_info.json')
+    if os.path.exists(build_file):
+        try:
+            with open(build_file) as f:
+                saved = json.load(f)
+            info.update(saved)
+            if info.get('commit') and not info.get('commit_short'):
+                info['commit_short'] = info['commit'][:7]
+            return info
+        except Exception:
+            pass
+
+    # Fall back to reading git directly (works in dev/codespace)
     try:
-        root = os.path.dirname(os.path.abspath(__file__))
         def _git(cmd):
             return subprocess.check_output(cmd, cwd=root, stderr=subprocess.DEVNULL).decode().strip()
         info['commit'] = _git(['git', 'rev-parse', 'HEAD'])

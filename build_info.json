@@ -1,0 +1,8 @@
+{
+  "commit": "b888a008036c5478feccc6ee71bbe75156ab731f",
+  "commit_short": "b888a00",
+  "last_updated": "2026-03-02 17:42:50 +0000",
+  "commit_message": "Add build_info.json for deploy-time version info",
+  "commit_count": 126,
+  "version": "3.0.126"
+}
