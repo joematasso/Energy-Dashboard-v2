@@ -78,11 +78,27 @@ function getMultilegPrice(t) {
   return net;
 }
 
+// Returns the forward curve price for a specific delivery month, or spot if prompt.
+function _getContractPrice(hub, deliveryMonth) {
+  if (!deliveryMonth || !hub) return getPrice(hub);
+  const fwd = STATE.forwardCurves[hub];
+  if (!fwd || !fwd.length) return getPrice(hub);
+  const now = new Date();
+  const target = new Date(deliveryMonth + '-01');
+  const monthsAhead = (target.getFullYear() - now.getFullYear()) * 12 + target.getMonth() - now.getMonth();
+  // Prompt month (0) or past month → use spot
+  if (monthsAhead <= 0) return getPrice(hub);
+  // Deferred month → use forward curve
+  if (monthsAhead <= fwd.length) return fwd[monthsAhead - 1].price;
+  // Beyond curve → use last available forward point
+  return fwd[fwd.length - 1].price;
+}
+
 function getTradeSpot(t) {
   if (t.type === 'MULTILEG' && t.legs && t.legs.length) return getMultilegPrice(t);
   if (SPREAD_TYPES.has(t.type)) return getSpreadPrice(t);
   if (BASIS_TYPES.has(t.type)) return getBasisPrice(t);
-  return getPrice(t.hub);
+  return _getContractPrice(t.hub, t.deliveryMonth);
 }
 
 /* --- Row expand toggle --- */

@@ -151,7 +151,7 @@ function updateAccountBar() {
       if (pnl > 0) wins++; else if (pnl < 0) losses++;
     } else if (t.status === 'OPEN') {
       openCount++;
-      const spot = getPrice(t.hub);
+      const spot = typeof getTradeSpot === 'function' ? getTradeSpot(t) : getPrice(t.hub);
       const dir = t.direction === 'BUY' ? 1 : -1;
       const vol = parseFloat(t.volume || 0);
       const entry = parseFloat(t.entryPrice || 0);
