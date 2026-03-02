@@ -228,6 +228,15 @@ function renderPipelineMap(sector) {
   const container = document.getElementById(sector + 'MapContainer');
   if (!container) return;
 
+  // Restore saved zoom state
+  try {
+    const saved = JSON.parse(localStorage.getItem('map_zoom_' + sector));
+    if (saved && MAP_ZOOM[sector]) {
+      const z = MAP_ZOOM[sector];
+      z.vx = saved.vx; z.vy = saved.vy; z.vw = saved.vw; z.vh = saved.vh; z.zoom = saved.zoom;
+    }
+  } catch(e) {}
+
   const hubs = ALL_HUB_SETS[sector] || [];
   const thm = document.documentElement.getAttribute('data-theme');
   const isLight = thm === 'light';
@@ -487,6 +496,8 @@ function mapZoomAt(sector, dir, e) {
   mapScaleElements(sector);
   const lbl = document.getElementById(sector + 'ZoomLvl');
   if (lbl) lbl.textContent = Math.round(z.zoom * 100) + '%';
+  // Persist zoom
+  try { localStorage.setItem('map_zoom_' + sector, JSON.stringify({ vx: z.vx, vy: z.vy, vw: z.vw, vh: z.vh, zoom: z.zoom })); } catch(e) {}
 }
 
 function mapZoom(sector, dir) {

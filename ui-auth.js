@@ -485,6 +485,13 @@ async function fetchLiveNews() {
    ===================================================================== */
 let audioCtx;
 function playSound(type) {
+  // Visual flash for accessibility (always, regardless of sound setting)
+  const bell = document.querySelector('.notif-bell');
+  if (bell) {
+    bell.style.transition = 'background 0.1s';
+    bell.style.background = type === 'alert' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)';
+    setTimeout(() => { bell.style.background = ''; }, 300);
+  }
   if (!STATE.settings.sound) return;
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const osc = audioCtx.createOscillator();
@@ -540,4 +547,23 @@ document.addEventListener('mousemove', resetActivityTimer);
 document.addEventListener('keydown', resetActivityTimer);
 document.addEventListener('click', resetActivityTimer);
 setInterval(checkTimeout, 60000);
+
+// Cross-tab settings sync
+window.addEventListener('storage', function(e) {
+  if (!e.key || !STATE.trader) return;
+  const prefix = 'ng_' + STATE.trader.trader_name + '_';
+  if (e.key === prefix + 'settings' && e.newValue) {
+    try {
+      const newSettings = JSON.parse(e.newValue);
+      Object.assign(STATE.settings, newSettings);
+      if (typeof applySettings === 'function') applySettings();
+    } catch(err) {}
+  }
+  if (e.key === prefix + 'trades' && e.newValue) {
+    try {
+      STATE.trades = JSON.parse(e.newValue);
+      if (typeof renderBlotterPage === 'function') renderBlotterPage();
+    } catch(err) {}
+  }
+});
 
