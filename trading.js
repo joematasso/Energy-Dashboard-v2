@@ -564,10 +564,19 @@ function updateMarginPreview() {
   const reqMargin = calcMargin(mockTrade);
 
   const balance = STATE.settings.balance || 1000000;
-  let realized = 0;
-  STATE.trades.forEach(t => { if (t.status === 'CLOSED') realized += parseFloat(t.realizedPnl || 0); });
+  let realized = 0, unrealized = 0;
+  STATE.trades.forEach(t => {
+    if (t.status === 'CLOSED') realized += parseFloat(t.realizedPnl || 0);
+    else if (t.status === 'OPEN') {
+      const spot = typeof getTradeSpot === 'function' ? getTradeSpot(t) : getPrice(t.hub);
+      if (spot && !isNaN(spot)) {
+        const dir = t.direction === 'BUY' ? 1 : -1;
+        unrealized += (spot - parseFloat(t.entryPrice)) * parseFloat(t.volume) * dir;
+      }
+    }
+  });
   const usedMargin = STATE.trades.filter(t=>t.status==='OPEN').reduce((s,t)=>s+calcMargin(t),0);
-  const equity = balance + realized;
+  const equity = balance + realized + unrealized;
   const available = equity - usedMargin;
 
   document.getElementById('marginRequired').textContent = '$' + reqMargin.toLocaleString(undefined,{maximumFractionDigits:0});

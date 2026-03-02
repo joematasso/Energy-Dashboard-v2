@@ -74,31 +74,70 @@ function renderRiskPage() {
 
   const equity = balance + realized + unrealized;
   const portfolio = Math.abs(unrealized) + Math.abs(realized) || equity;
-  const dailyVol = 0.02;
 
-  // VaR
+  // Realized volatility from P&L returns (rolling window, fallback to sector defaults)
+  let dailyVol = 0.02;
+  if (pnlList.length >= 5) {
+    const mean = pnlList.reduce((a,b)=>a+b,0) / pnlList.length;
+    const variance = pnlList.reduce((s,v)=>s+(v-mean)*(v-mean),0) / (pnlList.length - 1);
+    const realizedStd = Math.sqrt(variance);
+    // Normalize as fraction of portfolio
+    dailyVol = portfolio > 0 ? Math.max(0.005, Math.min(0.10, realizedStd / portfolio)) : 0.02;
+  }
+
+  // VaR (parametric)
   const var95 = portfolio * dailyVol * 1.645;
   const var99 = portfolio * dailyVol * 2.326;
+  // CVaR (Expected Shortfall): average of P&L beyond VaR threshold, or parametric approximation
+  let cvar95 = var95 * 1.3, cvar99 = var99 * 1.3;
+  if (pnlList.length >= 10) {
+    const sorted = [...pnlList].sort((a,b)=>a-b);
+    const cutoff95 = Math.max(1, Math.floor(sorted.length * 0.05));
+    const cutoff99 = Math.max(1, Math.floor(sorted.length * 0.01));
+    const tail95 = sorted.slice(0, cutoff95);
+    const tail99 = sorted.slice(0, cutoff99);
+    if (tail95.length) cvar95 = Math.abs(tail95.reduce((a,b)=>a+b,0) / tail95.length);
+    if (tail99.length) cvar99 = Math.abs(tail99.reduce((a,b)=>a+b,0) / tail99.length);
+  }
   document.getElementById('riskPortValue').textContent = '$' + equity.toLocaleString(undefined,{maximumFractionDigits:0});
   document.getElementById('riskVar95').textContent = '-$' + var95.toLocaleString(undefined,{maximumFractionDigits:0});
   document.getElementById('riskVar99').textContent = '-$' + var99.toLocaleString(undefined,{maximumFractionDigits:0});
-  document.getElementById('riskCvar95').textContent = '-$' + (var95*1.3).toLocaleString(undefined,{maximumFractionDigits:0});
-  document.getElementById('riskCvar99').textContent = '-$' + (var99*1.3).toLocaleString(undefined,{maximumFractionDigits:0});
+  document.getElementById('riskCvar95').textContent = '-$' + cvar95.toLocaleString(undefined,{maximumFractionDigits:0});
+  document.getElementById('riskCvar99').textContent = '-$' + cvar99.toLocaleString(undefined,{maximumFractionDigits:0});
 
   // Performance
   const wr = (wins+losses)>0 ? ((wins/(wins+losses))*100).toFixed(1)+'%' : '—';
   const pf = grossLosses>0 ? (grossWins/grossLosses).toFixed(2) : (grossWins>0?'999':'—');
   const avgWin = wins>0 ? grossWins/wins : 0;
   const avgLoss = losses>0 ? grossLosses/losses : 0;
-  const sharpe = pnlList.length>1 ? (function(){ const mean=pnlList.reduce((a,b)=>a+b,0)/pnlList.length; const std=Math.sqrt(pnlList.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(pnlList.length-1)); return std>0?((mean/std)*Math.sqrt(252)).toFixed(2):'—'; })() : '—';
+  // Sharpe ratio (time-based: group P&L by day, annualize with sqrt(252))
+  const sharpe = pnlList.length>1 ? (function(){
+    // Group P&L by calendar day for proper time-based calculation
+    const dailyPnl = {};
+    STATE.trades.filter(t=>t.status==='CLOSED').forEach(t=>{
+      const day = (t.closedAt || t.timestamp || '').slice(0, 10);
+      if (day) dailyPnl[day] = (dailyPnl[day] || 0) + parseFloat(t.realizedPnl || 0);
+    });
+    const dailyReturns = Object.values(dailyPnl);
+    if (dailyReturns.length < 2) {
+      // Fallback to per-trade Sharpe if insufficient days
+      const mean=pnlList.reduce((a,b)=>a+b,0)/pnlList.length;
+      const std=Math.sqrt(pnlList.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(pnlList.length-1));
+      return std>0?((mean/std)*Math.sqrt(Math.min(pnlList.length,252))).toFixed(2):'—';
+    }
+    const mean=dailyReturns.reduce((a,b)=>a+b,0)/dailyReturns.length;
+    const std=Math.sqrt(dailyReturns.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(dailyReturns.length-1));
+    return std>0?((mean/std)*Math.sqrt(252)).toFixed(2):'—';
+  })() : '—';
 
-  // Sortino ratio (only penalizes downside deviation)
+  // Sortino ratio (downside deviation from all periods, not just negative trades)
   const sortino = pnlList.length>1 ? (function(){
     const mean=pnlList.reduce((a,b)=>a+b,0)/pnlList.length;
-    const downDev=pnlList.filter(v=>v<0);
-    if(!downDev.length) return mean>0?'999':'—';
-    const dStd=Math.sqrt(downDev.reduce((s,v)=>s+v*v,0)/downDev.length);
-    return dStd>0?((mean/dStd)*Math.sqrt(252)).toFixed(2):'—';
+    // Downside deviation: sqrt(mean of squared negative returns from MAR=0)
+    const downSquares = pnlList.map(v => v < 0 ? v * v : 0);
+    const dStd=Math.sqrt(downSquares.reduce((s,v)=>s+v,0)/pnlList.length);
+    if(dStd <= 0) return mean>0?'999':'—';
+    return ((mean/dStd)*Math.sqrt(252)).toFixed(2);
   })() : '—';
 
   // Max drawdown from equity curve
@@ -656,8 +695,8 @@ function renderCorrelationMatrix() {
   if (!el) return;
 
   // Get sectors that have price history
-  const sectors = ['NG', 'Crude', 'Power', 'Ag', 'Metals', 'LNG'];
-  const sectorHubs = { NG: 'Henry Hub', Crude: 'WTI Cushing', Power: 'PJM West', Ag: 'Corn CBOT', Metals: 'Gold COMEX', LNG: 'JKM' };
+  const sectors = ['NG', 'Crude', 'Power', 'Freight', 'Ag', 'Metals', 'NGLs', 'LNG'];
+  const sectorHubs = { NG: 'Henry Hub', Crude: 'WTI Cushing', Power: 'PJM West', Freight: 'Baltic Dry', Ag: 'Corn CBOT', Metals: 'Gold COMEX', NGLs: 'Mt Belvieu Ethane', LNG: 'JKM' };
   const histories = {};
   sectors.forEach(s => {
     const hub = sectorHubs[s];

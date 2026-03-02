@@ -262,6 +262,17 @@ def init_db():
         );
     """)
 
+    # Performance indexes
+    cur.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_trades_trader ON trades(trader_name);
+        CREATE INDEX IF NOT EXISTS idx_trades_created ON trades(created_at);
+        CREATE INDEX IF NOT EXISTS idx_traders_status ON traders(status);
+        CREATE INDEX IF NOT EXISTS idx_snapshots_trader ON performance_snapshots(trader_name);
+        CREATE INDEX IF NOT EXISTS idx_pending_orders_trader ON pending_orders(trader_name);
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_trade_feed_created ON trade_feed(created_at);
+    """)
+
     # Insert default admin PIN if not exists
     cur.execute("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('admin_pin', 'admin123')")
     cur.execute("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('censored_words', '[]')")
