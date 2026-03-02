@@ -527,8 +527,10 @@ async function checkStatus(){
     // Version info — compact card + modal
     const b=d.build;
     if(b){
-      const ts=b.last_updated?new Date(b.last_updated.replace(' ','T')):null;
-      const ago=ts?_timeAgo(ts):'';
+      // Parse git timestamp: "2026-03-02 17:42:50 +0000" → replace only first space with T
+      const ts=b.last_updated?new Date(b.last_updated.replace(/^(\d{4}-\d{2}-\d{2}) /,'$1T')):null;
+      const ago=(ts&&!isNaN(ts.getTime()))?_timeAgo(ts):'';
+      const tsStr=(ts&&!isNaN(ts.getTime()))?ts.toLocaleString():'—';
       // Compact one-liner
       document.getElementById('versionBadge').textContent='v'+b.version;
       document.getElementById('versionOneLiner').textContent=
@@ -537,27 +539,31 @@ async function checkStatus(){
       // Modal detail
       const env=location.hostname==='localhost'||location.hostname==='127.0.0.1'?'Development':'Production';
       const envColor=env==='Production'?'var(--green)':'var(--amber)';
+      const statusColor=serverOnline?'var(--green)':'var(--red)';
+      const statusText=serverOnline?'All systems operational':'Server offline';
+      // Info tooltip helper
+      const _i=(tip)=>'<span title="'+tip+'" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--border);color:var(--text-muted);font-size:9px;cursor:help;margin-left:6px;flex-shrink:0;font-style:normal;font-family:var(--font-sans)">i</span>';
       document.getElementById('versionModalBody').innerHTML=
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'+
           '<span style="background:rgba(212,160,83,0.15);color:var(--accent);padding:4px 12px;border-radius:6px;font-weight:600;font-size:14px">v'+b.version+'</span>'+
           '<span style="background:var(--surface2);color:var(--text-dim);padding:4px 12px;border-radius:6px;font-size:12px">Build #'+b.commit_count+'</span>'+
-          '<span style="background:var(--surface2);color:var(--text-dim);padding:4px 12px;border-radius:6px;font-size:12px">'+b.commit_short+'</span>'+
+          '<span style="background:var(--surface2);color:var(--text-dim);padding:4px 12px;border-radius:6px;font-size:12px">'+(b.commit_short||'—')+'</span>'+
         '</div>'+
-        '<div style="display:grid;grid-template-columns:130px 1fr;gap:12px 16px;line-height:1.9">'+
-          '<span style="color:var(--text-muted);font-size:12px">LATEST UPDATE</span>'+
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;line-height:1.9;align-items:center">'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">LATEST UPDATE'+_i('Description of the most recent code change pushed to this server')+'</span>'+
           '<span style="color:var(--text);font-size:13px">'+(b.commit_message||'—')+'</span>'+
-          '<span style="color:var(--text-muted);font-size:12px">LAST DEPLOY</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">LAST DEPLOY'+_i('How long ago the latest version was deployed to this server')+'</span>'+
           '<span style="color:var(--text)">'+(ago||'—')+'</span>'+
-          '<span style="color:var(--text-muted);font-size:12px">DEPLOY DATE</span>'+
-          '<span style="color:var(--text)">'+(ts?ts.toLocaleString():'—')+'</span>'+
-          '<span style="color:var(--text-muted);font-size:12px">FULL COMMIT</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">DEPLOY DATE'+_i('Exact date and time when this version was built and deployed')+'</span>'+
+          '<span style="color:var(--text)">'+tsStr+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">FULL COMMIT'+_i('The full SHA-1 hash uniquely identifying this exact version of the codebase')+'</span>'+
           '<span style="color:var(--text);font-size:11px;word-break:break-all">'+(b.commit||'—')+'</span>'+
-          '<span style="color:var(--text-muted);font-size:12px">TECH STACK</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">TECH STACK'+_i('The core technologies powering this platform: web framework, frontend, and database')+'</span>'+
           '<span style="color:var(--text)">Flask 2.3 + Vanilla JS + SQLite</span>'+
-          '<span style="color:var(--text-muted);font-size:12px">ENVIRONMENT</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">ENVIRONMENT'+_i('Development = running locally for testing. Production = live server accessible to all traders')+'</span>'+
           '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+envColor+'"></span><span style="color:'+envColor+'">'+env+'</span></span>'+
-          '<span style="color:var(--text-muted);font-size:12px">STATUS</span>'+
-          '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span><span style="color:var(--green)">All systems operational</span></span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">STATUS'+_i('Current health of the server. Green = all APIs responding normally')+'</span>'+
+          '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+statusColor+'"></span><span style="color:'+statusColor+'">'+statusText+'</span></span>'+
         '</div>';
     }
   }catch{

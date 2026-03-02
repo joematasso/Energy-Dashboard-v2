@@ -1,8 +1,8 @@
 {
-  "commit": "b888a008036c5478feccc6ee71bbe75156ab731f",
-  "commit_short": "b888a00",
-  "last_updated": "2026-03-02 17:42:50 +0000",
-  "commit_message": "Add build_info.json for deploy-time version info",
-  "commit_count": 126,
-  "version": "3.0.126"
+  "commit": "57a56b8b4f738f120ff88172e7f499ade6239f31",
+  "commit_short": "57a56b8",
+  "last_updated": "2026-03-02 17:48:18 +0000",
+  "commit_message": "Fix version modal: date parsing, status accuracy, info tooltips",
+  "commit_count": 127,
+  "version": "3.0.127"
 }
