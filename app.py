@@ -39,7 +39,7 @@ from threading import Lock
 
 import requests
 import feedparser
-from flask import Flask, request, jsonify, send_from_directory, Response, g
+from flask import Flask, request, jsonify, send_from_directory, Response, g, abort
 from flask_socketio import SocketIO, emit
 
 # ---------------------------------------------------------------------------
@@ -48,6 +48,24 @@ from flask_socketio import SocketIO, emit
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'energydesk-v3-secret')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# Block access to sensitive files served by static_folder='.'
+_BLOCKED_EXTENSIONS = {'.py', '.pyc', '.db', '.sqlite', '.env', '.git', '.json', '.jsonl', '.log', '.cfg', '.ini', '.toml', '.yaml', '.yml'}
+_ALLOWED_JSON = {'build_info.json'}  # Explicitly allowed JSON files
+
+@app.before_request
+def _block_sensitive_files():
+    path = request.path.lstrip('/')
+    if not path:
+        return
+    # Block dotfiles/directories (.git, .env, .claude, etc.)
+    if any(part.startswith('.') for part in path.split('/')):
+        abort(404)
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _BLOCKED_EXTENSIONS:
+        basename = os.path.basename(path)
+        if basename not in _ALLOWED_JSON:
+            abort(404)
 
 DATABASE = os.environ.get('DB_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energydesk.db'))
 EIA_API_KEY  = os.environ.get('EIA_API_KEY', 'gy5wa7bBT1fQGFkomilxjR1XN8Rs889yG9D0n2HT')

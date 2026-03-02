@@ -89,6 +89,42 @@ def _read_git_history(limit=20):
         return []
 
 # ---------------------------------------------------------------------------
+# Server-side price cache — tracks last known spot price per hub
+# Seeded by trade submissions (spotRef), prevents fabricated prices
+# ---------------------------------------------------------------------------
+import threading as _threading
+_price_cache = {}       # {hub_name: price}
+_price_cache_lock = _threading.Lock()
+
+def _update_price_cache(hub, price):
+    """Update server-side price cache for a hub."""
+    try:
+        p = float(price)
+        if math.isfinite(p) and p > 0:
+            with _price_cache_lock:
+                _price_cache[hub] = p
+    except (ValueError, TypeError):
+        pass
+
+def _get_cached_price(hub):
+    """Get last known server-side price for a hub."""
+    with _price_cache_lock:
+        return _price_cache.get(hub, 0)
+
+def _verify_trader_pin(trader_name):
+    """Verify the X-Trader-Pin header matches the trader's PIN. Returns (ok, error_response_tuple)."""
+    pin = request.headers.get('X-Trader-Pin', '')
+    if not pin:
+        return False, (jsonify({'success': False, 'error': 'Authentication required (X-Trader-Pin header)'}), 401)
+    db = get_db()
+    row = db.execute("SELECT pin FROM traders WHERE trader_name=?", (trader_name,)).fetchone()
+    if not row:
+        return False, (jsonify({'success': False, 'error': 'Trader not found'}), 404)
+    if row['pin'] != pin:
+        return False, (jsonify({'success': False, 'error': 'Invalid PIN'}), 403)
+    return True, None
+
+# ---------------------------------------------------------------------------
 # Public API Endpoints
 # ---------------------------------------------------------------------------
 import sys as _sys
@@ -321,6 +357,11 @@ def get_trades(trader):
 @public_bp.route('/api/trades/<trader>', methods=['POST'])
 def submit_trade(trader):
     """Submit a trade with server-side validation."""
+    # Authenticate trader
+    ok, err = _verify_trader_pin(trader)
+    if not ok:
+        return err
+
     db = get_db()
 
     # 1. Validate trader status
@@ -336,7 +377,10 @@ def submit_trade(trader):
 
     # 1b. Market hours enforcement (OTC and privileged bypass)
     venue = data.get('venue', '')
-    is_privileged = bool(trader_row.get('privileged'))
+    try:
+        is_privileged = bool(trader_row['privileged'])
+    except (KeyError, IndexError):
+        is_privileged = False
     if venue and venue != 'OTC' and not is_privileged:
         try:
             from routes_market import is_market_open
@@ -417,6 +461,20 @@ def submit_trade(trader):
         spot_ref = entry_price
     if not math.isfinite(spot_ref) or (not is_basis and spot_ref <= 0):
         spot_ref = entry_price  # Fall back to entry price if spotRef is invalid
+
+    # Validate spotRef against server-side price cache (prevents client fabricating spotRef)
+    hub = data.get('hub', '')
+    cached_price = _get_cached_price(hub)
+    if cached_price > 0 and not is_basis:
+        # spotRef must be within 5% of last known server price
+        spot_deviation = abs(spot_ref - cached_price) / cached_price
+        if spot_deviation > 0.05:
+            return jsonify({'success': False, 'error': f'Spot reference ${spot_ref:.4f} deviates too far from market ${cached_price:.4f}'}), 400
+        # entryPrice must also be within 5% of cached price
+        entry_deviation = abs(entry_price - cached_price) / cached_price
+        if entry_deviation > 0.05:
+            return jsonify({'success': False, 'error': f'Entry price ${entry_price:.4f} deviates too far from market ${cached_price:.4f}'}), 400
+
     direction = data.get('direction', '')
     is_privileged_trader = trader_row['privileged'] if 'privileged' in trader_row.keys() else False
     is_backdating = bool(data.get('backdate')) and is_privileged_trader
@@ -492,6 +550,9 @@ def submit_trade(trader):
     db.execute("UPDATE traders SET last_seen=CURRENT_TIMESTAMP WHERE trader_name=?", (trader,))
     db.commit()
 
+    # Update server-side price cache with this trade's spotRef
+    _update_price_cache(data.get('hub', ''), spot_ref)
+
     socketio.emit('trade_submitted', {
         'trader_name': trader,
         'trade_id': trade_id,
@@ -518,6 +579,10 @@ def submit_trade(trader):
 @public_bp.route('/api/trades/<trader>/<int:trade_id>', methods=['PUT'])
 def update_trade(trader, trade_id):
     """Close a trade (or update trade data)."""
+    ok, err = _verify_trader_pin(trader)
+    if not ok:
+        return err
+
     db = get_db()
     row = db.execute("SELECT * FROM trades WHERE id=? AND trader_name=?", (trade_id, trader)).fetchone()
     if not row:
@@ -534,15 +599,28 @@ def update_trade(trader, trade_id):
             return jsonify({'success': False, 'error': 'Invalid close price'}), 400
         if not math.isfinite(close_price):
             return jsonify({'success': False, 'error': 'Close price must be a finite number'}), 400
-        try:
-            spot_ref = float(data.get('spotRef', 0)) or float(td.get('spotRef', 0))
-        except (ValueError, TypeError):
-            spot_ref = 0
-        if spot_ref > 0 and math.isfinite(spot_ref):
-            # Allow close price within 2% of spot reference (accommodates bid-ask spread)
-            deviation = abs(close_price - spot_ref) / spot_ref
-            if deviation > 0.02 and td.get('type') != 'BASIS_SWAP':
-                return jsonify({'success': False, 'error': f'Close price ${close_price:.4f} deviates too far from market ${spot_ref:.4f}'}), 400
+
+        # Validate close price against server-side price cache (not client spotRef)
+        hub = td.get('hub', '')
+        is_basis = td.get('type') == 'BASIS_SWAP'
+        cached = _get_cached_price(hub)
+        if cached > 0 and not is_basis:
+            deviation = abs(close_price - cached) / cached
+            if deviation > 0.05:
+                return jsonify({'success': False, 'error': f'Close price ${close_price:.4f} deviates too far from market ${cached:.4f}'}), 400
+            # Update cache with close price
+            _update_price_cache(hub, close_price)
+        elif not is_basis:
+            # Fall back to client spotRef if no cached price (first trade for this hub)
+            try:
+                spot_ref = float(data.get('spotRef', 0)) or float(td.get('spotRef', 0))
+            except (ValueError, TypeError):
+                spot_ref = 0
+            if spot_ref > 0 and math.isfinite(spot_ref):
+                deviation = abs(close_price - spot_ref) / spot_ref
+                if deviation > 0.02:
+                    return jsonify({'success': False, 'error': f'Close price ${close_price:.4f} deviates too far from market ${spot_ref:.4f}'}), 400
+                _update_price_cache(hub, spot_ref)
 
     # Validate closeReason if provided
     if data.get('closeReason'):
@@ -559,7 +637,31 @@ def update_trade(trader, trade_id):
         except (ValueError, TypeError):
             return jsonify({'success': False, 'error': 'Invalid realized P&L value'}), 400
 
-    td.update(data)
+    # Only allow specific safe fields to be updated (prevent td.update injection)
+    ALLOWED_FIELDS = {'status', 'closePrice', 'closedAt', 'closeReason', 'realizedPnl',
+                      'stopLoss', 'targetExit', 'notes', 'spotRef', 'autoRoll'}
+    for key in data:
+        if key in ALLOWED_FIELDS:
+            td[key] = data[key]
+
+    # Server-compute realizedPnl when closing a trade
+    if td.get('status') == 'CLOSED' and td.get('closePrice') is not None:
+        try:
+            entry_price = float(td.get('entryPrice', 0))
+            close_price = float(td.get('closePrice', 0))
+            volume = float(td.get('volume', 0))
+            direction = td.get('direction', 'BUY')
+            mult = 1 if direction == 'BUY' else -1
+            # Compute P&L multiplier based on trade type
+            trade_type = td.get('type', '')
+            is_basis = trade_type == 'BASIS_SWAP'
+            computed_pnl = mult * (close_price - entry_price) * volume
+            if is_basis:
+                computed_pnl = (close_price - entry_price) * volume if direction == 'BUY' else -(close_price - entry_price) * volume
+            td['realizedPnl'] = round(computed_pnl, 2)
+        except (ValueError, TypeError):
+            pass
+
     db.execute("UPDATE trades SET trade_data=? WHERE id=?", (json.dumps(td), trade_id))
     db.commit()
 
@@ -572,6 +674,10 @@ def update_trade(trader, trade_id):
 @public_bp.route('/api/trades/<trader>/<int:trade_id>', methods=['DELETE'])
 def delete_trade(trader, trade_id):
     """Delete a trade (only within 1-hour window)."""
+    ok, err = _verify_trader_pin(trader)
+    if not ok:
+        return err
+
     db = get_db()
     row = db.execute("SELECT * FROM trades WHERE id=? AND trader_name=?", (trade_id, trader)).fetchone()
     if not row:
@@ -693,13 +799,6 @@ def get_leaderboard():
     db = get_db()
     traders = db.execute("SELECT * FROM traders WHERE status='ACTIVE'").fetchall()
     results = []
-    # Accept current prices from client (optional query param)
-    prices_json = request.args.get('prices', '{}')
-    try:
-        client_prices = json.loads(prices_json) if prices_json else {}
-    except (json.JSONDecodeError, TypeError):
-        client_prices = {}
-
     for t in traders:
         trades = db.execute("SELECT trade_data FROM trades WHERE trader_name=?", (t['trader_name'],)).fetchall()
         realized = 0
@@ -721,25 +820,18 @@ def get_leaderboard():
                     losses += 1
                     gross_losses += abs(pnl)
             elif td.get('status') == 'OPEN':
-                # Calculate unrealized P&L using client-provided prices or spotRef as fallback
+                # Calculate unrealized P&L using server price cache (not client-supplied)
                 hub = td.get('hub', '')
                 ep = float(td.get('entryPrice', 0))
                 vol = float(td.get('volume', 0))
                 direction = td.get('direction', '')
                 is_basis_trade = td.get('type') == 'BASIS_SWAP'
 
-                try:
-                    current_price = float(client_prices.get(hub, 0))
-                    if not math.isfinite(current_price) or current_price <= 0:
-                        current_price = 0
-                except (ValueError, TypeError):
-                    current_price = 0
+                current_price = _get_cached_price(hub)
                 if not current_price:
                     current_price = float(td.get('spotRef', ep))
 
                 if is_basis_trade:
-                    # For basis trades, use differential change
-                    basis_ref = float(td.get('spotRef', ep))
                     diff_change = current_price - ep
                     trade_pnl = diff_change * vol if direction == 'BUY' else -diff_change * vol
                 else:
@@ -851,6 +943,9 @@ def get_snapshots(trader):
 @public_bp.route('/api/tournament/<int:tid>/trade/<trader>', methods=['POST'])
 def submit_tournament_trade(tid, trader):
     """Submit a trade within an active tournament (separate from main trades)."""
+    ok, err = _verify_trader_pin(trader)
+    if not ok:
+        return err
     db = get_db()
 
     # 1. Validate tournament is ACTIVE
@@ -982,6 +1077,9 @@ def submit_tournament_trade(tid, trader):
 @public_bp.route('/api/tournament/<int:tid>/trade/<trader>/<int:trade_id>', methods=['PUT'])
 def update_tournament_trade(tid, trader, trade_id):
     """Close or update a tournament trade."""
+    ok, err = _verify_trader_pin(trader)
+    if not ok:
+        return err
     db = get_db()
 
     # Verify tournament is active
@@ -1033,6 +1131,9 @@ def update_tournament_trade(tid, trader, trade_id):
 @public_bp.route('/api/tournament/<int:tid>/force-close/<trader>', methods=['POST'])
 def force_close_tournament_trades(tid, trader):
     """Force-close all open tournament trades for a trader (VaR DQ or tournament end)."""
+    ok, err = _verify_trader_pin(trader)
+    if not ok:
+        return err
     db = get_db()
 
     # Verify tournament exists

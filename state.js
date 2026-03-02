@@ -10,6 +10,16 @@ function traderStorageKey(key) {
   return 'ng_' + tn + '_' + key;
 }
 
+// Build fetch headers with trader PIN for authenticated trade endpoints
+function tradeHeaders(extra) {
+  var h = { 'Content-Type': 'application/json' };
+  if (STATE && STATE.trader && STATE.trader.pin) {
+    h['X-Trader-Pin'] = STATE.trader.pin;
+  }
+  if (extra) { for (var k in extra) { h[k] = extra[k]; } }
+  return h;
+}
+
 const _savedTrader = JSON.parse(localStorage.getItem('ng_trader') || 'null');
 const _traderPrefix = _savedTrader ? 'ng_' + _savedTrader.trader_name + '_' : 'ng__anon_';
 

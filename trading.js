@@ -854,7 +854,7 @@ async function submitTrade() {
     try {
       const url = API_BASE + '/api/trades/otc/' + STATE.trader.trader_name;
       const body = JSON.stringify({...trade, counterparty: cptyTrader, proposalMessage: ''});
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const r = await fetch(url, { method: 'POST', headers: tradeHeaders(), body });
       const d = await r.json();
       if (!d.success) { toast(d.error || 'OTC proposal rejected', 'error'); return; }
       const cptyInfo = OTC_COUNTERPARTIES.find(c=>c.trader_name===cptyTrader);
@@ -871,7 +871,7 @@ async function submitTrade() {
     try {
       const tUrl = API_BASE + '/api/tournament/' + STATE.tournament.id + '/trade/' + STATE.trader.trader_name;
       const tBody = JSON.stringify(trade);
-      const tR = await fetch(tUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: tBody });
+      const tR = await fetch(tUrl, { method: 'POST', headers: tradeHeaders(), body: tBody });
       const tD = await tR.json();
       if (!tD.success) { toast(tD.error || 'Tournament trade rejected', 'error'); return; }
       trade.id = tD.trade_id;
@@ -892,7 +892,7 @@ async function submitTrade() {
       const url = API_BASE + '/api/trades/' + STATE.trader.trader_name;
       const body = JSON.stringify(trade);
       const r = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body
+        method: 'POST', headers: tradeHeaders(), body
       });
       const d = await r.json();
       if (!d.success) { toast(d.error || 'Trade rejected by server', 'error'); return; }
@@ -1006,12 +1006,12 @@ function _autoRollIfExpired(trade) {
         const traderName = STATE.trader.trader_name;
         if (trade.id) {
           fetch(API_BASE + '/api/trades/' + traderName + '/' + trade.id, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            method: 'PUT', headers: tradeHeaders(),
             body: JSON.stringify({ status: 'CLOSED', closePrice, realizedPnl: totalRollPnl, closeReason: 'BACKDATED_ROLL' })
           }).catch(() => {});
         }
         fetch(API_BASE + '/api/trades/' + traderName, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: tradeHeaders(),
           body: JSON.stringify(rolledTrade)
         }).then(r => r.json()).then(d => {
           if (d.success && d.trade_id) rolledTrade.id = d.trade_id;

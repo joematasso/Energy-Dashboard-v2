@@ -1241,7 +1241,17 @@ if(typeof io !== 'undefined') {
         if (typeof renderCurrentPage === 'function') renderCurrentPage();
       });
       sock.on('tournament_news_flash', function(data) {
-        // Full impact params — for price engine only
+        // Decode obfuscated impact params for price engine
+        try {
+          var p = JSON.parse(atob(data._ep || ''));
+          data.impact_type = p.it;
+          data.impact_direction = p.id;
+          data.impact_pct = p.ip;
+          data.delay_seconds = p.ds;
+          data.duration_ticks = p.dt;
+          data.affected_hubs = p.ah;
+          data.is_noise = !!p.n;
+        } catch(e) {}
         STATE.tournamentNews.push(data);
       });
       sock.on('tournament_news_public', function(data) {

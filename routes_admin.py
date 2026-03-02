@@ -7,6 +7,7 @@ import io
 import random
 import sqlite3
 import string
+import base64
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify, Response
@@ -1105,21 +1106,23 @@ def flash_tournament_news(tid, nid):
     except Exception:
         affected_hubs = []
 
-    # Full event with impact params — for price engine
+    # Full event with impact params — encoded to prevent casual inspection in DevTools
+    _impact_payload = json.dumps({
+        'it': row['impact_type'],
+        'id': row['impact_direction'],
+        'ip': row['impact_pct'],
+        'ds': row['delay_seconds'],
+        'dt': row['duration_ticks'],
+        'ah': affected_hubs,
+        'n': 1 if row['is_noise'] else 0,
+    })
+    _ep = base64.b64encode(_impact_payload.encode()).decode()
+
     socketio.emit('tournament_news_flash', {
         'event_id': nid,
         'tournament_id': tid,
-        'headline': row['headline'],
-        'description': row['description'],
-        'category': row['category'],
-        'impact_type': row['impact_type'],
-        'impact_direction': row['impact_direction'],
-        'impact_pct': row['impact_pct'],
-        'delay_seconds': row['delay_seconds'],
-        'duration_ticks': row['duration_ticks'],
-        'affected_hubs': affected_hubs,
-        'is_noise': bool(row['is_noise']),
         'flashed_at': now,
+        '_ep': _ep,
     })
 
     # Public event — headline only, no impact params (traders can't see signal vs noise)

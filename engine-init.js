@@ -75,7 +75,7 @@ function amendPendingOrder(pendingId) {
   // Sync to server
   if (order._serverId && STATE.connected && STATE.trader) {
     fetch(API_BASE + '/api/pending-orders/' + STATE.trader.trader_name + '/' + order._serverId, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: tradeHeaders(),
       body: JSON.stringify({ limitPrice: order.limitPrice, stopPrice: order.stopPrice, volume: order.volume })
     }).catch(() => {});
   }
@@ -192,7 +192,7 @@ function processPendingOrders() {
       // Submit to server if connected
       if (STATE.connected && STATE.trader) {
         fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: tradeHeaders(),
           body: JSON.stringify(trade)
         }).then(r => r.json()).then(d => {
           if (!d.success) {
@@ -245,7 +245,7 @@ function processStopLossTargets() {
         // Server update
         if (STATE.connected && STATE.trader && t.id) {
           fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            method: 'PUT', headers: tradeHeaders(),
             body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
           }).catch(() => {});
         }
@@ -268,7 +268,7 @@ function processStopLossTargets() {
         playSound('trade');
         if (STATE.connected && STATE.trader && t.id) {
           fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            method: 'PUT', headers: tradeHeaders(),
             body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
           }).catch(() => {});
         }
@@ -292,7 +292,7 @@ function processStopLossTargets() {
           playSound('alert');
           if (STATE.connected && STATE.trader && t.id) {
             fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              method: 'PUT', headers: tradeHeaders(),
               body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
             }).catch(() => {});
           }
@@ -309,7 +309,7 @@ function processStopLossTargets() {
           playSound('alert');
           if (STATE.connected && STATE.trader && t.id) {
             fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              method: 'PUT', headers: tradeHeaders(),
               body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, spotRef: spot })
             }).catch(() => {});
           }
@@ -700,11 +700,11 @@ function processAutoRolls() {
     // Server sync
     if (STATE.connected && STATE.trader) {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: tradeHeaders(),
         body: JSON.stringify({ status: 'CLOSED', closePrice, realizedPnl: pnl, closeReason: 'AUTO_ROLL' })
       }).catch(() => {});
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tradeHeaders(),
         body: JSON.stringify(rolledTrade)
       }).catch(() => {});
     }
@@ -778,7 +778,7 @@ function processExpiredContracts() {
     // Server sync
     if (STATE.connected && STATE.trader && t.id) {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: tradeHeaders(),
         body: JSON.stringify({ status: 'CLOSED', closePrice, realizedPnl: pnl, closeReason: 'EXPIRY' })
       }).catch(() => {});
     }
@@ -856,7 +856,7 @@ function checkMarginLevels() {
       // Server sync
       if (STATE.connected && STATE.trader && worstTrade.id) {
         fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + worstTrade.id, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          method: 'PUT', headers: tradeHeaders(),
           body: JSON.stringify({ status: 'CLOSED', closePrice: spot, realizedPnl: pnl, closeReason: 'MARGIN_CALL' })
         }).catch(() => {});
       }
@@ -1020,7 +1020,7 @@ function checkTournamentVaR() {
     if (STATE.trader && STATE.tournament) {
       fetch(API_BASE + '/api/tournament/' + STATE.tournament.id + '/disqualify/' + STATE.trader.trader_name, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: tradeHeaders(),
         body: JSON.stringify({ reason: 'VAR_LIMIT_EXCEEDED', var_amount: Math.round(totalVar) })
       }).catch(function() {});
     }
@@ -1076,7 +1076,7 @@ function _closeTournamentTrade(trade, closePrice, reason) {
   if (STATE.trader && STATE.tournament) {
     fetch(API_BASE + '/api/tournament/' + STATE.tournament.id + '/trade/' + STATE.trader.trader_name + '/' + trade.id, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: tradeHeaders(),
       body: JSON.stringify({ status: 'CLOSED', closePrice: closePrice, realizedPnl: trade.realizedPnl, closeReason: reason })
     }).catch(function() {});
   }
@@ -1097,7 +1097,7 @@ function forceCloseTournamentPositions(reason) {
   if (STATE.trader && STATE.tournament && closedTrades.length > 0) {
     fetch(API_BASE + '/api/tournament/' + STATE.tournament.id + '/force-close/' + STATE.trader.trader_name, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: tradeHeaders(),
       body: JSON.stringify({ trades: closedTrades })
     }).catch(function() {});
   }

@@ -138,7 +138,7 @@ function toggleAutoRoll(tradeId, enabled) {
   // Sync to server
   if (STATE.connected && STATE.trader) {
     fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + tradeId, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: tradeHeaders(),
       body: JSON.stringify({ autoRoll: enabled })
     }).catch(() => {});
   }
@@ -575,12 +575,12 @@ function closeTrade(id) {
   if (STATE.connected && STATE.trader) {
     if (isOtc) {
       fetch(API_BASE + '/api/trades/otc-close/' + STATE.trader.trader_name + '/' + id, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tradeHeaders(),
         body: JSON.stringify({ closePrice: cp })
       }).catch(() => {});
     } else {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + id, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: tradeHeaders(),
         body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp, closeReason: 'MANUAL' })
       }).catch(() => {});
     }
@@ -597,7 +597,7 @@ function deleteTrade(id) {
   STATE.trades.splice(idx, 1);
   localStorage.setItem(traderStorageKey('trades'), JSON.stringify(STATE.trades));
   if (STATE.connected && STATE.trader) {
-    fetch('/api/trades/' + STATE.trader.trader_name + '/' + id, { method: 'DELETE' }).catch(() => {});
+    fetch('/api/trades/' + STATE.trader.trader_name + '/' + id, { method: 'DELETE', headers: tradeHeaders() }).catch(() => {});
   }
   toast('Trade deleted', 'info');
   renderBlotterPage();
@@ -967,7 +967,7 @@ function flatAll() {
     totalPnl += pnl;
     if (STATE.connected && STATE.trader) {
       fetch(API_BASE + '/api/trades/' + STATE.trader.trader_name + '/' + t.id, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: tradeHeaders(),
         body: JSON.stringify({ status: 'CLOSED', closePrice: cp, realizedPnl: pnl, spotRef: cp, closeReason: 'FLAT_ALL' })
       }).catch(() => {});
     }
