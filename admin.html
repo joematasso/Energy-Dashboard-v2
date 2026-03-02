@@ -558,11 +558,11 @@ async function checkStatus(){
           '<span style="color:var(--text)">'+tsStr+'</span>'+
           '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">FULL COMMIT'+_i('The full SHA-1 hash uniquely identifying this exact version of the codebase')+'</span>'+
           '<span style="color:var(--text);font-size:11px;word-break:break-all">'+(b.commit||'—')+'</span>'+
-          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">TECH STACK'+_i('The core technologies powering this platform: web framework, frontend, and database')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">TECH STACK'+_i('Flask 2.3 handles HTTP routing, REST APIs, WebSocket events, and database access. Vanilla JavaScript (no React/Vue) renders all UI, charts, and real-time updates. SQLite in WAL mode stores traders, trades, chat, and leaderboard data. Socket.IO provides real-time push for trade feeds and chat.')+'</span>'+
           '<span style="color:var(--text)">Flask 2.3 + Vanilla JS + SQLite</span>'+
-          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">ENVIRONMENT'+_i('Development = running locally for testing. Production = live server accessible to all traders')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">ENVIRONMENT'+_i('Development: running on localhost or a codespace for testing — uses simulated prices, debug logging enabled, no impact on live traders. Production: deployed on the public server (Render), real API keys active, all trader data is persistent, changes affect everyone.')+'</span>'+
           '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+envColor+'"></span><span style="color:'+envColor+'">'+env+'</span></span>'+
-          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">STATUS'+_i('Current health of the server. Green = all APIs responding normally')+'</span>'+
+          '<span style="color:var(--text-muted);font-size:12px;display:flex;align-items:center">STATUS'+_i('Server health check: tests the /api/status endpoint every 30 seconds. Green = Flask is responding, database is accessible, WebSocket connections active. Red = server unreachable — traders cannot log in, submit trades, or sync data until restored.')+'</span>'+
           '<span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+statusColor+'"></span><span style="color:'+statusColor+'">'+statusText+'</span></span>'+
         '</div>';
     }

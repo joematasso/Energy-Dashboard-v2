@@ -1,8 +1,8 @@
 {
-  "commit": "57a56b8b4f738f120ff88172e7f499ade6239f31",
-  "commit_short": "57a56b8",
-  "last_updated": "2026-03-02 17:48:18 +0000",
-  "commit_message": "Fix version modal: date parsing, status accuracy, info tooltips",
-  "commit_count": 127,
-  "version": "3.0.127"
+  "commit": "c8b0e63be8757cd803a6a2be18519f62bb9ca3f3",
+  "commit_short": "c8b0e63",
+  "last_updated": "2026-03-02 17:54:20 +0000",
+  "commit_message": "Expand info tooltips for Tech Stack, Environment, and Status",
+  "commit_count": 128,
+  "version": "3.0.128"
 }
