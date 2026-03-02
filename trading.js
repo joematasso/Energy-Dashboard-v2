@@ -129,11 +129,14 @@ function renderBlotterPage() {
     STATE.clickedPrice = null;
   }
 
-  // Update spot ref
-  const hub = document.getElementById('tradeHub').value;
-  if (hub) {
-    document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
-    _updateSpotBadge(hub);
+  // Update spot ref — but NOT if backdating (historical price should persist)
+  const bdActive = document.getElementById('tradeBackdate');
+  if (!bdActive || !bdActive.value) {
+    const hub = document.getElementById('tradeHub').value;
+    if (hub) {
+      document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+      _updateSpotBadge(hub);
+    }
   }
 }
 
@@ -207,11 +210,16 @@ function populateHubDropdown() {
   const basisSel = document.getElementById('tradeBasisHub');
   if (basisSel) basisSel.innerHTML = hubs.map(h => `<option value="${h.name}">${h.name}</option>`).join('');
 
-  // Update spot reference
+  // Update spot reference — use historical price if backdating
   const hub = sel.value;
   if (hub) {
-    document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
-    _updateSpotBadge(hub);
+    const bdInput = document.getElementById('tradeBackdate');
+    if (bdInput && bdInput.value) {
+      onBackdateChange();
+    } else {
+      document.getElementById('tradeSpot').value = getPrice(hub).toFixed(4);
+      _updateSpotBadge(hub);
+    }
   }
 }
 
@@ -811,27 +819,31 @@ function onBackdateChange() {
   const bdInput = document.getElementById('tradeBackdate');
   const hub = document.getElementById('tradeHub').value;
   const spotEl = document.getElementById('tradeSpot');
+  const entryEl = document.getElementById('tradeEntry');
   const badgeEl = document.getElementById('tradeSpotBadge');
+  const hintEl = document.getElementById('tradeFormHint');
   if (!bdInput || !bdInput.value || !hub) {
     // Reset to live price
     if (hub && spotEl) spotEl.value = getPrice(hub).toFixed(4);
     if (badgeEl) { badgeEl.textContent = 'LIVE'; badgeEl.style.color = '#10b981'; badgeEl.style.background = 'rgba(16,185,129,0.15)'; badgeEl.style.border = '1px solid rgba(16,185,129,0.3)'; }
+    if (hintEl) hintEl.textContent = '';
     return;
   }
   // Look up historical price for the selected date
   const targetDate = new Date(bdInput.value);
   const daily = typeof _historicalDaily !== 'undefined' ? _historicalDaily[hub] : null;
   if (daily && daily.length > 0) {
-    // Historical daily is an array of closing prices, most recent last.
-    // Approximate the index: count trading days back from today.
     const now = new Date();
     const diffMs = now.getTime() - targetDate.getTime();
     const diffDays = Math.round(diffMs / 86400000);
-    const tradingDays = Math.round(diffDays * 5 / 7); // rough weekday approximation
+    const tradingDays = Math.round(diffDays * 5 / 7);
     const idx = daily.length - 1 - tradingDays;
     if (idx >= 0 && idx < daily.length) {
-      spotEl.value = daily[idx].toFixed(4);
+      const histPrice = daily[idx].toFixed(4);
+      spotEl.value = histPrice;
+      if (entryEl) entryEl.value = histPrice;
       if (badgeEl) { badgeEl.textContent = 'HIST'; badgeEl.style.color = 'var(--amber)'; badgeEl.style.background = 'rgba(245,158,11,0.1)'; badgeEl.style.border = '1px solid rgba(245,158,11,0.3)'; }
+      if (hintEl) hintEl.textContent = 'Entry price set to historical close for ' + bdInput.value;
       return;
     }
   }
@@ -842,8 +854,11 @@ function onBackdateChange() {
   const daysDiff = Math.round((new Date().getTime() - targetDate.getTime()) / 86400000);
   const drift = (Math.random() - 0.5) * vol * Math.sqrt(daysDiff) * current;
   const estimated = Math.max(current * 0.7, current - drift);
-  spotEl.value = estimated.toFixed(4);
+  const estPrice = estimated.toFixed(4);
+  spotEl.value = estPrice;
+  if (entryEl) entryEl.value = estPrice;
   if (badgeEl) { badgeEl.textContent = 'EST'; badgeEl.style.color = '#94a3b8'; badgeEl.style.background = 'rgba(148,163,184,0.1)'; badgeEl.style.border = '1px solid rgba(148,163,184,0.2)'; }
+  if (hintEl) hintEl.textContent = 'Entry price estimated for ' + bdInput.value;
 }
 
 function toggleBlotterHelp() {
