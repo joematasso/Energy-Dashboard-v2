@@ -25,7 +25,7 @@ def _read_git_info():
     """Read build info — always tries git first for freshest data, falls back to build_info.json."""
     info = {'version': '3.0', 'commit': None, 'commit_short': None,
             'last_updated': None, 'commit_message': None, 'commit_count': 0}
-    root = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Always try git first (works in dev/codespace AND on servers with git installed)
     git_ok = False
@@ -62,7 +62,7 @@ _BUILD_INFO = _read_git_info()
 
 def _read_git_history(limit=20):
     """Read recent git commit history."""
-    root = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     try:
         # Use @@@ as delimiter to avoid collision with pipe chars in commit messages
         delim = '@@@'
@@ -379,7 +379,7 @@ def submit_trade(trader):
     venue = data.get('venue', '')
     if venue and venue != 'OTC':
         try:
-            from routes_market import is_market_open
+            from routes.market import is_market_open
             mkt_open, mkt_reason, _ = is_market_open()
             if not mkt_open:
                 return jsonify({'success': False, 'error': f'Exchange closed ({mkt_reason}). Use OTC or wait for market open.'}), 400

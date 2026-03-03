@@ -126,7 +126,7 @@ def admin_delete_trader(tid):
     # Immediately kick via WebSocket if online
     if trader:
         try:
-            from routes_misc import trader_sids, trader_sids_lock
+            from routes.misc import trader_sids, trader_sids_lock
             from app import socketio
             with trader_sids_lock:
                 sid = trader_sids.get(trader['trader_name'])

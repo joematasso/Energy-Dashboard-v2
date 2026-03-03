@@ -8,7 +8,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from app import get_db, socketio
-from routes_admin import censor_text
+from routes.admin import censor_text
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -127,6 +127,31 @@ def add_conversation_members(conv_id):
     db.commit()
     return jsonify({'success': True, 'added': added, 'count': len(added)})
 
+
+@chat_bp.route('/api/chat/conversations/<int:conv_id>/remove-member', methods=['POST'])
+def remove_conversation_member(conv_id):
+    db = get_db()
+    data = request.get_json()
+    trader = data.get('trader', '')
+    member_to_remove = data.get('member', '')
+    if not trader or not member_to_remove:
+        return jsonify({'success': False, 'error': 'Trader and member required'}), 400
+    # Verify requester is a member
+    requester = db.execute("SELECT * FROM conversation_members WHERE conversation_id=? AND trader_name=?",
+                           (conv_id, trader)).fetchone()
+    if not requester:
+        return jsonify({'success': False, 'error': 'Not a member'}), 403
+    # Only group conversations
+    conv = db.execute("SELECT * FROM conversations WHERE id=?", (conv_id,)).fetchone()
+    if not conv or conv['type'] != 'group':
+        return jsonify({'success': False, 'error': 'Can only remove members from group chats'}), 400
+    # Cannot remove yourself
+    if trader == member_to_remove:
+        return jsonify({'success': False, 'error': 'Cannot remove yourself'}), 400
+    db.execute("DELETE FROM conversation_members WHERE conversation_id=? AND trader_name=?",
+               (conv_id, member_to_remove))
+    db.commit()
+    return jsonify({'success': True})
 
 
 # Chat System
@@ -258,6 +283,7 @@ def get_messages(conv_id):
         'photo_url': (r['photo_url'] or '') if r['display_name'] else '',
         'team_name': r['team_name'] or '', 'team_color': r['team_color'] or '#888',
         'text': r['text'], 'image': r['image'] if 'image' in r.keys() else '',
+        'edited_at': r['edited_at'] if 'edited_at' in r.keys() else '',
         'created_at': r['created_at'],
         'reactions': reactions_map.get(r['id'], []),
         'pinned': r['id'] in pins_set
@@ -351,6 +377,34 @@ def delete_message(message_id):
     db.execute("DELETE FROM messages WHERE id=?", (message_id,))
     db.commit()
     socketio.emit('message_deleted', {'conversation_id': conv_id, 'message_id': message_id})
+    return jsonify({'success': True})
+
+
+@chat_bp.route('/api/chat/messages/<int:message_id>/edit', methods=['POST'])
+def edit_message(message_id):
+    db = get_db()
+    data = request.get_json()
+    trader = data.get('trader', '')
+    new_text = data.get('text', '').strip()
+    if not trader:
+        return jsonify({'success': False, 'error': 'Trader required'}), 400
+    if not new_text:
+        return jsonify({'success': False, 'error': 'Text required'}), 400
+    if len(new_text) > 2000:
+        return jsonify({'success': False, 'error': 'Too long'}), 400
+    msg = db.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Message not found'}), 404
+    if msg['sender'] != trader:
+        return jsonify({'success': False, 'error': 'You can only edit your own messages'}), 403
+    new_text = censor_text(new_text)
+    db.execute("UPDATE messages SET text=?, edited_at=CURRENT_TIMESTAMP WHERE id=?", (new_text, message_id))
+    db.commit()
+    conv_id = msg['conversation_id']
+    socketio.emit('message_edited', {
+        'conversation_id': conv_id, 'message_id': message_id,
+        'text': new_text, 'edited_at': datetime.utcnow().isoformat()
+    })
     return jsonify({'success': True})
 
 

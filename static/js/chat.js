@@ -234,7 +234,10 @@ async function openConvo(convId) {
   }
   updateChatOnlineStatus();
   await loadMessages(convId);
-  if(convo.type !== 'system' && convo.type !== 'admin_inbox') document.getElementById('chatInput').focus();
+  if(convo.type !== 'system' && convo.type !== 'admin_inbox') {
+    document.getElementById('chatInput').focus();
+    ensureChatPasteListener();
+  }
 }
 
 async function loadMessages(convId, isPolling) {
@@ -321,15 +324,17 @@ function renderMessages(msgs, isPolling) {
     }
 
     const pinIndicator = m.pinned ? '<div class="msg-pin-indicator">📌 Pinned</div>' : '';
+    const editBtn = isMe && m.text ? `<button class="msg-action-btn" onclick="startEditMessage(${m.id})" title="Edit">&#9998;</button>` : '';
     const deleteBtn = isMe ? `<button class="msg-action-btn" onclick="deleteMessage(${m.id})" title="Delete">🗑</button>` : '';
     const actionsHtml = `<div class="msg-actions-inline">
       <button class="msg-action-btn" onclick="showReactPicker(event,${m.id})" title="React">😊</button>
       <button class="msg-action-btn" onclick="togglePin(${m.id})" title="${m.pinned ? 'Unpin' : 'Pin'}">${m.pinned ? '📌' : '📍'}</button>
-      ${deleteBtn}
+      ${editBtn}${deleteBtn}
     </div>`;
 
     const teamDot = m.team_color ? `<span style="width:6px;height:6px;border-radius:50%;background:${m.team_color};display:inline-block;flex-shrink:0"></span>` : '';
     const renderedText = m.text ? formatMentions(escapeHtml(m.text)) : '';
+    const editedTag = m.edited_at ? '<span class="msg-edited">(edited)</span>' : '';
     const imageHtml = m.image ? `<img src="${m.image}" class="chat-img-msg" onclick="showImageLightbox(this.src)" alt="image">` : '';
 
     // Avatar column (other messages only)
@@ -351,7 +356,7 @@ function renderMessages(msgs, isPolling) {
       <div class="chat-msg-content">
         ${pinIndicator}
         ${!isMe && !isGrouped ? `<div class="msg-sender">${teamDot}${m.display_name}</div>` : ''}
-        ${renderedText ? `<div class="msg-bubble">${renderedText}</div>` : ''}
+        ${renderedText ? `<div class="msg-bubble" data-msgid="${m.id}">${renderedText}${editedTag}</div>` : ''}
         ${imageHtml}
         ${reactionsHtml}
         <div class="msg-meta">
@@ -596,6 +601,53 @@ async function deleteMessage(msgId) {
   } catch(e) { toast('Failed to delete message', 'error'); }
 }
 
+/* --- Edit Messages --- */
+function startEditMessage(msgId) {
+  const bubble = document.querySelector(`.msg-bubble[data-msgid="${msgId}"]`);
+  if (!bubble) return;
+  // Get raw text (strip edited tag, unescape HTML)
+  const tmp = document.createElement('div');
+  tmp.innerHTML = bubble.innerHTML;
+  const editedSpan = tmp.querySelector('.msg-edited');
+  if (editedSpan) editedSpan.remove();
+  // Convert mention spans back to @text
+  tmp.querySelectorAll('.mention-tag').forEach(el => { el.replaceWith(el.textContent); });
+  const rawText = tmp.textContent;
+  bubble.innerHTML = `<textarea class="msg-edit-area" id="editArea_${msgId}" maxlength="2000">${escapeHtml(rawText)}</textarea>
+    <div class="msg-edit-actions">
+      <button class="msg-edit-save" onclick="saveEditMessage(${msgId})">Save</button>
+      <button class="msg-edit-cancel" onclick="cancelEditMessage()">Cancel</button>
+    </div>`;
+  const area = document.getElementById('editArea_' + msgId);
+  area.focus();
+  area.setSelectionRange(area.value.length, area.value.length);
+  area.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditMessage(msgId); }
+    if (e.key === 'Escape') { cancelEditMessage(); }
+  });
+}
+
+async function saveEditMessage(msgId) {
+  const area = document.getElementById('editArea_' + msgId);
+  if (!area) return;
+  const newText = area.value.trim();
+  if (!newText) { toast('Message cannot be empty', 'error'); return; }
+  try {
+    const r = await fetch(API_BASE + '/api/chat/messages/' + msgId + '/edit', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ trader: STATE.trader.trader_name, text: newText })
+    });
+    const d = await r.json();
+    if (d.success) {
+      await loadMessages(CHAT_STATE.activeConvo.id);
+    } else { toast(d.error || 'Edit failed', 'error'); }
+  } catch(e) { toast('Failed to edit message', 'error'); }
+}
+
+function cancelEditMessage() {
+  if (CHAT_STATE.activeConvo) loadMessages(CHAT_STATE.activeConvo.id);
+}
+
 /* --- Pinned Messages --- */
 async function togglePin(msgId) {
   if (!STATE.trader || !CHAT_STATE.activeConvo) return;
@@ -759,11 +811,10 @@ function closeMentionDropdown() {
 
 let _chatPendingImage = null;
 
-function chatImageSelected(input) {
-  if (!input.files || !input.files[0]) return;
-  const file = input.files[0];
-  if (!file.type.startsWith('image/')) { toast('Please select an image','error'); input.value=''; return; }
-  if (file.size > 5*1024*1024) { toast('Image too large (max 5 MB)','error'); input.value=''; return; }
+function handleChatImageFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Please select an image','error'); return; }
+  if (file.size > 5*1024*1024) { toast('Image too large (max 5 MB)','error'); return; }
   const reader = new FileReader();
   reader.onload = function(e) {
     _chatPendingImage = e.target.result;
@@ -771,7 +822,31 @@ function chatImageSelected(input) {
     document.getElementById('chatImgPreview').style.display = 'block';
   };
   reader.readAsDataURL(file);
+}
+
+function chatImageSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  handleChatImageFile(input.files[0]);
   input.value = '';
+}
+
+// Clipboard image paste — attached once to chatInput
+let _chatPasteListenerAdded = false;
+function ensureChatPasteListener() {
+  if (_chatPasteListenerAdded) return;
+  const chatInput = document.getElementById('chatInput');
+  if (!chatInput) return;
+  chatInput.addEventListener('paste', function(e) {
+    const items = (e.clipboardData || window.clipboardData).items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        handleChatImageFile(items[i].getAsFile());
+        return;
+      }
+    }
+  });
+  _chatPasteListenerAdded = true;
 }
 
 function showImageLightbox(src, caption) {
@@ -886,9 +961,44 @@ async function chatAvatarUpload(input) {
   input.value = ''; // Reset so same file can be re-selected
 }
 
-async function chatAddMembers() {
+async function chatShowMembers() {
   if(!CHAT_STATE.activeConvo || CHAT_STATE.activeConvo.type !== 'group') return;
   CHAT_STATE.showingAddMembers = true;
+  const convId = CHAT_STATE.activeConvo.id;
+  const me = STATE.trader.trader_name;
+
+  // Fetch current members
+  let members = [];
+  try {
+    const r = await fetch(API_BASE+'/api/chat/conversations/'+convId+'/members');
+    const d = await r.json();
+    if(d.success) members = d.members;
+  } catch(e) { toast('Failed to load members','error'); return; }
+
+  const msgContainer = document.getElementById('chatMessages');
+  let html = '<div style="padding:8px">';
+  html += `<h4 style="margin:0 0 8px;font-size:13px;color:var(--text-dim)">Members (${members.length})</h4>`;
+  html += '<div id="membersList">';
+  members.forEach(m => {
+    const isMe = m.trader_name === me;
+    const teamDot = m.team_color ? `<span style="width:8px;height:8px;border-radius:50%;background:${m.team_color};display:inline-block"></span>` : '';
+    const youTag = isMe ? '<span class="member-you-tag">(you)</span>' : '';
+    const removeBtn = !isMe ? `<span class="member-remove-btn" onclick="doRemoveMember('${m.trader_name}','${(m.display_name||'').replace(/'/g,"\\'")}',${convId},this.closest('.chat-convo-item'))">Remove</span>` : '';
+    html += `<div class="chat-convo-item" style="gap:8px">
+      <div class="convo-avatar">${(m.display_name||'?')[0].toUpperCase()}</div>
+      <div class="convo-info"><div class="convo-name">${teamDot} ${m.display_name}${youTag}</div><div class="convo-preview">${m.team_name||''}</div></div>
+      ${removeBtn}
+    </div>`;
+  });
+  html += '</div>';
+  html += `<button class="btn btn-ghost btn-sm" onclick="chatAddMembers()" style="width:100%;margin-top:8px;color:var(--accent)">+ Add Members</button>`;
+  html += `<button class="btn btn-ghost btn-sm" onclick="chatDoneAdding()" style="width:100%;margin-top:4px">Done</button>`;
+  html += '</div>';
+  msgContainer.innerHTML = html;
+}
+
+async function chatAddMembers() {
+  if(!CHAT_STATE.activeConvo || CHAT_STATE.activeConvo.type !== 'group') return;
   const convId = CHAT_STATE.activeConvo.id;
 
   // Get current members
@@ -908,15 +1018,10 @@ async function chatAddMembers() {
     else if(Array.isArray(d)) allTraders = d;
   } catch(e) { toast('Failed to load traders','error'); return; }
 
-  // Filter to non-members only
   const available = allTraders.filter(t => !currentMembers.has(t.trader_name));
   if(!available.length) { toast('All traders are already in this group','info'); return; }
 
-  // Show picker in message area
-  const msgView = document.getElementById('chatMsgView');
   const msgContainer = document.getElementById('chatMessages');
-  const savedHtml = msgContainer.innerHTML;
-
   msgContainer.innerHTML = `<div style="padding:8px">
     <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-dim)">Add members to ${CHAT_STATE.activeConvo.name || 'group'}</h4>
     <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Current members: ${currentMembers.size}</p>
@@ -928,9 +1033,9 @@ async function chatAddMembers() {
         <span style="font-size:11px;color:var(--accent);font-weight:600">+ Add</span>
       </div>`;
     }).join('')}</div>
-    <button class="btn btn-ghost btn-sm" onclick="chatDoneAdding()" style="width:100%;margin-top:12px">Done</button>
+    <button class="btn btn-ghost btn-sm" onclick="chatShowMembers()" style="width:100%;margin-top:8px">Back to Members</button>
+    <button class="btn btn-ghost btn-sm" onclick="chatDoneAdding()" style="width:100%;margin-top:4px">Done</button>
   </div>`;
-  window._chatAddMembersSavedHtml = savedHtml;
 }
 
 async function doAddMember(traderName, displayName, convId, el) {
@@ -942,14 +1047,33 @@ async function doAddMember(traderName, displayName, convId, el) {
     const d = await r.json();
     if(d.success) {
       toast(displayName + ' added to group', 'success');
-      if(el) { el.style.opacity='0.4'; el.style.pointerEvents='none'; el.querySelector('span:last-child').textContent='✓ Added'; }
+      if(el) { el.style.opacity='0.4'; el.style.pointerEvents='none'; el.querySelector('span:last-child').textContent='Added'; }
     } else { toast(d.error||'Failed to add','error'); }
   } catch(e) { toast('Failed to add member','error'); }
 }
 
+async function doRemoveMember(traderName, displayName, convId, el) {
+  try {
+    const r = await fetch(API_BASE+'/api/chat/conversations/'+convId+'/remove-member', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({trader:STATE.trader.trader_name, member:traderName})
+    });
+    const d = await r.json();
+    if(d.success) {
+      toast(displayName + ' removed from group', 'success');
+      if(el) el.remove();
+      // Update member count in header
+      const header = document.querySelector('#membersList')?.closest('div')?.querySelector('h4');
+      if(header) {
+        const remaining = document.querySelectorAll('#membersList .chat-convo-item').length;
+        header.textContent = 'Members (' + remaining + ')';
+      }
+    } else { toast(d.error||'Failed to remove','error'); }
+  } catch(e) { toast('Failed to remove member','error'); }
+}
+
 function chatDoneAdding() {
   CHAT_STATE.showingAddMembers = false;
-  // Reload the conversation messages
   if(CHAT_STATE.activeConvo) {
     loadMessages(CHAT_STATE.activeConvo.id);
     loadConversations();
@@ -1136,6 +1260,11 @@ if(typeof io !== 'undefined') {
         }
       });
       sock.on('message_deleted', function(data) {
+        if (CHAT_STATE.activeConvo && CHAT_STATE.activeConvo.id === data.conversation_id) {
+          loadMessages(CHAT_STATE.activeConvo.id);
+        }
+      });
+      sock.on('message_edited', function(data) {
         if (CHAT_STATE.activeConvo && CHAT_STATE.activeConvo.id === data.conversation_id) {
           loadMessages(CHAT_STATE.activeConvo.id);
         }

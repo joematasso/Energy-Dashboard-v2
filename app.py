@@ -45,27 +45,23 @@ from flask_socketio import SocketIO, emit
 # ---------------------------------------------------------------------------
 # App Setup
 # ---------------------------------------------------------------------------
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'energydesk-v3-secret')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# Block access to sensitive files served by static_folder='.'
-_BLOCKED_EXTENSIONS = {'.py', '.pyc', '.db', '.sqlite', '.env', '.git', '.json', '.jsonl', '.log', '.cfg', '.ini', '.toml', '.yaml', '.yml'}
-_ALLOWED_JSON = {'build_info.json'}  # Explicitly allowed JSON files
+# Block access to sensitive files (defense-in-depth — static_folder='static' already isolates)
+_BLOCKED_EXTENSIONS = {'.py', '.pyc', '.db', '.sqlite', '.env', '.jsonl', '.log', '.cfg', '.ini', '.toml', '.yaml', '.yml'}
 
 @app.before_request
 def _block_sensitive_files():
     path = request.path.lstrip('/')
     if not path:
         return
-    # Block dotfiles/directories (.git, .env, .claude, etc.)
     if any(part.startswith('.') for part in path.split('/')):
         abort(404)
     ext = os.path.splitext(path)[1].lower()
     if ext in _BLOCKED_EXTENSIONS:
-        basename = os.path.basename(path)
-        if basename not in _ALLOWED_JSON:
-            abort(404)
+        abort(404)
 
 DATABASE = os.environ.get('DB_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energydesk.db'))
 EIA_API_KEY  = os.environ.get('EIA_API_KEY', 'gy5wa7bBT1fQGFkomilxjR1XN8Rs889yG9D0n2HT')
@@ -320,6 +316,12 @@ def init_db():
     except sqlite3.OperationalError:
         cur.execute("ALTER TABLE messages ADD COLUMN image TEXT DEFAULT ''")
 
+    # Migration: add edited_at column to messages (for edit tracking)
+    try:
+        cur.execute("SELECT edited_at FROM messages LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP")
+
     # Migration: add privileged column to traders (after-hours + backdate)
     try:
         cur.execute("SELECT privileged FROM traders LIMIT 1")
@@ -480,19 +482,19 @@ def admin_required(f):
 # ---------------------------------------------------------------------------
 @app.route('/')
 def serve_index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory('static', 'index.html')
 
 @app.route('/admin')
 def serve_admin():
-    return send_from_directory('.', 'admin.html')
+    return send_from_directory('static', 'admin.html')
 
 @app.route('/manifest.json')
 def serve_manifest():
-    return send_from_directory('.', 'manifest.json')
+    return send_from_directory('static', 'manifest.json')
 
 @app.route('/icon.svg')
 def serve_icon():
-    return send_from_directory('.', 'icon.svg')
+    return send_from_directory('static', 'icon.svg')
 
 
 # ---------------------------------------------------------------------------
@@ -524,12 +526,7 @@ def _calc_margin(td):
 # ---------------------------------------------------------------------------
 # Blueprint Registration
 # ---------------------------------------------------------------------------
-from routes_public import public_bp
-from routes_market import market_bp
-from routes_admin import admin_bp
-from routes_chat import chat_bp
-from routes_misc import misc_bp
-from routes_prices import prices_bp
+from routes import public_bp, market_bp, admin_bp, chat_bp, misc_bp, prices_bp
 
 app.register_blueprint(public_bp)
 app.register_blueprint(market_bp)

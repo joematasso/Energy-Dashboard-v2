@@ -886,6 +886,17 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(21
 .chat-attach-btn:hover{border-color:var(--accent);color:var(--accent)}
 .chat-img-msg{max-width:240px;border-radius:10px;margin-top:4px;cursor:pointer;border:1px solid var(--border)}
 .chat-img-msg:hover{opacity:0.9}
+.msg-edited{font-size:11px;color:#888;margin-left:6px;font-style:italic}
+.msg-edit-area{width:100%;background:var(--bg-dark);color:var(--text);border:1px solid var(--accent);border-radius:8px;padding:8px;font-size:13px;resize:none;font-family:inherit;min-height:36px}
+.msg-edit-actions{display:flex;gap:6px;margin-top:4px}
+.msg-edit-actions button{padding:2px 10px;border-radius:4px;border:none;cursor:pointer;font-size:12px}
+.msg-edit-save{background:var(--accent);color:#000}
+.msg-edit-save:hover{opacity:0.85}
+.msg-edit-cancel{background:var(--border);color:var(--text)}
+.msg-edit-cancel:hover{opacity:0.85}
+.member-remove-btn{color:var(--red);font-size:11px;cursor:pointer;font-weight:600;margin-left:auto;padding:2px 8px}
+.member-remove-btn:hover{text-decoration:underline}
+.member-you-tag{font-size:10px;color:var(--text-muted);margin-left:4px}
 /* ── Mention dropdown ── */
 .mention-dropdown{position:absolute;bottom:calc(100% + 4px);left:14px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 -8px 24px rgba(0,0,0,0.25);z-index:10;display:none}
 .mention-dropdown.open{display:block}
