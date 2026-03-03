@@ -375,9 +375,10 @@ def submit_trade(trader):
     if not data:
         return jsonify({'success': False, 'error': 'No trade data provided'}), 400
 
-    # 1b. Market hours enforcement (OTC bypass allowed)
+    # 1b. Market hours enforcement (OTC and privileged bypass allowed)
     venue = data.get('venue', '')
-    if venue and venue != 'OTC':
+    is_privileged_trader = trader_row['privileged'] if 'privileged' in trader_row.keys() else False
+    if venue and venue != 'OTC' and not is_privileged_trader:
         try:
             from routes.market import is_market_open
             mkt_open, mkt_reason, _ = is_market_open()
@@ -402,6 +403,8 @@ def submit_trade(trader):
     trade_type = data.get('type', '')
     is_crude = trade_type.startswith('CRUDE') or trade_type in ('EFP', 'OPTION_CL')
     max_volume = 50000 if is_crude else 500000
+    if is_privileged_trader:
+        max_volume *= 2
     unit = 'BBL' if is_crude else 'MMBtu'
     if volume <= 0:
         return jsonify({'success': False, 'error': 'Volume must be positive'}), 400
@@ -504,11 +507,14 @@ def submit_trade(trader):
             'error': f'Insufficient buying power. Required: ${new_margin:,.0f}, Available: ${buying_power:,.0f}'
         }), 400
 
-    # 5. Duplicate prevention (same trade within 5 seconds)
-    recent = db.execute(
-        "SELECT trade_data FROM trades WHERE trader_name=? AND created_at > datetime('now', '-5 seconds')",
-        (trader,)
-    ).fetchall()
+    # 5. Duplicate prevention (same trade within 5 seconds) — privileged bypass
+    if is_privileged_trader:
+        recent = []
+    else:
+        recent = db.execute(
+            "SELECT trade_data FROM trades WHERE trader_name=? AND created_at > datetime('now', '-5 seconds')",
+            (trader,)
+        ).fetchall()
     for row in recent:
         td = json.loads(row['trade_data'])
         if (td.get('type') == data.get('type') and
@@ -633,9 +639,15 @@ def update_trade(trader, trade_id):
         except (ValueError, TypeError):
             return jsonify({'success': False, 'error': 'Invalid realized P&L value'}), 400
 
+    # Privileged traders can amend closed trades (correct mistakes)
+    trader_info = db.execute("SELECT privileged FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    is_privileged = trader_info and trader_info['privileged'] if trader_info and 'privileged' in trader_info.keys() else False
+
     # Only allow specific safe fields to be updated (prevent td.update injection)
     ALLOWED_FIELDS = {'status', 'closePrice', 'closedAt', 'closeReason', 'realizedPnl',
                       'stopLoss', 'targetExit', 'notes', 'spotRef', 'autoRoll'}
+    if is_privileged:
+        ALLOWED_FIELDS |= {'entryPrice', 'volume'}  # privileged can also amend entry price/volume
     for key in data:
         if key in ALLOWED_FIELDS:
             td[key] = data[key]
@@ -669,7 +681,7 @@ def update_trade(trader, trade_id):
 
 @public_bp.route('/api/trades/<trader>/<int:trade_id>', methods=['DELETE'])
 def delete_trade(trader, trade_id):
-    """Delete a trade (only within 1-hour window)."""
+    """Delete a trade (1-hour window, or anytime for privileged traders)."""
     ok, err = _verify_trader_pin(trader)
     if not ok:
         return err
@@ -679,9 +691,12 @@ def delete_trade(trader, trade_id):
     if not row:
         return jsonify({'success': False, 'error': 'Trade not found'}), 404
 
-    created = datetime.fromisoformat(row['created_at'])
-    if datetime.utcnow() - created > timedelta(hours=1):
-        return jsonify({'success': False, 'error': 'Trade can only be deleted within 1 hour of placement'}), 400
+    trader_info = db.execute("SELECT privileged FROM traders WHERE trader_name=?", (trader,)).fetchone()
+    is_privileged = trader_info and trader_info['privileged'] if trader_info and 'privileged' in trader_info.keys() else False
+    if not is_privileged:
+        created = datetime.fromisoformat(row['created_at'])
+        if datetime.utcnow() - created > timedelta(hours=1):
+            return jsonify({'success': False, 'error': 'Trade can only be deleted within 1 hour of placement'}), 400
 
     db.execute("DELETE FROM trades WHERE id=?", (trade_id,))
     db.commit()

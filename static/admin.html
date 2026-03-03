@@ -568,6 +568,16 @@ tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
+<div class="modal-overlay" id="traderDetailModal" onclick="if(event.target===this)closeTraderDetail()">
+  <div class="modal" style="max-width:420px">
+    <h3 id="tdTitle" style="margin-bottom:12px">Trader Details</h3>
+    <div id="tdBody"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeTraderDetail()">Close</button>
+    </div>
+  </div>
+</div>
+
 
 
 
@@ -799,10 +809,9 @@ function renderTraderTable(list){
     a+='<button class="btn btn-ghost btn-sm" onclick="resetTrader('+t.id+',\''+t.display_name.replace(/'/g,"\\'")+'\')">Reset</button>';
     a+='<button class="btn btn-ghost btn-sm" onclick="changeTraderPin('+t.id+',\''+t.display_name.replace(/'/g,"\\'")+'\')" title="Change PIN">PIN</button>';
     a+='<button class="btn btn-ghost btn-sm" onclick="adjustBalance('+t.id+','+t.starting_balance+')">Balance</button>';
-    a+='<button class="btn btn-ghost btn-sm" style="font-size:14px;padding:2px 6px;'+(t.privileged?'color:var(--amber)':'color:var(--text-muted);opacity:0.4')+'" onclick="togglePrivilege('+t.id+')" title="Extended access">'+(t.privileged?'\u2605':'\u2606')+'</button>';
     a+='<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTrader('+t.id+',\''+t.display_name.replace(/'/g,"\\'")+'\')">Delete</button>';
     const pinCell='<span style="font-family:monospace;cursor:pointer;background:var(--bg);padding:2px 6px;border-radius:4px;color:transparent;text-shadow:0 0 5px var(--text-muted)" onclick="this.style.color=\'var(--text)\';this.style.textShadow=\'none\'" title="Click to reveal">'+(t.pin||'????')+'</span>';
-    return '<tr><td><strong>'+t.display_name+'</strong></td><td>'+(t.firm||'\u2014')+'</td><td>'+tb+'</td><td>'+pinCell+'</td><td><span class="badge '+sc+'">'+t.status+'</span></td><td>'+t.trade_count+'</td><td style="'+pc+'">$'+(t.realized_pnl||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</td><td>$'+(t.starting_balance||1000000).toLocaleString()+'</td><td style="font-size:12px;color:var(--text-dim)">'+ls+'</td><td><div class="actions-cell">'+a+'</div></td></tr>';
+    return '<tr><td><strong style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="showTraderDetail('+t.id+')">'+t.display_name+'</strong></td><td>'+(t.firm||'\u2014')+'</td><td>'+tb+'</td><td>'+pinCell+'</td><td><span class="badge '+sc+'">'+t.status+'</span></td><td>'+t.trade_count+'</td><td style="'+pc+'">$'+(t.realized_pnl||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</td><td>$'+(t.starting_balance||1000000).toLocaleString()+'</td><td style="font-size:12px;color:var(--text-dim)">'+ls+'</td><td><div class="actions-cell">'+a+'</div></td></tr>';
   }).join('');
 }
 function filterTraders(){renderTraderTable(traders)}
@@ -816,7 +825,36 @@ async function addTrader(){
   else toast(d.error||'Failed','error');
 }
 async function approveTrader(id){await api('/api/admin/traders/approve/'+id,{method:'POST'});toast('Trader approved','success');loadTraders()}
-async function togglePrivilege(id){const d=await api('/api/admin/traders/privilege/'+id,{method:'POST'});if(d.success){toast(d.privileged?'Extended access enabled':'Extended access removed',d.privileged?'success':'info');loadTraders()}else toast(d.error||'Failed','error')}
+function showTraderDetail(id){
+  const t=traders.find(x=>x.id===id);if(!t)return;
+  const teamName=t.team?t.team.name:'None';
+  const pinHtml='<span style="font-family:monospace;background:var(--bg);padding:2px 6px;border-radius:4px">'+t.pin+'</span>';
+  let html='<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px">';
+  html+='<span style="color:var(--text-muted)">Name</span><span>'+t.display_name+'</span>';
+  html+='<span style="color:var(--text-muted)">Firm</span><span>'+(t.firm||'—')+'</span>';
+  html+='<span style="color:var(--text-muted)">Team</span><span>'+teamName+'</span>';
+  html+='<span style="color:var(--text-muted)">PIN</span><span>'+pinHtml+'</span>';
+  html+='<span style="color:var(--text-muted)">Status</span><span>'+t.status+'</span>';
+  html+='<span style="color:var(--text-muted)">Trades</span><span>'+t.trade_count+'</span>';
+  html+='<span style="color:var(--text-muted)">P&L</span><span>$'+(t.realized_pnl||0).toLocaleString()+'</span>';
+  html+='<span style="color:var(--text-muted)">Balance</span><span>$'+(t.starting_balance||1000000).toLocaleString()+'</span>';
+  html+='</div>';
+  html+='<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06)">';
+  html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Reporting & Analytics</div>';
+  html+='<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim);cursor:pointer">';
+  html+='<input type="checkbox" id="tdExtAnalytics" '+(t.privileged?'checked':'')+' onchange="toggleTraderAnalytics('+t.id+',this.checked)" style="accent-color:var(--text-muted)">';
+  html+='Enable extended analytics</label>';
+  html+='</div>';
+  document.getElementById('tdTitle').textContent=t.display_name;
+  document.getElementById('tdBody').innerHTML=html;
+  document.getElementById('traderDetailModal').classList.add('active');
+}
+function closeTraderDetail(){document.getElementById('traderDetailModal').classList.remove('active')}
+async function toggleTraderAnalytics(id,val){
+  const d=await api('/api/admin/traders/privilege/'+id,{method:'POST'});
+  if(d.success){toast('Settings updated','success');const t=traders.find(x=>x.id===id);if(t)t.privileged=d.privileged?1:0}
+  else{toast(d.error||'Failed','error');document.getElementById('tdExtAnalytics').checked=!val}
+}
 async function disableTrader(id){await api('/api/admin/traders/disable/'+id,{method:'POST'});toast('Trader disabled','info');loadTraders()}
 async function enableTrader(id){await api('/api/admin/traders/enable/'+id,{method:'POST'});toast('Trader enabled','success');loadTraders()}
 function resetTrader(id,name){showModal('Reset Trader','Reset all trades for "'+name+'"? This cannot be undone.',async()=>{await api('/api/admin/traders/reset/'+id,{method:'POST'});toast('Trades reset for '+name,'success');loadTraders()})}

@@ -442,7 +442,8 @@ function renderBlotterTable() {
     const rowBg = t._pending ? 'background:rgba(139,92,246,0.03)' : (t.status === 'OPEN' ? (mtm >= 0 ? 'background:rgba(16,185,129,0.03)' : 'background:rgba(239,68,68,0.03)') : '');
 
     // Actions
-    const canDelete = (Date.now() - created.getTime()) < 3600000;
+    const isPrivileged = STATE.trader && STATE.trader.privileged;
+    const canDelete = isPrivileged || (Date.now() - created.getTime()) < 3600000;
     let actions = '';
     if (t._pending) {
       actions = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="event.stopPropagation();amendPendingOrder('${t._pendingId}')">Amend</button>`;
