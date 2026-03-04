@@ -377,7 +377,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .otc-switch input:checked+.slider:before{transform:translateX(16px)}
 
 /* =====================================================================
-   TAB NAVIGATION
+   TAB NAVIGATION — Hover Gradient Style
    ===================================================================== */
 .tab-nav{
   display:flex;gap:4px;background:var(--bg);border-bottom:1px solid var(--border);
@@ -387,10 +387,48 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
   padding:8px 16px;font-family:inherit;font-size:13px;font-weight:500;
   color:var(--text-muted);background:none;border:none;border-bottom:none;
   border-radius:var(--radius-sm);
-  cursor:pointer;transition:all var(--transition);white-space:nowrap;
+  cursor:pointer;transition:all 0.35s ease;white-space:nowrap;
+  position:relative;overflow:hidden;
 }
-.tab-btn:hover{color:var(--text-dim);background:var(--surface)}
-.tab-btn.active{color:var(--accent);background:var(--accent-soft);font-weight:600;border:1px solid rgba(212,160,83,0.2)}
+/* Radial gradient glow behind each tab on hover */
+.tab-btn::before{
+  content:'';position:absolute;inset:-8px;border-radius:inherit;
+  opacity:0;transition:opacity 0.4s ease,transform 0.4s ease;
+  transform:scale(0.8);pointer-events:none;z-index:0;
+}
+.tab-btn:hover::before{opacity:1;transform:scale(1.1)}
+.tab-btn:hover{color:var(--text);transform:translateY(-1px)}
+.tab-btn.active{
+  color:var(--accent);background:var(--accent-soft);font-weight:600;
+  border:1px solid rgba(212,160,83,0.2);
+}
+.tab-btn.active::before{opacity:0.7;transform:scale(1)}
+
+/* Per-sector gradient colors */
+.tab-btn[data-page="ng"]::before{background:radial-gradient(circle,rgba(59,130,246,0.18) 0%,rgba(37,99,235,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="ng"]:hover{color:#60a5fa}
+.tab-btn[data-page="ngls"]::before{background:radial-gradient(circle,rgba(147,51,234,0.18) 0%,rgba(126,34,206,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="ngls"]:hover{color:#a78bfa}
+.tab-btn[data-page="lng"]::before{background:radial-gradient(circle,rgba(20,184,166,0.18) 0%,rgba(13,148,136,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="lng"]:hover{color:#2dd4bf}
+.tab-btn[data-page="crude"]::before{background:radial-gradient(circle,rgba(249,115,22,0.18) 0%,rgba(234,88,12,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="crude"]:hover{color:#fb923c}
+.tab-btn[data-page="power"]::before{background:radial-gradient(circle,rgba(234,179,8,0.18) 0%,rgba(202,138,4,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="power"]:hover{color:#facc15}
+.tab-btn[data-page="freight"]::before{background:radial-gradient(circle,rgba(34,197,94,0.18) 0%,rgba(22,163,74,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="freight"]:hover{color:#4ade80}
+.tab-btn[data-page="ag"]::before{background:radial-gradient(circle,rgba(132,204,22,0.18) 0%,rgba(101,163,13,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="ag"]:hover{color:#a3e635}
+.tab-btn[data-page="metals"]::before{background:radial-gradient(circle,rgba(212,160,83,0.18) 0%,rgba(180,130,60,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="metals"]:hover{color:#d4a053}
+.tab-btn[data-page="blotter"]::before{background:radial-gradient(circle,rgba(239,68,68,0.18) 0%,rgba(220,38,38,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="blotter"]:hover{color:#f87171}
+.tab-btn[data-page="risk"]::before{background:radial-gradient(circle,rgba(244,114,182,0.18) 0%,rgba(219,39,119,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="risk"]:hover{color:#f472b6}
+.tab-btn[data-page="leaderboard"]::before{background:radial-gradient(circle,rgba(34,211,238,0.18) 0%,rgba(6,182,212,0.06) 50%,transparent 100%)}
+.tab-btn[data-page="leaderboard"]:hover{color:#22d3ee}
+/* Active tab overrides hover color back to accent */
+.tab-btn.active:hover{color:var(--accent)}
 
 /* =====================================================================
    MAIN CONTENT AREA
@@ -633,7 +671,7 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(21
 .reg-overlay{position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;overscroll-behavior:contain;touch-action:pan-y;overflow:hidden}
 .reg-overlay.hidden{display:none}
 #regDotCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:0}
-.reg-radial-overlay{position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,0,0,0.85) 0%,transparent 100%);z-index:1;pointer-events:none}
+.reg-radial-overlay{position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,0,0,0.55) 0%,transparent 100%);z-index:1;pointer-events:none}
 .reg-top-fade{position:absolute;top:0;left:0;right:0;height:33%;background:linear-gradient(to bottom,#000,transparent);z-index:1;pointer-events:none}
 .reg-box{position:relative;z-index:2;background:rgba(15,21,32,0.65);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(34,211,238,0.12);border-radius:24px;padding:48px 40px;width:90%;max-width:420px;animation:regFadeIn 0.6s ease-out}
 @keyframes regFadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
