@@ -622,13 +622,27 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(21
 /* =====================================================================
    REGISTRATION OVERLAY
    ===================================================================== */
-.reg-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;overscroll-behavior:contain;touch-action:pan-y}
+.reg-overlay{position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;overscroll-behavior:contain;touch-action:pan-y;overflow:hidden}
 .reg-overlay.hidden{display:none}
-.reg-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px;width:90%;max-width:440px}
-.reg-box .logo{font-size:28px;text-align:center;margin-bottom:8px}
-.reg-box .subtitle{color:var(--text-dim);font-size:14px;text-align:center;margin-bottom:24px}
-.reg-box .btn{width:100%;justify-content:center;padding:12px;font-size:15px;margin-top:8px}
-.reg-error{color:var(--red);font-size:13px;text-align:center;margin-top:8px;display:none}
+#regDotCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+.reg-radial-overlay{position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,0,0,0.85) 0%,transparent 100%);z-index:1;pointer-events:none}
+.reg-top-fade{position:absolute;top:0;left:0;right:0;height:33%;background:linear-gradient(to bottom,#000,transparent);z-index:1;pointer-events:none}
+.reg-box{position:relative;z-index:2;background:rgba(15,21,32,0.65);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(34,211,238,0.12);border-radius:24px;padding:48px 40px;width:90%;max-width:420px;animation:regFadeIn 0.6s ease-out}
+@keyframes regFadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.reg-logo-wrap{text-align:center;margin-bottom:28px}
+.reg-logo-icon{display:inline-block;margin-bottom:16px;filter:drop-shadow(0 0 20px rgba(34,211,238,0.3))}
+.reg-title{font-size:2rem;font-weight:700;color:#fff;margin:0 0 4px;letter-spacing:-0.02em}
+.reg-box .subtitle{color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin-bottom:0;font-weight:300}
+.reg-box .form-group{margin-bottom:16px}
+.reg-box .form-group label{font-size:12px;color:rgba(255,255,255,0.5);font-weight:500;margin-bottom:6px;display:block}
+.reg-box .form-group input{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9999px;padding:12px 18px;color:#fff;font-size:14px;outline:none;transition:border-color 0.2s,box-shadow 0.2s;box-sizing:border-box;backdrop-filter:blur(2px)}
+.reg-box .form-group input:focus{border-color:rgba(34,211,238,0.4);box-shadow:0 0 0 3px rgba(34,211,238,0.08)}
+.reg-box .form-group input::placeholder{color:rgba(255,255,255,0.25)}
+.reg-login-btn{width:100%;padding:13px 0!important;font-size:15px!important;font-weight:600;border:none;border-radius:9999px!important;background:linear-gradient(135deg,#22d3ee,#06b6d4)!important;color:#000!important;cursor:pointer;transition:all 0.2s;margin-top:12px;position:relative;overflow:hidden}
+.reg-login-btn:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 8px 30px rgba(34,211,238,0.25)}
+.reg-login-btn:active{transform:translateY(0)}
+.reg-error{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;display:none}
+.reg-footer{text-align:center;color:rgba(255,255,255,0.2);font-size:11px;margin-top:28px}
 
 /* =====================================================================
    MODAL
