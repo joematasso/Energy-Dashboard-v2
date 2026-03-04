@@ -225,6 +225,10 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .chat-tab{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:18px 10px;background:var(--accent);border:1px solid var(--accent);border-right:none;border-radius:10px 0 0 10px;cursor:pointer;font-size:14px;font-weight:700;color:#fff;z-index:200;transition:all 0.2s;display:flex;align-items:center;gap:8px;letter-spacing:1px;box-shadow:-2px 0 12px rgba(212,160,83,0.3)}
 .chat-tab:hover{background:var(--accent-hover);transform:translateY(-50%) translateX(-2px);box-shadow:-4px 0 20px rgba(212,160,83,0.4)}
 .chat-tab .unread-dot{width:10px;height:10px;border-radius:50%;background:#ef4444;display:none;writing-mode:horizontal-tb;box-shadow:0 0 6px rgba(239,68,68,0.6)}
+/* Chat panel slide-in */
+.chat-panel{position:fixed;right:-430px;top:0;bottom:0;width:420px;background:var(--surface);border-left:1px solid var(--border);z-index:300;display:flex;flex-direction:column;transition:right 0.3s cubic-bezier(0.4,0,0.2,1);box-shadow:-8px 0 32px rgba(0,0,0,0.35)}
+.chat-panel.open{right:0}
+.chat-header h3{margin:0;font-size:16px;font-weight:700}
 /* React picker (legacy, keep) */
 .react-picker-inline{display:flex;gap:2px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.3);margin-top:4px}
 .react-picker-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:4px;border-radius:6px;transition:background 0.1s}
