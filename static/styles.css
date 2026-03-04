@@ -643,8 +643,7 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(21
 .reg-login-btn:active{transform:translateY(0)}
 .reg-error{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;display:none}
 .reg-footer{text-align:center;color:rgba(255,255,255,0.18);font-size:11px;margin-top:32px;letter-spacing:0.03em}
-.dot-bg-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
-body>*:not(.dot-bg-canvas):not(#regOverlay){position:relative;z-index:1}
+.dot-bg-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 
 /* =====================================================================
    MODAL
