@@ -409,7 +409,7 @@ function renderBlotterTable() {
     } else {
       const perUnit = vol > 0 ? Math.abs(mtm / vol) : 0;
       const pnlSign = mtm >= 0 ? '+' : '-';
-      pnlCell = `<span class="${mtmColor}" style="font-weight:600">${pnlSign}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</span>`;
+      pnlCell = `<span class="perf-badge ${mtm >= 0 ? 'up' : 'down'}">${pnlSign}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</span>`;
       if (vol > 0 && t.status === 'OPEN') {
         pnlCell += `<br><span style="font-size:10px;color:var(--text-muted)">${mtm >= 0 ? '+' : '-'}$${perUnit.toFixed(3)}/${unit || 'u'}</span>`;
       }
@@ -422,16 +422,16 @@ function renderBlotterTable() {
     const venue = t.venue || 'OTC';
     const isOtcVenue = venue === 'OTC';
     const venueBadge = isOtcVenue
-      ? `<span style="font-size:10px;padding:1px 4px;border-radius:3px;background:rgba(139,92,246,0.12);color:#a78bfa">OTC</span>`
-      : `<span style="font-size:10px;padding:1px 4px;border-radius:3px;background:rgba(34,211,238,0.08);color:var(--text-dim)">${venue}</span>`;
+      ? `<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(139,92,246,0.10);color:#a78bfa;border:1px solid rgba(139,92,246,0.25)">OTC</span>`
+      : `<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(34,211,238,0.08);color:var(--text-dim);border:1px solid rgba(34,211,238,0.15)">${venue}</span>`;
 
     // Status badge
     let statusBadge;
-    if (t._pending) statusBadge = '<span class="badge" style="background:rgba(139,92,246,0.15);color:#8b5cf6">PEND</span>';
-    else if (t.status === 'OPEN') statusBadge = '<span class="badge" style="background:rgba(34,211,238,0.15);color:var(--accent)">OPEN</span>';
-    else statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.15);color:var(--text-dim)">CLSD</span>';
+    if (t._pending) statusBadge = '<span class="badge" style="background:rgba(139,92,246,0.10);color:#8b5cf6;border:1px solid rgba(139,92,246,0.25);border-radius:8px">PEND</span>';
+    else if (t.status === 'OPEN') statusBadge = '<span class="badge" style="background:rgba(34,211,238,0.10);color:var(--accent);border:1px solid rgba(212,160,83,0.25);border-radius:8px">OPEN</span>';
+    else statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.10);color:var(--text-dim);border:1px solid rgba(148,163,184,0.2);border-radius:8px">CLSD</span>';
     // Tournament badge
-    if (t._tournament) statusBadge += ' <span class="badge" style="background:rgba(168,85,247,0.15);color:#c084fc;font-size:9px">TOURN</span>';
+    if (t._tournament) statusBadge += ' <span class="badge" style="background:rgba(168,85,247,0.10);color:#c084fc;font-size:9px;border:1px solid rgba(168,85,247,0.25);border-radius:8px">TOURN</span>';
 
     // Age
     const created = new Date(t.timestamp || t.server_created_at || Date.now());
