@@ -634,11 +634,11 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(21
 .reg-title{font-size:1.75rem;font-weight:700;color:#fff;margin:0 0 8px;letter-spacing:-0.01em;line-height:1.2}
 .reg-subtitle{color:rgba(255,255,255,0.45);font-size:14px;text-align:center;margin:0;font-weight:300;letter-spacing:0.02em}
 .reg-box .form-group{margin-bottom:20px}
-.reg-box .form-group label{font-size:11px;color:rgba(255,255,255,0.45);font-weight:500;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;display:block;padding-left:18px}
-.reg-box .form-group input{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9999px;padding:14px 20px;color:#fff;font-size:14px;outline:none;transition:border-color 0.2s,box-shadow 0.2s;box-sizing:border-box;backdrop-filter:blur(2px)}
+.reg-box .form-group label{font-size:11px;font-family:var(--font-sans);color:rgba(255,255,255,0.45);font-weight:500;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;display:block;padding-left:18px}
+.reg-box .form-group input{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9999px;padding:14px 20px;color:#fff;font-size:14px;font-family:var(--font-sans);outline:none;transition:border-color 0.2s,box-shadow 0.2s;box-sizing:border-box;backdrop-filter:blur(2px)}
 .reg-box .form-group input:focus{border-color:rgba(34,211,238,0.4);box-shadow:0 0 0 3px rgba(34,211,238,0.08)}
 .reg-box .form-group input::placeholder{color:rgba(255,255,255,0.25)}
-.reg-login-btn{width:100%;padding:14px 0!important;font-size:15px!important;font-weight:600;border:none;border-radius:9999px!important;background:linear-gradient(135deg,#22d3ee,#06b6d4)!important;color:#000!important;cursor:pointer;transition:all 0.2s;margin-top:8px;position:relative;overflow:hidden;letter-spacing:0.02em}
+.reg-login-btn{width:100%;padding:14px 0!important;font-size:15px!important;font-weight:600;font-family:var(--font-sans)!important;text-align:center;border:none;border-radius:9999px!important;background:linear-gradient(135deg,#22d3ee,#06b6d4)!important;color:#000!important;cursor:pointer;transition:all 0.2s;margin-top:8px;position:relative;overflow:hidden;letter-spacing:0.04em}
 .reg-login-btn:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 8px 30px rgba(34,211,238,0.25)}
 .reg-login-btn:active{transform:translateY(0)}
 .reg-error{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;display:none}
