@@ -253,16 +253,15 @@ function showTraderProfile(trader) {
   }
   rankEl.innerHTML = rankHtml || '';
 
-  // Stats grid
+  // Stats row (FreelancerProfileCard-inspired layout)
   const retColor = trader.ret>=0 ? '#10b981' : '#ef4444';
   const equity = trader.equity || balance*(1+trader.ret/100);
   document.getElementById('profStats').innerHTML = `
-    <div class="profile-stat"><div class="profile-stat-label">Return</div><div class="profile-stat-value" style="color:${retColor}">${trader.ret>=0?'+':''}${trader.ret.toFixed(1)}%</div></div>
-    <div class="profile-stat"><div class="profile-stat-label">Equity</div><div class="profile-stat-value">$${equity.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
-    <div class="profile-stat"><div class="profile-stat-label">Win Rate</div><div class="profile-stat-value">${trader.winRate.toFixed(0)}%</div></div>
-    <div class="profile-stat"><div class="profile-stat-label">Profit Factor</div><div class="profile-stat-value">${trader.pf.toFixed(2)}</div></div>
-    <div class="profile-stat"><div class="profile-stat-label">Trades</div><div class="profile-stat-value">${trader.trades}</div></div>
-    <div class="profile-stat"><div class="profile-stat-label">Status</div><div class="profile-stat-value" style="font-size:14px">${trader.isMe?'Active':'Peer'}</div></div>
+    <div class="profile-stat"><div class="profile-stat-value" style="color:${retColor}">${trader.ret>=0?'+':''}${trader.ret.toFixed(1)}%</div><div class="profile-stat-label">Return</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${trader.winRate.toFixed(0)}%</div><div class="profile-stat-label">Win Rate</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${trader.pf.toFixed(2)}</div><div class="profile-stat-label">P. Factor</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${trader.trades}</div><div class="profile-stat-label">Trades</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">$${equity.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div class="profile-stat-label">Equity</div></div>
   `;
 
   // Mini equity curve
