@@ -215,7 +215,7 @@
 
     <div class="section-header">Basis Spreads vs Henry Hub</div>
     <div class="card"><div class="table-wrap">
-      <table id="ngBasisTable">
+      <table id="ngBasisTable" class="blotter-tbl">
         <thead><tr><th>Hub</th><th>Price</th><th>Basis</th><th>Change</th><th>30d Avg</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -224,7 +224,7 @@
     <div class="section-header">Forward Curve — <span id="ngFwdTitle">Henry Hub</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="ngFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="ngFwdTable">
+      <table id="ngFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>Price</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -277,7 +277,7 @@
         <!-- Degree Day Outlook -->
         <div class="section-header" style="margin-top:0">Degree Day Outlook — 6–10 Day & 8–14 Day</div>
         <div class="card" style="margin-bottom:16px"><div class="table-wrap">
-          <table id="wxDDTable">
+          <table id="wxDDTable" class="blotter-tbl">
             <thead>
               <tr>
                 <th>City</th>
@@ -374,7 +374,7 @@
 
       <div class="section-header">Differentials vs WTI Cushing</div>
       <div class="card"><div class="table-wrap">
-        <table id="crudeDiffTable">
+        <table id="crudeDiffTable" class="blotter-tbl">
           <thead><tr><th>Benchmark</th><th>Price</th><th>Differential</th><th>Change</th><th>30d Avg</th></tr></thead>
           <tbody></tbody>
         </table>
@@ -383,7 +383,7 @@
       <div class="section-header">Forward Curve — <span id="crudeFwdTitle">WTI Cushing</span></div>
       <div class="card" style="margin-bottom:8px"><canvas id="crudeFwdChart"></canvas></div>
       <div class="card"><div class="table-wrap">
-        <table id="crudeFwdTable">
+        <table id="crudeFwdTable" class="blotter-tbl">
           <thead><tr><th>Month</th><th>Price</th><th>Change</th><th>Open Interest</th></tr></thead>
           <tbody></tbody>
         </table>
@@ -480,7 +480,7 @@
 
     <div class="section-header">Spark Spreads (Heat Rate: 7.0 MMBtu/MWh)</div>
     <div class="card"><div class="table-wrap">
-      <table id="powerSparkTable">
+      <table id="powerSparkTable" class="blotter-tbl">
         <thead><tr><th>ISO Node</th><th>Power $/MWh</th><th>Gas Ref</th><th>Gas $/MMBtu</th><th>Gas Cost $/MWh</th><th>Spark Spread</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -489,7 +489,7 @@
     <div class="section-header">Forward Curve — <span id="powerFwdTitle">ERCOT Hub</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="powerFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="powerFwdTable">
+      <table id="powerFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>Price</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -545,7 +545,7 @@
 
     <div class="section-header">Route Differentials vs Baltic Dry Index</div>
     <div class="card"><div class="table-wrap">
-      <table id="freightDiffTable">
+      <table id="freightDiffTable" class="blotter-tbl">
         <thead><tr><th>Route / Index</th><th>Rate</th><th>vs BDI</th><th>Change</th><th>30d Avg</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -554,7 +554,7 @@
     <div class="section-header">FFA Forward Curve — <span id="freightFwdTitle">Baltic Dry Index</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="freightFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="freightFwdTable">
+      <table id="freightFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>Rate</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -600,7 +600,7 @@
 
     <div class="section-header">Spreads vs <span id="agDiffTitle">Corn (CBOT)</span></div>
     <div class="card"><div class="table-wrap">
-      <table id="agDiffTable">
+      <table id="agDiffTable" class="blotter-tbl">
         <thead><tr><th>Commodity</th><th>Price</th><th>Change</th><th>% Change</th><th>30d Avg</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -609,7 +609,7 @@
     <div class="section-header">Forward Curve — <span id="agFwdTitle">Corn (CBOT)</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="agFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="agFwdTable">
+      <table id="agFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>Price</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -655,7 +655,7 @@
 
     <div class="section-header">Spreads vs <span id="metalsDiffTitle">Gold (COMEX)</span></div>
     <div class="card"><div class="table-wrap">
-      <table id="metalsDiffTable">
+      <table id="metalsDiffTable" class="blotter-tbl">
         <thead><tr><th>Metal</th><th>Price</th><th>Change</th><th>% Change</th><th>30d Avg</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -664,7 +664,7 @@
     <div class="section-header">Forward Curve — <span id="metalsFwdTitle">Gold (COMEX)</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="metalsFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="metalsFwdTable">
+      <table id="metalsFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>Price</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -738,7 +738,7 @@
 
     <div class="section-header">NGL Products — Mont Belvieu</div>
     <div class="card"><div class="table-wrap">
-      <table id="nglsProductTable">
+      <table id="nglsProductTable" class="blotter-tbl">
         <thead><tr><th>Product</th><th>¢/gal</th><th>$/bbl</th><th>Change</th><th>% Change</th><th>Yield (gal/Mcf)</th><th>Revenue $/Mcf</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -747,7 +747,7 @@
     <div class="section-header">Forward Curve — <span id="nglsFwdTitle">Ethane (C2)</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="nglsFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="nglsFwdTable">
+      <table id="nglsFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>¢/gal</th><th>$/bbl</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -856,7 +856,7 @@
 
     <div class="section-header">LNG Benchmarks vs JKM</div>
     <div class="card"><div class="table-wrap">
-      <table id="lngSpreadTable">
+      <table id="lngSpreadTable" class="blotter-tbl">
         <thead><tr><th>Benchmark</th><th>Region</th><th>Price ($/MMBtu)</th><th>vs JKM</th><th>Change</th><th>30d Avg Spread</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -865,7 +865,7 @@
     <div class="section-header">Forward Curve — <span id="lngFwdTitle">JKM (Platts)</span></div>
     <div class="card" style="margin-bottom:8px"><canvas id="lngFwdChart"></canvas></div>
     <div class="card"><div class="table-wrap">
-      <table id="lngFwdTable">
+      <table id="lngFwdTable" class="blotter-tbl">
         <thead><tr><th>Month</th><th>$/MMBtu</th><th>Change</th><th>Open Interest</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -1176,7 +1176,7 @@
     <!-- Position Netting -->
     <div class="section-header">Net Position Summary</div>
     <div class="card"><div class="table-wrap">
-      <table id="netPositionTable">
+      <table id="netPositionTable" class="blotter-tbl">
         <thead><tr><th>Hub</th><th>Long Volume</th><th>Short Volume</th><th>Net Exposure</th><th>Direction</th></tr></thead>
         <tbody id="netPositionBody"></tbody>
       </table>
@@ -1251,7 +1251,7 @@
       <div class="card">
         <div class="card-header" style="display:flex;align-items:center">Scenario Analysis<button class="info-btn" onclick="toggleInfo('scenInfo',event)">i</button></div>
         <div class="card-body"><div class="table-wrap">
-          <table id="scenarioTable">
+          <table id="scenarioTable" class="blotter-tbl">
             <thead><tr><th>Scenario</th><th>NG</th><th>Crude</th><th>Power</th><th>Impact</th></tr></thead>
             <tbody id="scenarioBody"></tbody>
           </table>
@@ -1296,7 +1296,7 @@
       <div class="card">
         <div class="card-header">Open Positions</div>
         <div class="card-body"><div class="table-wrap">
-          <table><thead><tr><th>Hub</th><th>Dir</th><th>Volume</th><th>MTM P&amp;L</th></tr></thead>
+          <table class="blotter-tbl"><thead><tr><th>Hub</th><th>Dir</th><th>Volume</th><th>MTM P&amp;L</th></tr></thead>
           <tbody id="riskOpenBody"></tbody></table>
         </div></div>
       </div>
@@ -1361,7 +1361,7 @@
 
     <div id="lbIndividual">
       <div class="card"><div class="table-wrap">
-        <table id="lbTable">
+        <table id="lbTable" class="blotter-tbl">
           <thead><tr><th>Rank</th><th>Trader</th><th>Return %</th><th>Equity</th><th>Win Rate</th><th>PF</th><th>Trades</th><th>Trend</th></tr></thead>
           <tbody id="lbBody"></tbody>
         </table>
@@ -1393,7 +1393,7 @@
       <div class="chart-container"><div class="chart-canvas-wrap"><canvas id="teamBarChart" style="height:200px"></canvas></div></div>
       <div id="teamRankChips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div>
       <div class="card" style="margin-top:16px"><div class="table-wrap">
-        <table><thead><tr><th>Rank</th><th>Team</th><th>Members</th><th>Combined P&amp;L</th><th>Avg Return</th><th>Best Trader</th></tr></thead>
+        <table class="blotter-tbl"><thead><tr><th>Rank</th><th>Team</th><th>Members</th><th>Combined P&amp;L</th><th>Avg Return</th><th>Best Trader</th></tr></thead>
         <tbody id="lbTeamRankBody"></tbody></table>
       </div></div>
     </div>

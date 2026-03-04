@@ -660,12 +660,12 @@ function renderNetPositions() {
     const net = pos.long - pos.short;
     const dir = net > 0 ? 'NET LONG' : net < 0 ? 'NET SHORT' : 'FLAT';
     const dirColor = net > 0 ? 'color:var(--green)' : net < 0 ? 'color:var(--red)' : 'color:var(--text-muted)';
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="font-weight:600">${hub}</td>
-      <td class="mono green">${pos.long.toLocaleString()}</td>
-      <td class="mono red">${pos.short.toLocaleString()}</td>
-      <td class="mono" style="${dirColor};font-weight:700">${Math.abs(net).toLocaleString()}</td>
-      <td style="${dirColor};font-weight:600">${dir}</td>
+      <td class="mono"><span class="perf-badge up">${pos.long.toLocaleString()}</span></td>
+      <td class="mono"><span class="perf-badge down">${pos.short.toLocaleString()}</span></td>
+      <td class="mono" style="font-weight:700"><span class="perf-badge ${net>0?'up':net<0?'down':'neutral'}">${Math.abs(net).toLocaleString()}</span></td>
+      <td style="font-weight:600"><span class="perf-badge ${net>0?'up':net<0?'down':'neutral'}">${dir}</span></td>
     </tr>`;
   }).join('');
 }

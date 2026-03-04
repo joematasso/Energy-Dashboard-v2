@@ -190,14 +190,14 @@ function renderRiskPage() {
     });
     const impPct = equity > 0 ? (impact / equity * 100).toFixed(2) : '0.00';
     const impColor = impact>=0?'green':'red';
-    return `<tr><td style="font-weight:600;white-space:nowrap">${sc.name}</td><td class="mono">${sc.ng>=0?'+':''}${sc.ng}%</td><td class="mono">${sc.crude>=0?'+':''}${sc.crude}%</td><td class="mono">${sc.power>=0?'+':''}${sc.power}%</td><td class="mono ${impColor}" style="font-weight:700">${impact>=0?'+':'-'}$${Math.abs(impact).toLocaleString(undefined,{maximumFractionDigits:0})}<br><span style="font-size:10px;font-weight:400">${impact>=0?'+':''}${impPct}%</span></td></tr>`;
+    return `<tr class="blotter-row"><td style="font-weight:600;white-space:nowrap">${sc.name}</td><td class="mono">${_pb(sc.ng, 0)}%</td><td class="mono">${_pb(sc.crude, 0)}%</td><td class="mono">${_pb(sc.power, 0)}%</td><td class="mono"><span class="perf-badge ${impact>=0?'up':'down'}" style="font-weight:700">${impact>=0?'+':'-'}$${Math.abs(impact).toLocaleString(undefined,{maximumFractionDigits:0})}</span><br><span style="font-size:10px">${_pb(impPct)}%</span></td></tr>`;
   }).join('');
 
   // Open positions
   const riskOpen = document.getElementById('riskOpenBody');
   const open = STATE.trades.filter(t=>t.status==='OPEN');
   if (!open.length) { riskOpen.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px">No open positions</td></tr>'; }
-  else { riskOpen.innerHTML = open.map(t => { const spot=getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;const mtm=(spot-parseFloat(t.entryPrice))*parseFloat(t.volume)*dir;return `<tr><td>${t.hub}</td><td style="color:${t.direction==='BUY'?'var(--buy)':'var(--sell)'};font-weight:700">${t.direction}</td><td class="mono">${parseFloat(t.volume).toLocaleString()}</td><td class="mono ${mtm>=0?'green':'red'}">${mtm>=0?'+':'-'}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>`;}).join(''); }
+  else { riskOpen.innerHTML = open.map(t => { const spot=getPrice(t.hub);const dir=t.direction==='BUY'?1:-1;const mtm=(spot-parseFloat(t.entryPrice))*parseFloat(t.volume)*dir;return `<tr class="blotter-row"><td>${t.hub}</td><td style="color:${t.direction==='BUY'?'var(--buy)':'var(--sell)'};font-weight:700">${t.direction}</td><td class="mono">${parseFloat(t.volume).toLocaleString()}</td><td class="mono"><span class="perf-badge ${mtm>=0?'up':'down'}">${mtm>=0?'+':'-'}$${Math.abs(mtm).toLocaleString(undefined,{maximumFractionDigits:0})}</span></td></tr>`;}).join(''); }
 
   // Margin & Exposure
   renderRiskMargin(open, equity);

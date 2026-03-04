@@ -1,6 +1,16 @@
 /* =====================================================================
    SHARED HELPERS
    ===================================================================== */
+/** Wrap a numeric change value in a perf-badge span */
+function _pb(val, decimals, prefix) {
+  prefix = prefix || '';
+  const n = parseFloat(val);
+  const cls = n > 0 ? 'up' : n < 0 ? 'down' : 'neutral';
+  const sign = n >= 0 ? '+' : '';
+  const display = typeof decimals === 'number' ? n.toFixed(decimals) : val;
+  return `<span class="perf-badge ${cls}">${sign}${prefix}${display}</span>`;
+}
+
 function _populateSpreadSelectors(sector, hubs) {
   const s1 = document.getElementById(sector + 'Spread1');
   const s2 = document.getElementById(sector + 'Spread2');
@@ -61,12 +71,12 @@ function renderNGPage() {
     const henryHist30 = (getChartHistory('Henry Hub')||[]).slice(-30);
     const avg30 = hist30.reduce((s,v,i) => s + (v - (henryHist30[i]||henry)), 0) / hist30.length;
     const spotDisplay = isAECO ? `C$${mmbtuToCADGJ(p).toFixed(2)} <span style="font-size:10px;color:var(--text-muted)">(US$${p.toFixed(3)})</span>` : `$${p.toFixed(3)}`;
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="color:${h.color};font-weight:600">${h.name}${isAECO?' 🇨🇦':''}</td>
       <td class="mono">${spotDisplay}</td>
-      <td class="mono ${basis>=0?'green':'red'}">${basis>=0?'+':''}${basis.toFixed(3)}</td>
-      <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${c.toFixed(3)}</td>
-      <td class="mono">${avg30>=0?'+':''}${avg30.toFixed(3)}</td>
+      <td class="mono">${_pb(basis, 3)}</td>
+      <td class="mono">${_pb(c, 3)}</td>
+      <td class="mono">${_pb(avg30, 3)}</td>
     </tr>`;
   }).join('');
 
@@ -82,10 +92,10 @@ function renderNGPage() {
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
     const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-    return `<tr>
+    return `<tr class="blotter-row">
       <td>${mLabel}${src}</td>
       <td class="mono">$${pt.price.toFixed(3)}</td>
-      <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(3)}</td>
+      <td class="mono">${_pb(change, 3)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -163,12 +173,12 @@ function renderCrudePage() {
     const hist30 = (getChartHistory(h.name)||[]).slice(-30);
     const wtiHist30 = (getChartHistory('WTI Cushing')||[]).slice(-30);
     const avg30 = hist30.reduce((s,v,i) => s + (v - (wtiHist30[i]||wti)), 0) / hist30.length;
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="color:${h.color};font-weight:600">${h.name}</td>
       <td class="mono">$${p.toFixed(2)}</td>
-      <td class="mono ${diff>=0?'green':'red'}">${diff>=0?'+':''}${diff.toFixed(2)}</td>
-      <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${c.toFixed(2)}</td>
-      <td class="mono">${avg30>=0?'+':''}${avg30.toFixed(2)}</td>
+      <td class="mono">${_pb(diff, 2)}</td>
+      <td class="mono">${_pb(c, 2)}</td>
+      <td class="mono">${_pb(avg30, 2)}</td>
     </tr>`;
   }).join('');
 
@@ -184,10 +194,10 @@ function renderCrudePage() {
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
     const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-    return `<tr>
+    return `<tr class="blotter-row">
       <td>${mLabel}${src}</td>
       <td class="mono">$${pt.price.toFixed(2)}</td>
-      <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
+      <td class="mono">${_pb(change, 2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -260,13 +270,13 @@ function renderPowerPage() {
     const gasPrice = getPrice(h.gasRef);
     const gasCostMwh = gasPrice * HEAT_RATE;
     const spark = powerPrice - gasCostMwh;
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="color:${h.color};font-weight:600">${h.name}</td>
       <td class="mono">$${powerPrice.toFixed(2)}</td>
       <td style="color:var(--text-dim);font-size:12px">${h.gasRef}</td>
       <td class="mono">$${gasPrice.toFixed(3)}</td>
       <td class="mono">$${gasCostMwh.toFixed(2)}</td>
-      <td class="mono ${spark>=0?'green':'red'}" style="font-weight:700">${spark>=0?'+':''}$${spark.toFixed(2)}</td>
+      <td class="mono">${_pb(spark, 2, '$')}</td>
     </tr>`;
   }).join('');
 
@@ -282,10 +292,10 @@ function renderPowerPage() {
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
     const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-    return `<tr>
+    return `<tr class="blotter-row">
       <td>${mLabel}${src}</td>
       <td class="mono">$${pt.price.toFixed(2)}</td>
-      <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
+      <td class="mono">${_pb(change, 2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -347,11 +357,11 @@ function renderFreightPage() {
     const diffLabel = h.name === 'Baltic Dry Index' ? '—' : (isIdx ? (diff>=0?'+':'')+diff.toFixed(0) : '$'+p.toFixed(2));
     const hist30 = (getChartHistory(h.name)||[0]).slice(-30);
     const avg = hist30.length ? hist30.reduce((s,v)=>s+v,0)/hist30.length : 0;
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="color:${h.color};font-weight:600">${h.name}</td>
       <td class="mono">${isIdx ? p.toFixed(0) : '$'+p.toFixed(2)}</td>
       <td class="mono">${diffLabel}</td>
-      <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${isIdx?c.toFixed(0):c.toFixed(2)}</td>
+      <td class="mono">${_pb(c, isIdx?0:2)}</td>
       <td class="mono">${isIdx ? avg.toFixed(0) : '$'+avg.toFixed(2)}</td>
     </tr>`;
   }).join('');
@@ -369,10 +379,10 @@ function renderFreightPage() {
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
     const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-    return `<tr>
+    return `<tr class="blotter-row">
       <td>${mLabel}${src}</td>
       <td class="mono">${isIdx ? pt.price.toFixed(0) : '$'+pt.price.toFixed(2)}</td>
-      <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${isIdx?change.toFixed(0):change.toFixed(2)}</td>
+      <td class="mono">${_pb(change, isIdx?0:2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -430,11 +440,11 @@ function renderAgPage() {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const hist30 = (getChartHistory(h.name)||[0]).slice(-30);
     const avg = hist30.length ? hist30.reduce((s,v)=>s+v,0)/hist30.length : 0;
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="color:${h.color};font-weight:600">${h.name}</td>
       <td class="mono">${formatAgPrice(h, p)}</td>
-      <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${c.toFixed(3)}</td>
-      <td class="mono ${cp>=0?'green':'red'}">${cp>=0?'+':''}${cp.toFixed(2)}%</td>
+      <td class="mono">${_pb(c, 3)}</td>
+      <td class="mono">${_pb(cp.toFixed(2)+'%')}</td>
       <td class="mono">${formatAgPrice(h, avg)}</td>
     </tr>`;
   }).join('');
@@ -451,10 +461,10 @@ function renderAgPage() {
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
     const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-    return `<tr>
+    return `<tr class="blotter-row">
       <td>${mLabel}${src}</td>
       <td class="mono">${selHubData ? formatAgPrice(selHubData, pt.price) : pt.price.toFixed(3)}</td>
-      <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(3)}</td>
+      <td class="mono">${_pb(change, 3)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -512,11 +522,11 @@ function renderMetalsPage() {
     const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
     const hist30 = (getChartHistory(h.name)||[0]).slice(-30);
     const avg = hist30.length ? hist30.reduce((s,v)=>s+v,0)/hist30.length : 0;
-    return `<tr>
+    return `<tr class="blotter-row">
       <td style="color:${h.color};font-weight:600">${h.name}</td>
       <td class="mono">${formatMetalPrice(h, p)}</td>
-      <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${c.toFixed(2)}</td>
-      <td class="mono ${cp>=0?'green':'red'}">${cp>=0?'+':''}${cp.toFixed(2)}%</td>
+      <td class="mono">${_pb(c, 2)}</td>
+      <td class="mono">${_pb(cp.toFixed(2)+'%')}</td>
       <td class="mono">${formatMetalPrice(h, avg)}</td>
     </tr>`;
   }).join('');
@@ -533,10 +543,10 @@ function renderMetalsPage() {
     const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
     const change = pt.price - prevPrice;
     const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-    return `<tr>
+    return `<tr class="blotter-row">
       <td>${mLabel}${src}</td>
       <td class="mono">${selHubData ? formatMetalPrice(selHubData, pt.price) : '$'+pt.price.toFixed(2)}</td>
-      <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
+      <td class="mono">${_pb(change, 2)}</td>
       <td class="mono">${pt.oi.toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -616,12 +626,12 @@ function renderNGLsPage() {
       const p = getPrice(h.name), c = getPriceChange(h.name), cp = getPriceChangePct(h.name);
       const bblPrice = (p * 42 / 100).toFixed(2);
       const revPerMcf = (p / 100) * h.yieldPerMcf;
-      return `<tr>
+      return `<tr class="blotter-row">
         <td style="color:${h.color};font-weight:600">${h.name}</td>
         <td class="mono">${p.toFixed(2)}</td>
         <td class="mono">$${bblPrice}</td>
-        <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${c.toFixed(2)}</td>
-        <td class="mono ${cp>=0?'green':'red'}">${cp>=0?'+':''}${cp.toFixed(2)}%</td>
+        <td class="mono">${_pb(c, 2)}</td>
+        <td class="mono">${_pb(cp.toFixed(2)+'%')}</td>
         <td class="mono">${h.yieldPerMcf}</td>
         <td class="mono" style="color:var(--green)">$${revPerMcf.toFixed(3)}</td>
       </tr>`;
@@ -652,11 +662,11 @@ function renderNGLsPage() {
       const change = pt.price - prevPrice;
       const bblPrice = (pt.price * 42 / 100).toFixed(2);
       const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-      return `<tr>
+      return `<tr class="blotter-row">
         <td>${mLabel}${src}</td>
         <td class="mono">${pt.price.toFixed(2)}</td>
         <td class="mono">$${bblPrice}</td>
-        <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(2)}</td>
+        <td class="mono">${_pb(change, 2)}</td>
         <td class="mono">${pt.oi.toLocaleString()}</td>
       </tr>`;
     }).join('');
@@ -760,12 +770,12 @@ function renderLNGPage() {
       const hist30 = (getChartHistory(h.name)||[]).slice(-30);
       const jkmHist30 = (getChartHistory('JKM (Platts)')||[]).slice(-30);
       const avg30 = hist30.reduce((s,v,i) => s + (v - (jkmHist30[i]||jkm)), 0) / hist30.length;
-      return `<tr>
+      return `<tr class="blotter-row">
         <td style="color:${h.color};font-weight:600">${h.name}</td>
         <td style="font-size:11px;color:var(--text-dim)">${h.region}</td>
         <td class="mono">$${p.toFixed(3)}</td>
-        <td class="mono ${spread>=0?'green':'red'}">${spread>=0?'+':''}${spread.toFixed(3)}</td>
-        <td class="mono ${c>=0?'green':'red'}">${c>=0?'+':''}${c.toFixed(3)}</td>
+        <td class="mono">${_pb(spread, 3)}</td>
+        <td class="mono">${_pb(c, 3)}</td>
         <td class="mono">${avg30>=0?'+':''}${avg30.toFixed(3)}</td>
       </tr>`;
     }).join('');
@@ -787,10 +797,10 @@ function renderLNGPage() {
       const prevPrice = i > 0 ? fwd[i-1].price : getPrice(selHub);
       const change = pt.price - prevPrice;
       const src = pt._real === true ? '<span style="color:#22c55e;font-size:8px" title="Live market data"> &#9679;</span>' : (pt._real === false ? '<span style="color:#f59e0b;font-size:8px" title="Interpolated"> &#9675;</span>' : '');
-      return `<tr>
+      return `<tr class="blotter-row">
         <td>${mLabel}${src}</td>
         <td class="mono">$${pt.price.toFixed(3)}</td>
-        <td class="mono ${change>=0?'green':'red'}">${change>=0?'+':''}${change.toFixed(3)}</td>
+        <td class="mono">${_pb(change, 3)}</td>
         <td class="mono">${pt.oi.toLocaleString()}</td>
       </tr>`;
     }).join('');
