@@ -259,9 +259,9 @@ function showTraderProfile(trader) {
   document.getElementById('profStats').innerHTML = `
     <div class="profile-stat"><div class="profile-stat-value" style="color:${retColor}">${trader.ret>=0?'+':''}${trader.ret.toFixed(1)}%</div><div class="profile-stat-label">Return</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${trader.winRate.toFixed(0)}%</div><div class="profile-stat-label">Win Rate</div></div>
-    <div class="profile-stat"><div class="profile-stat-value">${trader.pf.toFixed(2)}</div><div class="profile-stat-label">P. Factor</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${trader.pf.toFixed(1)}</div><div class="profile-stat-label">PF</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${trader.trades}</div><div class="profile-stat-label">Trades</div></div>
-    <div class="profile-stat"><div class="profile-stat-value">$${equity.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div class="profile-stat-label">Equity</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${equity>=1000000?'$'+(equity/1000000).toFixed(2)+'M':equity>=1000?'$'+(equity/1000).toFixed(0)+'K':'$'+equity.toFixed(0)}</div><div class="profile-stat-label">Equity</div></div>
   `;
 
   // Mini equity curve
