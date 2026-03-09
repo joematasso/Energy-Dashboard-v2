@@ -12,9 +12,9 @@ import string
 import subprocess
 from datetime import datetime, timedelta
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 
-from app import get_db, active_connections, connections_lock, socketio, _calc_margin, logger
+from app import get_db, active_connections, connections_lock, socketio, _calc_margin, logger, AUTH_MODE
 
 public_bp = Blueprint('public', __name__)
 
@@ -111,11 +111,17 @@ def _get_cached_price(hub):
     with _price_cache_lock:
         return _price_cache.get(hub, 0)
 
-def _verify_trader_pin(trader_name):
-    """Verify the X-Trader-Pin header matches the trader's PIN. Returns (ok, error_response_tuple)."""
+def _verify_trader_auth(trader_name):
+    """Verify trader identity via session (Windows Auth) or X-Trader-Pin header (PIN mode).
+    Returns (ok, error_response_tuple)."""
+    # 1. Check Flask session first (set by Windows Auth or PIN login)
+    if session.get('trader_name') == trader_name:
+        return True, None
+
+    # 2. Fall back to X-Trader-Pin header (traditional PIN auth)
     pin = request.headers.get('X-Trader-Pin', '')
     if not pin:
-        return False, (jsonify({'success': False, 'error': 'Authentication required (X-Trader-Pin header)'}), 401)
+        return False, (jsonify({'success': False, 'error': 'Authentication required'}), 401)
     db = get_db()
     row = db.execute("SELECT pin FROM traders WHERE trader_name=?", (trader_name,)).fetchone()
     if not row:
@@ -123,6 +129,9 @@ def _verify_trader_pin(trader_name):
     if row['pin'] != pin:
         return False, (jsonify({'success': False, 'error': 'Invalid PIN'}), 403)
     return True, None
+
+# Keep old name as alias for backward compatibility within this file
+_verify_trader_pin = _verify_trader_auth
 
 # ---------------------------------------------------------------------------
 # Public API Endpoints
@@ -269,6 +278,21 @@ def login_trader():
     db.execute("UPDATE traders SET last_seen=CURRENT_TIMESTAMP WHERE id=?", (trader['id'],))
     if trader['status'] == 'PENDING':
         db.execute("UPDATE traders SET status='ACTIVE' WHERE id=?", (trader['id'],))
+
+    # Auto-link Windows identity if available (seamless migration to Windows Auth)
+    remote_user = request.headers.get('X-Remote-User', '').strip()
+    if remote_user and not trader['windows_identity']:
+        windows_identity = remote_user.upper()
+        try:
+            db.execute("UPDATE traders SET windows_identity=? WHERE id=?", (windows_identity, trader['id']))
+        except Exception:
+            pass  # Ignore if identity already linked to another trader
+
+    # Set Flask session (works for both PIN and Windows auth modes)
+    session.permanent = True
+    session['trader_name'] = trader['trader_name']
+    session['auth_method'] = 'windows' if remote_user else 'pin'
+
     db.commit()
 
     # Get team info

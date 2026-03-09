@@ -5,3 +5,4 @@ from routes.admin import admin_bp
 from routes.chat import chat_bp
 from routes.misc import misc_bp
 from routes.prices import prices_bp
+from routes.auth import auth_bp

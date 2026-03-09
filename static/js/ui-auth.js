@@ -39,6 +39,8 @@ function setTraderPhoto(data) {
   localStorage.setItem('ng_photo_' + tn, data);
 }
 
+let _authMode = 'pin'; // will be updated by adaptLoginUI
+
 function checkRegistration() {
   if (STATE.trader) {
     document.getElementById('regOverlay').classList.add('hidden');
@@ -46,6 +48,98 @@ function checkRegistration() {
     initAfterLogin();
   } else {
     document.body.style.overflow = 'hidden';
+    // Fetch auth mode and adapt UI
+    adaptLoginUI();
+  }
+}
+
+async function adaptLoginUI() {
+  try {
+    const r = await fetch('/api/auth/mode');
+    const d = await r.json();
+    _authMode = d.mode || 'pin';
+  } catch { _authMode = 'pin'; }
+
+  const pinSection = document.getElementById('pinSection');
+  const winBtn = document.getElementById('windowsLoginBtn');
+  const fallback = document.getElementById('pinFallbackLink');
+  const separator = document.getElementById('regSeparator');
+
+  if (_authMode === 'windows') {
+    // Show Windows button + fallback link, hide PIN section
+    if (winBtn) winBtn.style.display = '';
+    if (fallback) fallback.style.display = '';
+    if (pinSection) pinSection.style.display = 'none';
+    if (separator) separator.style.display = 'none';
+  } else {
+    // Standard PIN mode — show PIN section only
+    if (winBtn) winBtn.style.display = 'none';
+    if (fallback) fallback.style.display = 'none';
+    if (pinSection) pinSection.style.display = '';
+    if (separator) separator.style.display = 'none';
+  }
+}
+
+function showPinFallback() {
+  // Show both Windows button + PIN section with OR separator
+  const pinSection = document.getElementById('pinSection');
+  const winBtn = document.getElementById('windowsLoginBtn');
+  const fallback = document.getElementById('pinFallbackLink');
+  const separator = document.getElementById('regSeparator');
+  if (pinSection) pinSection.style.display = '';
+  if (winBtn) winBtn.style.display = '';
+  if (separator) separator.style.display = 'flex';
+  if (fallback) fallback.style.display = 'none';
+}
+
+async function doWindowsLogin() {
+  const errEl = document.getElementById('regError');
+  if (errEl) errEl.style.display = 'none';
+
+  try {
+    // Step 1: Trigger NTLM handshake — the browser handles the 401 challenge/response automatically
+    const ntlmResp = await fetch('/api/auth/ntlm', { method: 'GET' });
+    if (!ntlmResp.ok) {
+      throw new Error('NTLM authentication failed');
+    }
+    const ntlmData = await ntlmResp.json();
+    if (!ntlmData.success || !ntlmData.windows_identity) {
+      throw new Error('No Windows identity returned');
+    }
+
+    // Step 2: Complete login with the verified Windows identity
+    const r = await fetch('/api/auth/windows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows_identity: ntlmData.windows_identity })
+    });
+    const d = await r.json();
+    if (d.success) {
+      STATE.trader = {
+        trader_name: d.trader_name,
+        real_name: d.real_name,
+        display_name: d.display_name,
+        firm: d.firm,
+        pin: '', // No PIN needed in Windows auth mode
+        starting_balance: d.starting_balance,
+        team: d.team || null,
+        privileged: d.privileged || false
+      };
+      if (d.photo_url) setTraderPhoto(d.photo_url);
+      localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));
+      document.getElementById('regOverlay').classList.add('hidden');
+      document.body.style.overflow = '';
+      const msg = d.new_account ? 'Welcome, ' + d.display_name + '! Account created.' : 'Welcome back, ' + d.display_name + '!';
+      toast(msg, 'success');
+      initAfterLogin();
+    } else {
+      if (errEl) { errEl.textContent = d.error || 'Windows login failed'; errEl.style.display = 'block'; }
+      // Show PIN fallback on failure
+      showPinFallback();
+    }
+  } catch(e) {
+    if (errEl) { errEl.textContent = 'Could not connect to server'; errEl.style.display = 'block'; }
+    showPinFallback();
   }
 }
 
@@ -55,6 +149,29 @@ document.addEventListener('DOMContentLoaded', function() {
   var regPin = document.getElementById('regPin');
   if (regName) regName.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
   if (regPin) regPin.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+
+  // On page load, check for existing server session (Windows Auth auto-login on reload)
+  if (!STATE.trader) {
+    fetch('/api/auth/check').then(r => r.json()).then(d => {
+      if (d.authenticated) {
+        STATE.trader = {
+          trader_name: d.trader_name,
+          real_name: d.real_name,
+          display_name: d.display_name,
+          firm: d.firm,
+          pin: '',
+          starting_balance: d.starting_balance,
+          team: d.team || null,
+          privileged: d.privileged || false
+        };
+        if (d.photo_url) setTraderPhoto(d.photo_url);
+        localStorage.setItem('ng_trader', JSON.stringify(STATE.trader));
+        document.getElementById('regOverlay').classList.add('hidden');
+        document.body.style.overflow = '';
+        initAfterLogin();
+      }
+    }).catch(() => {});
+  }
 });
 
 async function doLogin() {
@@ -325,8 +442,10 @@ function openLbProfile(index) {
 }
 
 function doLogout() {
+  // Clear server session
+  fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   localStorage.removeItem('ng_trader');
-  
+
   // Clear all trader-specific state
   STATE.trades = [];
   STATE.alerts = [];

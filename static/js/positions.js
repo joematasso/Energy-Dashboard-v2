@@ -635,6 +635,10 @@ function cloneTrade(id) {
     document.getElementById('tradeNotes').value = t.notes || '';
     const cloneSpot = (typeof getTradeSpot === 'function') ? getTradeSpot(t) : getPrice(t.hub);
     document.getElementById('tradeSpot').value = cloneSpot.toFixed(4);
+    // Refresh custom selects after value changes
+    if (window.CustomSelect) {
+      ['tradeHub','tradeVenue','tradeCpty'].forEach(function(id) { CustomSelect.refresh(document.getElementById(id)); });
+    }
     updateMarginPreview();
   }, 50);
   toast('Trade cloned — review and submit', 'info');

@@ -929,6 +929,24 @@ function postLoginInit() {
     if (typeof startTournamentPoll === 'function') startTournamentPoll();
     // Load pending orders from server
     if (STATE.trader) loadPendingOrdersFromServer(STATE.trader.trader_name);
+    // Upgrade all native selects to custom styled dropdowns
+    if (window.CustomSelect) {
+      // Trade form selects
+      ['tradeSector','tradeType','tradeHub','tradeCpty','tradeCallPut',
+       'tradeBasisHub','tradeOrderType','tradeTIF','tradeVenue','tradeBroker',
+       'tradeSettlement','tradeQuality','tradeIncoterms'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) CustomSelect.create(el);
+      });
+      // Blotter filter selects (small size)
+      ['blotterFilterSector','blotterFilterStatus','blotterFilterDir'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) CustomSelect.create(el, { size: 'sm' });
+      });
+      // Trail type inline select
+      var trailType = document.getElementById('tradeTrailType');
+      if (trailType) CustomSelect.create(trailType, { size: 'inline', searchable: false });
+    }
   } catch(e) { console.warn('postLoginInit error:', e); }
 }
 

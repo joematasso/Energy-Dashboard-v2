@@ -210,10 +210,11 @@ function populateHubDropdown() {
   else hubs = NG_HUBS;
 
   sel.innerHTML = hubs.map(h => `<option value="${h.name}" ${h.name===curVal?'selected':''}>${h.name}</option>`).join('');
+  if (window.CustomSelect) CustomSelect.refresh(sel);
 
   // Also populate basis hub dropdown (same sector as primary hub)
   const basisSel = document.getElementById('tradeBasisHub');
-  if (basisSel) basisSel.innerHTML = hubs.map(h => `<option value="${h.name}">${h.name}</option>`).join('');
+  if (basisSel) { basisSel.innerHTML = hubs.map(h => `<option value="${h.name}">${h.name}</option>`).join(''); if (window.CustomSelect) CustomSelect.refresh(basisSel); }
 
   // Update spot reference — use historical price if backdating
   const hub = sel.value;
@@ -359,6 +360,7 @@ function populateVenueDropdown(sector) {
   const venues = SECTOR_VENUES[sector] || [{ value:'OTC', label:'OTC Bilateral' }];
   const curVal = sel.value;
   sel.innerHTML = venues.map(v => `<option value="${v.value}" ${v.value===curVal?'selected':''}>${v.label}</option>`).join('');
+  if (window.CustomSelect) CustomSelect.refresh(sel);
 }
 
 function updateDeliveryRestriction() {
@@ -384,16 +386,19 @@ function onTradeSectorChange() {
   // Tournament mode: force sector to tournament sector
   if (typeof isTournamentMode === 'function' && isTournamentMode() && STATE.tournamentSector) {
     sectorSel.value = STATE.tournamentSector;
+    if (window.CustomSelect) CustomSelect.refresh(sectorSel);
   }
   const sector = sectorSel.value;
   const typeSel = document.getElementById('tradeType');
   if (!sector) {
     typeSel.innerHTML = '<option value="">Select sector first...</option>';
+    if (window.CustomSelect) CustomSelect.refresh(typeSel);
     return;
   }
   const types = SECTOR_TRADE_TYPES[sector] || [];
   typeSel.innerHTML = '<option value="">Select type...</option>' +
     types.map(t => `<option value="${t.value}">${t.label}</option>`).join('');
+  if (window.CustomSelect) CustomSelect.refresh(typeSel);
   // Auto-populate hub dropdown for this sector
   populateHubDropdown();
   // Auto-populate venue dropdown for this sector
@@ -435,7 +440,7 @@ function onSettlementChange() {
     const sector = document.getElementById('tradeSector').value || 'default';
     const opts = QUALITY_OPTIONS[sector] || QUALITY_OPTIONS.default;
     const qSel = document.getElementById('tradeQuality');
-    if (qSel) qSel.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
+    if (qSel) { qSel.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join(''); if (window.CustomSelect) CustomSelect.refresh(qSel); }
   }
 }
 
@@ -447,6 +452,7 @@ function onTradeTypeChange() {
   const settleEl = document.getElementById('tradeSettlement');
   if (settleEl) {
     settleEl.value = PHYSICAL_TYPES.has(type) ? 'PHYSICAL' : 'FINANCIAL';
+    if (window.CustomSelect) CustomSelect.refresh(settleEl);
     onSettlementChange();
   }
 
@@ -1042,13 +1048,17 @@ function _autoRollIfExpired(trade) {
 
 function resetTradeForm() {
   document.getElementById('tradeSector').value = '';
+  if (window.CustomSelect) CustomSelect.refresh(document.getElementById('tradeSector'));
   document.getElementById('tradeType').innerHTML = '<option value="">Select sector first...</option>';
   document.getElementById('tradeType').value = '';
+  if (window.CustomSelect) CustomSelect.refresh(document.getElementById('tradeType'));
   document.getElementById('tradeVenue').innerHTML = '<option value="OTC">OTC Bilateral</option>';
+  if (window.CustomSelect) CustomSelect.refresh(document.getElementById('tradeVenue'));
   document.getElementById('tradeVolume').value = '';
   updateVolumeField(''); // Reset volume label/placeholder to default
   document.getElementById('tradeEntry').value = '';
   document.getElementById('tradeCpty').value = '';
+  if (window.CustomSelect) CustomSelect.refresh(document.getElementById('tradeCpty'));
   const cptyHint = document.getElementById('cptyHint');
   if (cptyHint) cptyHint.textContent = '';
   document.getElementById('tradeNotes').value = '';
@@ -1057,7 +1067,9 @@ function resetTradeForm() {
   document.getElementById('tradeLimitPrice').value = '';
   document.getElementById('tradeStopPrice').value = '';
   document.getElementById('tradeOrderType').value = 'MARKET';
+  if (window.CustomSelect) CustomSelect.refresh(document.getElementById('tradeOrderType'));
   document.getElementById('tradeTIF').value = 'DAY';
+  if (window.CustomSelect) CustomSelect.refresh(document.getElementById('tradeTIF'));
   document.getElementById('tradeFormHint').textContent = '';
   const bdInput = document.getElementById('tradeBackdate');
   if (bdInput) bdInput.value = '';

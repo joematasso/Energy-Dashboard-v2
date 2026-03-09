@@ -234,6 +234,7 @@ function refreshCptyDropdown() {
     opt.style.color = avail ? '' : 'var(--text-muted)';
     sel.appendChild(opt);
   });
+  if (window.CustomSelect) CustomSelect.refresh(sel);
 }
 
 async function toggleOtcAvailable(val) {

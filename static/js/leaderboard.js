@@ -28,17 +28,21 @@ function renderLeaderboardPage() {
   const lbRangeMap={'1W':7,'1M':30,'3M':90,'ALL':365};
   const days = lbRangeMap[STATE.lbRange] || 30;
   // Fetch leaderboard + snapshots in parallel
+  const lbUrl = '/api/leaderboard?prices=' + pricesParam;
+  console.log('[LB] Fetching:', lbUrl.substring(0, 120) + '...');
   Promise.all([
-    fetch('/api/leaderboard?prices=' + pricesParam).then(r=>r.json()),
+    fetch(lbUrl).then(r=>{console.log('[LB] Response status:', r.status, r.url); return r.json();}),
     fetch('/api/leaderboard/all-snapshots?days=' + days).then(r=>r.json()).catch(()=>({success:false}))
   ]).then(([lbData, snapData]) => {
+    console.log('[LB] Data received - success:', lbData.success, 'count:', lbData.leaderboard?.length);
     window._lbSnapshots = (snapData.success && snapData.snapshots) ? snapData.snapshots : {};
     if(lbData.success && lbData.leaderboard && lbData.leaderboard.length > 0) {
       renderLeaderboardData(lbData.leaderboard, true);
     } else {
+      console.warn('[LB] Falling back to simulated - success:', lbData.success, 'data:', JSON.stringify(lbData).substring(0, 200));
       renderLeaderboardData(null, false);
     }
-  }).catch(()=>renderLeaderboardData(null, false));
+  }).catch((err)=>{console.error('[LB] Fetch failed:', err); renderLeaderboardData(null, false);});
 }
 
 function calcSharpeAndDrawdown(trades, balance) {

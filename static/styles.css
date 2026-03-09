@@ -610,28 +610,126 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(21
 /* =====================================================================
    REGISTRATION OVERLAY
    ===================================================================== */
+/* --- Overlay & background (kept) --- */
 .reg-overlay{position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;overscroll-behavior:contain;touch-action:pan-y;overflow:hidden}
 .reg-overlay.hidden{display:none}
 #regDotCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:0}
 .reg-radial-overlay{position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,0,0,0.55) 0%,transparent 100%);z-index:1;pointer-events:none}
 .reg-top-fade{position:absolute;top:0;left:0;right:0;height:33%;background:linear-gradient(to bottom,#000,transparent);z-index:1;pointer-events:none}
-.reg-box{position:relative;z-index:2;background:rgba(15,21,32,0.65);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(34,211,238,0.12);border-radius:24px;padding:48px 40px;width:90%;max-width:420px;animation:regFadeIn 0.6s ease-out}
-@keyframes regFadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.reg-logo-wrap{text-align:center;margin-bottom:32px}
-.reg-logo-img{height:56px;display:block;margin:0 auto 20px;filter:drop-shadow(0 0 24px rgba(34,211,238,0.25))}
-.reg-title{font-size:1.75rem;font-weight:700;color:#fff;margin:0 0 8px;letter-spacing:-0.01em;line-height:1.2}
-.reg-subtitle{color:rgba(255,255,255,0.45);font-size:14px;text-align:center;margin:0;font-weight:300;letter-spacing:0.02em}
-.reg-box .form-group{margin-bottom:20px}
-.reg-box .form-group label{font-size:11px;font-family:var(--font-sans);color:rgba(255,255,255,0.45);font-weight:500;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;display:block;padding-left:18px}
-.reg-box .form-group input{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9999px;padding:14px 20px;color:#fff;font-size:14px;font-family:var(--font-sans);outline:none;transition:border-color 0.2s,box-shadow 0.2s;box-sizing:border-box;backdrop-filter:blur(2px)}
-.reg-box .form-group input:focus{border-color:rgba(34,211,238,0.4);box-shadow:0 0 0 3px rgba(34,211,238,0.08)}
-.reg-box .form-group input::placeholder{color:rgba(255,255,255,0.25)}
-.reg-box .reg-login-btn.btn.btn-primary{width:100%;padding:14px 0;font-size:15px;font-weight:600;font-family:var(--font-sans);text-align:center;border:none;border-radius:9999px;background:linear-gradient(135deg,#22d3ee,#06b6d4);color:#000;cursor:pointer;transition:all 0.2s;margin-top:8px;position:relative;overflow:hidden;letter-spacing:0.04em;justify-content:center}
-.reg-box .reg-login-btn.btn.btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 8px 30px rgba(34,211,238,0.25);background:linear-gradient(135deg,#22d3ee,#06b6d4)}
-.reg-login-btn:active{transform:translateY(0)}
-.reg-error{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;display:none}
-.reg-footer{text-align:center;color:rgba(255,255,255,0.18);font-size:11px;margin-top:32px;letter-spacing:0.03em}
 .dot-bg-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+
+/* --- Card --- */
+.reg-box{
+  position:relative;z-index:2;
+  background:rgba(12,17,28,0.72);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px;
+  padding:40px 36px 32px;
+  width:90%;max-width:400px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.4),0 8px 32px rgba(0,0,0,0.3);
+  animation:regFadeIn 0.5s cubic-bezier(0.16,1,0.3,1)
+}
+@keyframes regFadeIn{from{opacity:0;transform:translateY(16px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* --- Header --- */
+.reg-logo-wrap{text-align:center;margin-bottom:24px}
+.reg-logo-img{height:72px;display:block;margin:0 auto 16px;filter:drop-shadow(0 0 24px rgba(34,211,238,0.25))}
+.reg-title{font-size:1.5rem;font-weight:600;color:#fff;margin:0 0 6px;letter-spacing:-0.02em;line-height:1.2}
+.reg-subtitle{color:rgba(255,255,255,0.4);font-size:13px;text-align:center;margin:0;font-weight:400}
+
+/* --- Actions area --- */
+.reg-actions{display:flex;flex-direction:column;gap:12px}
+
+/* --- Windows button (primary) --- */
+.reg-btn-windows{
+  width:100%;padding:12px 0;font-size:14px;font-weight:600;
+  font-family:var(--font-sans);text-align:center;
+  border:none;border-radius:10px;
+  background:linear-gradient(135deg,#22d3ee,#06b6d4);
+  color:#000;cursor:pointer;
+  transition:all 0.15s ease;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:0 1px 2px rgba(0,0,0,0.2),0 0 0 1px rgba(34,211,238,0.15);
+  letter-spacing:0.01em
+}
+.reg-btn-windows:hover{
+  filter:brightness(1.08);transform:translateY(-1px);
+  box-shadow:0 4px 20px rgba(34,211,238,0.25),0 0 0 1px rgba(34,211,238,0.3)
+}
+.reg-btn-windows:active{transform:translateY(0);filter:brightness(0.95)}
+.reg-btn-icon{width:16px;height:16px;flex-shrink:0}
+
+/* --- OR separator --- */
+.reg-separator{
+  display:flex;align-items:center;gap:12px;
+  margin:4px 0
+}
+.reg-separator-line{flex:1;height:1px;background:rgba(255,255,255,0.08)}
+.reg-separator-text{
+  font-size:11px;text-transform:uppercase;letter-spacing:0.08em;
+  color:rgba(255,255,255,0.3);font-weight:500;
+  padding:0 4px
+}
+
+/* --- PIN section inputs --- */
+.reg-box .form-group{margin-bottom:16px}
+.reg-box .form-group label{
+  font-size:11px;font-family:var(--font-sans);
+  color:rgba(255,255,255,0.4);font-weight:500;
+  text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:6px;display:block;padding-left:14px
+}
+.reg-box .form-group input{
+  width:100%;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:10px;
+  padding:11px 16px;color:#fff;font-size:14px;
+  font-family:var(--font-sans);outline:none;
+  transition:border-color 0.2s,box-shadow 0.2s;
+  box-sizing:border-box
+}
+.reg-box .form-group input:focus{
+  border-color:rgba(34,211,238,0.4);
+  box-shadow:0 0 0 3px rgba(34,211,238,0.08)
+}
+.reg-box .form-group input::placeholder{color:rgba(255,255,255,0.22)}
+
+/* --- PIN button (secondary/outline) --- */
+.reg-btn-pin{
+  width:100%;padding:11px 0;font-size:14px;font-weight:500;
+  font-family:var(--font-sans);text-align:center;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px;
+  background:rgba(255,255,255,0.04);
+  color:rgba(255,255,255,0.85);cursor:pointer;
+  transition:all 0.15s ease;
+  letter-spacing:0.01em
+}
+.reg-btn-pin:hover{
+  background:rgba(255,255,255,0.08);
+  border-color:rgba(255,255,255,0.2);
+  transform:translateY(-1px)
+}
+.reg-btn-pin:active{transform:translateY(0)}
+
+/* --- Fallback link --- */
+.reg-fallback-link{
+  color:rgba(255,255,255,0.35);font-size:12px;
+  text-decoration:none;transition:color 0.15s
+}
+.reg-fallback-link:hover{color:rgba(34,211,238,0.8);text-decoration:underline}
+
+/* --- Error --- */
+.reg-error{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;display:none}
+
+/* --- Footer --- */
+.reg-footer{
+  text-align:center;color:rgba(255,255,255,0.2);
+  font-size:11px;margin-top:28px;letter-spacing:0.02em;line-height:1.6
+}
+.reg-footer-sub{display:block;color:rgba(255,255,255,0.12);font-size:10px;margin-top:2px}
 
 /* =====================================================================
    MODAL

@@ -9,6 +9,7 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css?v=1772594448">
+<link rel="stylesheet" href="/css/custom-select.css?v=1772594448">
 </head>
 <body>
 <canvas id="dotBgCanvas" class="dot-bg-canvas"></canvas>
@@ -29,11 +30,39 @@
       <h1 class="reg-title">Welcome Back</h1>
       <p class="reg-subtitle">ARM Energy Trading Terminal</p>
     </div>
-    <div class="form-group"><label>Your Name</label><input type="text" id="regName" placeholder="As given by your admin" autocomplete="username"></div>
-    <div class="form-group"><label>4-Digit PIN</label><input type="password" id="regPin" inputmode="numeric" maxlength="4" placeholder="From your admin" style="letter-spacing:6px;text-align:center" autocomplete="current-password"></div>
-    <button class="btn btn-primary reg-login-btn" onclick="doLogin()">Log In</button>
+    <!-- Primary: Windows Sign In -->
+    <div class="reg-actions">
+      <button class="reg-login-btn reg-btn-windows" id="windowsLoginBtn" onclick="doWindowsLogin()" style="display:none">
+        <svg class="reg-btn-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+        Sign in with Windows
+      </button>
+
+      <!-- OR separator -->
+      <div class="reg-separator" id="regSeparator" style="display:none">
+        <span class="reg-separator-line"></span>
+        <span class="reg-separator-text">or</span>
+        <span class="reg-separator-line"></span>
+      </div>
+
+      <!-- Secondary: PIN login -->
+      <div id="pinSection">
+        <div class="form-group" id="nameFieldGroup"><label>Your Name</label><input type="text" id="regName" placeholder="As given by your admin" autocomplete="username"></div>
+        <div class="form-group" id="pinFieldGroup"><label>4-Digit PIN</label><input type="password" id="regPin" inputmode="numeric" maxlength="4" placeholder="From your admin" style="letter-spacing:6px;text-align:center" autocomplete="current-password"></div>
+        <button class="reg-login-btn reg-btn-pin" id="pinLoginBtn" onclick="doLogin()">Log In with PIN</button>
+      </div>
+
+      <!-- PIN fallback link (shown when in Windows-only mode) -->
+      <div id="pinFallbackLink" style="display:none;text-align:center;margin-top:4px">
+        <a href="#" onclick="showPinFallback();return false" class="reg-fallback-link">Use PIN instead</a>
+      </div>
+    </div>
+
     <div class="reg-error" id="regError"></div>
-    <div class="reg-footer">ARM Energy &mdash; Simulated Trading</div>
+
+    <div class="reg-footer">
+      ARM Energy &mdash; Simulated Trading
+      <span class="reg-footer-sub">Powered by ARM Risk Management</span>
+    </div>
   </div>
 </div>
 
@@ -1708,6 +1737,7 @@
 <!-- JS MODULES (load order matters — dependencies flow top to bottom)     -->
 <!-- Core: state → prices → charts → pages → trading → positions → market-data → options -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<script src="/js/custom-select.js?v=1772594448"></script>
 <script src="/js/state.js?v=1772594448"></script>
 <script src="/js/charts.js?v=1772594448"></script>
 <script src="/js/pages.js?v=1772594448"></script>
@@ -1805,13 +1835,16 @@
   window.addEventListener('resize', resize);
   draw();
 
-  // Stop animation when login overlay is hidden
+  // Stop/restart animation when login overlay is hidden/shown
   var observer = new MutationObserver(function(mutations) {
     mutations.forEach(function(m) {
       if (m.attributeName === 'class') {
         var overlay = document.getElementById('regOverlay');
         if (overlay && overlay.classList.contains('hidden')) {
           cancelAnimationFrame(animId);
+        } else if (overlay && !overlay.classList.contains('hidden')) {
+          animStart = performance.now();
+          draw();
         }
       }
     });

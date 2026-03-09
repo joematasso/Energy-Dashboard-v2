@@ -47,6 +47,15 @@ from flask_socketio import SocketIO, emit
 # ---------------------------------------------------------------------------
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'energydesk-v3-secret')
+
+# Auth mode: 'windows' for IIS Windows Auth, 'pin' for traditional PIN-based login
+AUTH_MODE = os.environ.get('AUTH_MODE', 'pin')
+
+# Session config for Windows Auth (cookie-based sessions)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
+
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Block access to sensitive files (defense-in-depth — static_folder='static' already isolates)
@@ -328,6 +337,13 @@ def init_db():
     except sqlite3.OperationalError:
         cur.execute("ALTER TABLE traders ADD COLUMN privileged INTEGER DEFAULT 0")
 
+    # Migration: add windows_identity column for Windows Authentication
+    try:
+        cur.execute("SELECT windows_identity FROM traders LIMIT 1")
+    except sqlite3.OperationalError:
+        cur.execute("ALTER TABLE traders ADD COLUMN windows_identity TEXT DEFAULT NULL")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_traders_windows_identity ON traders(windows_identity) WHERE windows_identity IS NOT NULL")
+
     # Migration: add negotiation columns to otc_proposals
     try:
         cur.execute("SELECT revision_history FROM otc_proposals LIMIT 1")
@@ -526,7 +542,7 @@ def _calc_margin(td):
 # ---------------------------------------------------------------------------
 # Blueprint Registration
 # ---------------------------------------------------------------------------
-from routes import public_bp, market_bp, admin_bp, chat_bp, misc_bp, prices_bp
+from routes import public_bp, market_bp, admin_bp, chat_bp, misc_bp, prices_bp, auth_bp
 
 app.register_blueprint(public_bp)
 app.register_blueprint(market_bp)
@@ -534,6 +550,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(misc_bp)
 app.register_blueprint(prices_bp)
+app.register_blueprint(auth_bp)
 
 # ---------------------------------------------------------------------------
 # Startup

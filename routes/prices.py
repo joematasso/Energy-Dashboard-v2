@@ -429,10 +429,22 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
     # --- Benchmarks ---
     # Priority chain (most authoritative → most available):
     # Henry Hub: EIA page physical spot > FRED EIA-sourced spot > yfinance NYMEX futures
-    # WTI:       EIA API RWTC spot / EIA page spot > FRED EIA-sourced spot > yfinance CL=F futures
+    # WTI:       yfinance CL=F preferred when EIA is stale (>5% divergence), else EIA spot
     # Brent:     yfinance BZ=F > EIA API/page spot > FRED EIA-sourced spot
-    hh    = eia_ng_spots.get('Henry Hub') or eia_prices.get('henry_hub_eia') or fred_prices.get('henry_hub_fred') or yf_prices.get('NG=F')
-    wti   = eia_prices.get('wti_eia')    or fred_prices.get('wti_fred')      or yf_prices.get('CL=F')
+    # For HH: prefer yfinance if EIA diverges significantly (EIA publishes with a lag)
+    _hh_eia = eia_ng_spots.get('Henry Hub') or eia_prices.get('henry_hub_eia') or fred_prices.get('henry_hub_fred')
+    _hh_yf  = yf_prices.get('NG=F')
+    if _hh_eia and _hh_yf and abs(_hh_eia - _hh_yf) / _hh_eia > 0.10:
+        hh = _hh_yf
+    else:
+        hh = _hh_eia or _hh_yf
+    # For WTI: prefer yfinance if EIA diverges significantly (EIA publishes with a lag)
+    _wti_eia = eia_prices.get('wti_eia') or fred_prices.get('wti_fred')
+    _wti_yf  = yf_prices.get('CL=F')
+    if _wti_eia and _wti_yf and abs(_wti_eia - _wti_yf) / _wti_eia > 0.05:
+        wti = _wti_yf   # EIA is stale, use real-time futures
+    else:
+        wti = _wti_eia or _wti_yf
     brent = yf_prices.get('BZ=F')        or eia_prices.get('brent_eia')      or fred_prices.get('brent_fred')
 
     out = {}
@@ -443,9 +455,11 @@ def _build_hub_prices(yf_prices, eia_prices, nyiso_lmps=None, eia_ng_spots=None,
     hh_src  = ('eia_spot_page'      if eia_ng_spots.get('Henry Hub')        else
                'fred_backup'        if fred_prices.get('henry_hub_fred')    else
                'yfinance_ng')
-    # WTI: distinguish EIA API vs EIA page scrape
+    # WTI: distinguish EIA API vs EIA page scrape vs yfinance override
     _wti_from_page = eia_petroleum_spots.get('wti_spot') and not eia_prices.get('wti_eia') != eia_petroleum_spots.get('wti_spot')
-    wti_src = ('eia_spot_page'      if eia_petroleum_spots.get('wti_spot') and eia_prices.get('wti_eia') == eia_petroleum_spots['wti_spot'] else
+    _wti_overridden = _wti_eia and _wti_yf and abs(_wti_eia - _wti_yf) / _wti_eia > 0.05
+    wti_src = ('yfinance_cl'        if _wti_overridden                      else
+               'eia_spot_page'      if eia_petroleum_spots.get('wti_spot') and eia_prices.get('wti_eia') == eia_petroleum_spots['wti_spot'] else
                'eia_api_rwtc'       if eia_prices.get('wti_eia')            else
                'fred_backup'        if fred_prices.get('wti_fred')          else
                'yfinance_cl')
