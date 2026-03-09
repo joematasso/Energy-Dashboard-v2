@@ -492,13 +492,6 @@ def serve_admin():
 def serve_manifest():
     return send_from_directory('static', 'manifest.json')
 
-# TEMPORARY: one-time DB download endpoint — remove after migration
-@app.route('/api/db-download-migrate-temp')
-@admin_required
-def _temp_db_download():
-    import os as _os
-    return send_from_directory(_os.path.dirname(_os.path.abspath(DATABASE)), _os.path.basename(DATABASE), as_attachment=True)
-
 @app.route('/icon.svg')
 def serve_icon():
     return send_from_directory('static', 'icon.svg')
